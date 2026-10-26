@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Jarvis" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+    </style>
+    <style name="Btn" parent="android:Widget.Material.Button.Borderless">
+        <item name="android:background">@drawable/btn</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+    <style name="Btn.Primary">
+        <item name="android:background">@drawable/btn_primary</item>
+        <item name="android:textColor">@color/accentInk</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Btn.Small">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/inkDim</item>
+    </style>
+    <style name="Label">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/accent</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.16</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Hint">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">12dp</item>
+        <item name="android:textColor">@color/inkFaint</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+    <style name="Field">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:background">@drawable/field</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textColorHint">@color/inkFaint</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+</resources>

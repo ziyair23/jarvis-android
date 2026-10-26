@@ -1,0 +1,42 @@
+name: Build Jarvis
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["config/**", "README.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Build the app
+        run: gradle :app:assembleRelease -PversionCode=${{ github.run_number }} --no-daemon --stacktrace
+
+      - name: Name the app file
+        run: cp app/build/outputs/apk/release/app-release.apk jarvis-${{ github.run_number }}.apk
+
+      - name: Publish as a release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Jarvis build ${{ github.run_number }}
+          body: Install this on your phone to update Jarvis. Your keys and settings stay.
+          files: jarvis-${{ github.run_number }}.apk
+          make_latest: true
