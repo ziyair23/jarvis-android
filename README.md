@@ -1,6 +1,6 @@
 # Jarvis for Android
 
-Marcus's hands-free Jarvis. Say "Jarvis" any time, even with the screen off.
+A hands-free Jarvis for Android. Say "Jarvis" any time, even with the screen off.
 
 - **Wake word:** Picovoice Porcupine, on-device, built-in "Jarvis" keyword.
 - **Hearing and speaking:** Android's own speech recognition and text-to-speech.

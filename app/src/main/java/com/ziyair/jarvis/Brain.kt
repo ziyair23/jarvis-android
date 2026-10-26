@@ -36,11 +36,11 @@ class Brain(private val context: Context) {
 
     private fun systemPrompt(cfg: JSONObject): String {
         val now = SimpleDateFormat("EEEE, MMMM d, h:mm a", Locale.US).format(Date())
-        val her = prefs.herName.ifBlank { "his girlfriend" }
+        val her = prefs.herName
         return cfg.optString("system") +
-            "\n\nAbout Marcus: " + prefs.notes +
-            "\nHis girlfriend: " + her + "." +
-            "\nRight now it is " + now + " in Spokane, WA." +
+            (if (prefs.notes.isNotBlank()) "\n\nAbout him and his day: " + prefs.notes else "") +
+            (if (her.isNotBlank()) "\nHis partner's name: " + her + "." else "") +
+            "\nRight now it is " + now + "." +
             "\nYou are speaking out loud through his phone, so never use lists, markdown, emojis or URLs."
     }
 

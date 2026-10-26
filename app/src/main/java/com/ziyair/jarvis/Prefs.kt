@@ -53,9 +53,6 @@ class Prefs(context: Context) {
     fun clearHistory() = sp.edit().putString("history", "[]").apply()
 
     companion object {
-        const val DEFAULT_NOTES = "Wakes around 7 with Ziyair, his newborn son; he and his girlfriend take Ziyair in 3-hour turns. " +
-            "Late morning is his own time: the Jarvis app and his clothing brand, Pursuit. " +
-            "DoorDash lunch rush 11 AM to 2 PM and dinner rush 5 to 9 PM, aiming for about \$100 to \$120 a day. " +
-            "Saving for a Porsche Macan. Bed around midnight. Lives in Spokane, WA."
+        const val DEFAULT_NOTES = ""
     }
 }

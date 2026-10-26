@@ -71,11 +71,11 @@
             <TextView style="@style/Hint" android:text="Picovoice AccessKey (from console.picovoice.ai)" />
             <EditText android:id="@+id/picoKey" style="@style/Field" android:inputType="textPassword" android:hint="AccessKey" />
 
-            <TextView style="@style/Hint" android:text="Your girlfriend's name (optional)" />
+            <TextView style="@style/Hint" android:text="Your partner's name (optional)" />
             <EditText android:id="@+id/herName" style="@style/Field" android:inputType="textPersonName|textCapWords" />
 
             <TextView style="@style/Hint" android:text="What Jarvis should know about your day" />
-            <EditText android:id="@+id/notes" style="@style/Field" android:gravity="top" android:inputType="textMultiLine|textCapSentences" android:minLines="4" />
+            <EditText android:id="@+id/notes" style="@style/Field" android:hint="Your routine, family, goals, where you live…" android:gravity="top" android:inputType="textMultiLine|textCapSentences" android:minLines="4" />
 
             <Button android:id="@+id/save" style="@style/Btn.Primary" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="12dp" android:text="Save" />
             <TextView style="@style/Hint" android:layout_marginTop="10dp" android:text="Your keys stay on this phone only." />
