@@ -62,7 +62,13 @@ class JarvisService : Service() {
                 pickVoice()
             }
         }
-        thread { brain.refreshConfig(); Updater.check(this) }
+        thread { brain.refreshConfig(); Updater.check(this, busy = busy) }
+        // whenever he unlocks the phone, see if there's a new build to slip in (checks GitHub at most hourly)
+        registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT))
+    }
+
+    private val unlocked = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy) } }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -388,6 +394,7 @@ class JarvisService : Service() {
     }
 
     override fun onDestroy() {
+        try { unregisterReceiver(unlocked) } catch (_: Exception) {}
         try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(carWatch) } catch (_: Exception) {}
         DriveMode.on = false
         quiet(false)

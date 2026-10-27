@@ -101,13 +101,28 @@ class MainActivity : Activity() {
             thread {
                 val r = Updater.check(this, force = true)
                 runOnUiThread {
-                    if (r != null) { update.text = "Get build ${r.build}"; startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(r.apkUrl))) }
-                    else update.text = "Up to date · build ${BuildConfig.VERSION_CODE}"
+                    update.text = if (r != null) "Installing build ${r.build}…" else "Up to date · build ${BuildConfig.VERSION_CODE}"
                 }
             }
         }
         update.text = "Check for updates · build ${BuildConfig.VERSION_CODE}"
         findViewById<View>(R.id.setup).visibility = if (ready()) View.GONE else View.VISIBLE
+        handleExtras(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); handleExtras(intent) }
+
+    /** autostart: just updated, bring Jarvis back and step out of the way. update: tapped "Update ready". */
+    private fun handleExtras(i: Intent?) {
+        if (i?.getBooleanExtra("autostart", false) == true) {
+            i.removeExtra("autostart")
+            if (ready() && hasMic()) {
+                startForegroundService(Intent(this, JarvisService::class.java)); prefs.running = true
+                status.text = "Updated to build ${BuildConfig.VERSION_CODE}, sir. Back on."
+                window.decorView.postDelayed({ moveTaskToBack(true) }, 600)
+            }
+        }
+        if (i?.getBooleanExtra("update", false) == true) { i.removeExtra("update"); update.performClick() }
     }
 
     override fun onResume() { super.onResume(); LogBus.listen(refresh); render() }
