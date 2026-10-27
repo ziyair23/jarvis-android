@@ -150,13 +150,13 @@ class JarvisService : Service() {
         acquire()
         stopWakeWord()
         try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 120) } catch (_: Exception) {}
-        openWindow(10)
+        openWindow(brain.config().optInt("wake_seconds", 5))
         main.postDelayed({ listen(firstTurn = true) }, 350)
     }
 
     /** How long he keeps listening without hearing anything before going back to waiting for "Hey Jarvis". */
     private fun openWindow(seconds: Int) { listenUntil = System.currentTimeMillis() + seconds * 1000L }
-    private fun convoSeconds() = brain.config().optInt("conversation_seconds", 10)
+    private fun convoSeconds() = brain.config().optInt("conversation_seconds", 3)
 
     /** Mutes the phone's own "mic on / mic off" beeps while Jarvis listens; always undone before he speaks. */
     private var muted = false
@@ -188,9 +188,8 @@ class JarvisService : Service() {
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
         recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
                 retries = 0
@@ -227,7 +226,7 @@ class JarvisService : Service() {
         if (firstTurn && followUps == 0) {
             // he said "Jarvis" then paused: answer like the films and give him one more go
             followUps = 1
-            speak(pick("greetings", "Sir?")) { openWindow(8); afterSpeaking { listen(firstTurn = false) } }
+            speak(pick("greetings", "Sir?")) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
         } else finishTurn()
     }
 
