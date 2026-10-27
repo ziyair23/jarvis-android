@@ -76,6 +76,18 @@
             <TextView style="@style/Hint" android:text="What Jarvis should know about your day" />
             <EditText android:id="@+id/notes" style="@style/Field" android:hint="Your routine, family, goals, where you live…" android:gravity="top" android:inputType="textMultiLine|textCapSentences" android:minLines="4" />
 
+            <TextView style="@style/Hint" android:text="Your city (for weather)" />
+            <EditText android:id="@+id/city" style="@style/Field" android:inputType="textCapWords" android:hint="e.g. Spokane" />
+
+            <TextView style="@style/Hint" android:text="Lunch rush (24-hour, start-end)" />
+            <EditText android:id="@+id/lunch" style="@style/Field" android:inputType="text" android:hint="11:00-14:00" />
+
+            <TextView style="@style/Hint" android:text="Dinner rush (24-hour, start-end)" />
+            <EditText android:id="@+id/dinner" style="@style/Field" android:inputType="text" android:hint="17:00-21:00" />
+
+            <TextView style="@style/Hint" android:text="Bedtime (24-hour)" />
+            <EditText android:id="@+id/bedtime" style="@style/Field" android:inputType="text" android:hint="00:00" />
+
             <Button android:id="@+id/save" style="@style/Btn.Primary" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="12dp" android:text="Save" />
             <TextView style="@style/Hint" android:layout_marginTop="10dp" android:text="Your keys stay on this phone only." />
         </LinearLayout>
@@ -108,6 +120,16 @@
             <Button android:id="@+id/editSetup" style="@style/Btn.Small" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:text="Setup" />
             <Button android:id="@+id/battery" style="@style/Btn.Small" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:layout_marginStart="8dp" android:text="Battery" />
             <Button android:id="@+id/clear" style="@style/Btn.Small" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:layout_marginStart="8dp" android:text="Clear" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical">
+            <Button android:id="@+id/allowComms" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:text="Allow calls &amp; texts" />
+            <Button android:id="@+id/allowApps" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Allow opening apps" />
+            <Button android:id="@+id/talkFirst" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Speaks first: on" />
         </LinearLayout>
 
         <Button android:id="@+id/update" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:layout_marginBottom="24dp" />

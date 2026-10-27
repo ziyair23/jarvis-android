@@ -62,9 +62,19 @@ class JarvisService : Service() {
         when (intent?.action) {
             ACTION_STOP -> { stopEverything(); return START_NOT_STICKY }
             ACTION_LISTEN -> { goForeground(); if (!busy) onWake() ; return START_STICKY }
+            ACTION_SAY -> {
+                val moment = intent.getStringExtra("moment")
+                val text = intent.getStringExtra("text")
+                thread {
+                    val line = moment?.let { Scheduler.momentLine(this, it) } ?: text.orEmpty()
+                    if (line.isNotBlank()) main.post { sayFirst(line) }
+                }
+                return START_STICKY
+            }
         }
         goForeground()
         prefs.running = true
+        Scheduler.rearm(this)
         startWakeWord()
         return START_STICKY
     }
@@ -175,6 +185,17 @@ class JarvisService : Service() {
         }
     }
 
+    /** Jarvis speaks up on his own (heads-ups, timers, reminders), then goes back to listening. */
+    private fun sayFirst(line: String) {
+        note(line)
+        if (busy) return
+        busy = true
+        acquire()
+        stopWakeWord()
+        try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 90) } catch (_: Exception) {}
+        main.postDelayed({ speak(line) { finishTurn() } }, 300)
+    }
+
     private fun finishTurn() {
         recognizer?.destroy(); recognizer = null
         busy = false
@@ -253,6 +274,7 @@ class JarvisService : Service() {
         const val NOTIF_ID = 7
         const val ACTION_STOP = "com.ziyair.jarvis.STOP"
         const val ACTION_LISTEN = "com.ziyair.jarvis.LISTEN"
+        const val ACTION_SAY = "com.ziyair.jarvis.SAY"
     }
 }
 

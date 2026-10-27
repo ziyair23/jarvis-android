@@ -38,6 +38,37 @@ class Prefs(context: Context) {
         get() = sp.getLong("last_update_check", 0L)
         set(v) = sp.edit().putLong("last_update_check", v).apply()
 
+    var city: String
+        get() = sp.getString("city", "") ?: ""
+        set(v) = sp.edit().putString("city", v.trim()).apply()
+    var cityLat: String
+        get() = sp.getString("city_lat", "") ?: ""
+        set(v) = sp.edit().putString("city_lat", v).apply()
+    var cityLon: String
+        get() = sp.getString("city_lon", "") ?: ""
+        set(v) = sp.edit().putString("city_lon", v).apply()
+    var cityFor: String
+        get() = sp.getString("city_for", "") ?: ""
+        set(v) = sp.edit().putString("city_for", v).apply()
+
+    /** Daily routine for heads-ups, as "HH:MM-HH:MM" ranges and a bedtime. */
+    var lunch: String
+        get() = sp.getString("lunch", "11:00-14:00") ?: "11:00-14:00"
+        set(v) = sp.edit().putString("lunch", v.trim()).apply()
+    var dinner: String
+        get() = sp.getString("dinner", "17:00-21:00") ?: "17:00-21:00"
+        set(v) = sp.edit().putString("dinner", v.trim()).apply()
+    var bedtime: String
+        get() = sp.getString("bedtime", "00:00") ?: "00:00"
+        set(v) = sp.edit().putString("bedtime", v.trim()).apply()
+    var talkFirst: Boolean
+        get() = sp.getBoolean("talk_first", true)
+        set(v) = sp.edit().putBoolean("talk_first", v).apply()
+
+    /** Pending timers and reminders: [{"id":n,"at":ms,"text":"...","loud":bool,"label":"..."}] */
+    fun reminders(): JSONArray = try { JSONArray(sp.getString("reminders", "[]")) } catch (e: Exception) { JSONArray() }
+    fun saveReminders(a: JSONArray) = sp.edit().putString("reminders", a.toString()).apply()
+
     /** Conversation history: [{"role":"user"|"assistant","content":"..."}], newest last. */
     fun history(): JSONArray = try { JSONArray(sp.getString("history", "[]")) } catch (e: Exception) { JSONArray() }
 

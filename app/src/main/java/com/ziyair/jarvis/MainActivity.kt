@@ -39,10 +39,16 @@ class MainActivity : Activity() {
         val her = findViewById<EditText>(R.id.herName)
         val notes = findViewById<EditText>(R.id.notes)
         claude.setText(prefs.claudeKey); pico.setText(prefs.picoKey); her.setText(prefs.herName); notes.setText(prefs.notes)
+        val city = findViewById<EditText>(R.id.city); val lunch = findViewById<EditText>(R.id.lunch)
+        val dinner = findViewById<EditText>(R.id.dinner); val bed = findViewById<EditText>(R.id.bedtime)
+        city.setText(prefs.city); lunch.setText(prefs.lunch); dinner.setText(prefs.dinner); bed.setText(prefs.bedtime)
 
         findViewById<Button>(R.id.save).setOnClickListener {
             prefs.claudeKey = claude.text.toString(); prefs.picoKey = pico.text.toString()
             prefs.herName = her.text.toString(); prefs.notes = notes.text.toString()
+            prefs.city = city.text.toString(); prefs.lunch = lunch.text.toString()
+            prefs.dinner = dinner.text.toString(); prefs.bedtime = bed.text.toString()
+            Scheduler.scheduleDaily(this)
             status.text = "Saved, sir."
             findViewById<View>(R.id.setup).visibility = if (ready()) View.GONE else View.VISIBLE
             render()
@@ -56,6 +62,15 @@ class MainActivity : Activity() {
             startForegroundService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_LISTEN))
         }
         findViewById<Button>(R.id.battery).setOnClickListener { askBattery() }
+        findViewById<Button>(R.id.allowComms).setOnClickListener {
+            requestPermissions(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS, Manifest.permission.READ_CONTACTS), 2)
+        }
+        findViewById<Button>(R.id.allowApps).setOnClickListener {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        }
+        findViewById<Button>(R.id.talkFirst).setOnClickListener {
+            prefs.talkFirst = !prefs.talkFirst; Scheduler.scheduleDaily(this); render()
+        }
         findViewById<Button>(R.id.clear).setOnClickListener { prefs.clearHistory(); render() }
         update.setOnClickListener {
             update.text = "Checking…"
@@ -85,6 +100,8 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        render()
+        if (requestCode == 2) return
         if (hasMic() && pendingStart) { pendingStart = false; startJarvis() }
         else if (!hasMic()) status.text = "I need the microphone to hear you, sir. Allow it in the app's settings."
     }
@@ -113,6 +130,11 @@ class MainActivity : Activity() {
     }
 
     private fun render() {
+        findViewById<Button>(R.id.talkFirst).text = if (prefs.talkFirst) "Speaks first: on" else "Speaks first: off"
+        val comms = checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED &&
+            checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
+        findViewById<Button>(R.id.allowComms).text = if (comms) "Calls & texts: allowed" else "Allow calls & texts"
+        findViewById<Button>(R.id.allowApps).text = if (Settings.canDrawOverlays(this)) "Opening apps: allowed" else "Allow opening apps"
         toggle.text = if (prefs.running) "Stop listening" else "Start Jarvis"
         if (status.text.isNullOrBlank() || status.text.startsWith("Listening") || status.text.startsWith("Off"))
             status.text = if (prefs.running) "Listening for \"Hey Jarvis\", sir. You can lock your phone." else "Off. Tap Start Jarvis."
