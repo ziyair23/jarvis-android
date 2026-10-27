@@ -11,7 +11,6 @@ import android.provider.AlarmClock
 import android.provider.ContactsContract
 import android.provider.MediaStore
 import android.provider.Settings
-import android.telephony.SmsManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -84,12 +83,16 @@ class Actions(private val context: Context) {
             }
             "send_text" -> {
                 if (!input.optBoolean("confirmed")) return "Not sent. Read the message back and ask him to confirm first."
-                if (!has(Manifest.permission.SEND_SMS)) return "He needs to allow texts: open the Jarvis app and tap Allow calls and texts."
+                val msg = input.getString("message")
+                // if they messaged recently, reply right in that chat (no tap needed)
+                Inbox.find(input.getString("who"))?.takeIf { it.reply != null && input.getString("who").length > 1 }?.let { m ->
+                    if (Inbox.reply(context, m, msg)) return "Sent to ${m.sender} on ${m.app}."
+                }
+                if (!canOpenApps()) return NEED_OPEN_APPS
                 val (name, number) = findNumber(input.getString("who")) ?: return "No contact found for that name."
-                val sms = if (Build.VERSION.SDK_INT >= 31) context.getSystemService(SmsManager::class.java) else @Suppress("DEPRECATION") SmsManager.getDefault()
-                val parts = sms.divideMessage(input.getString("message"))
-                sms.sendMultipartTextMessage(number, null, parts, null, null)
-                "Text sent to $name."
+                context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(number)))
+                    .putExtra("sms_body", msg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                "Text to $name is ready in Messages; he just needs to tap send."
             }
             "navigate" -> {
                 if (!canOpenApps()) return NEED_OPEN_APPS

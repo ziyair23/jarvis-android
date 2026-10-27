@@ -65,7 +65,7 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.battery).setOnClickListener { askBattery() }
         findViewById<Button>(R.id.allowComms).setOnClickListener {
-            requestPermissions(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS, Manifest.permission.READ_CONTACTS), 2)
+            requestPermissions(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_CONTACTS), 2)
         }
         findViewById<Button>(R.id.allowApps).setOnClickListener {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -144,7 +144,7 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.allowMsgs).text = if (listening) "Reading messages: allowed" else "Allow reading messages"
         findViewById<Button>(R.id.readMode).text = "Read messages aloud: " + when (prefs.readMessages) { "always" -> "always"; "off" -> "never"; else -> "while driving" }
         findViewById<Button>(R.id.wakeScreen).text = if (prefs.wakeScreen) "Show replies on lock screen: on" else "Show replies on lock screen: off"
-        val comms = checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED &&
+        val comms = checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
         findViewById<Button>(R.id.allowComms).text = if (comms) "Calls & texts: allowed" else "Allow calls & texts"
         findViewById<Button>(R.id.allowApps).text = if (Settings.canDrawOverlays(this)) "Opening apps: allowed" else "Allow opening apps"
