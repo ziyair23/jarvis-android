@@ -65,6 +65,17 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("talk_first", true)
         set(v) = sp.edit().putBoolean("talk_first", v).apply()
 
+    /** Driving: the car's Bluetooth name (part of it is enough), and when to read messages aloud: "driving", "always" or "off". */
+    var carName: String
+        get() = sp.getString("car_name", "") ?: ""
+        set(v) = sp.edit().putString("car_name", v.trim()).apply()
+    var readMessages: String
+        get() = sp.getString("read_messages", "driving") ?: "driving"
+        set(v) = sp.edit().putString("read_messages", v).apply()
+    var wakeScreen: Boolean
+        get() = sp.getBoolean("wake_screen", true)
+        set(v) = sp.edit().putBoolean("wake_screen", v).apply()
+
     /** Pending timers and reminders: [{"id":n,"at":ms,"text":"...","loud":bool,"label":"..."}] */
     fun reminders(): JSONArray = try { JSONArray(sp.getString("reminders", "[]")) } catch (e: Exception) { JSONArray() }
     fun saveReminders(a: JSONArray) = sp.edit().putString("reminders", a.toString()).apply()

@@ -41,6 +41,8 @@ class Brain(private val context: Context) {
             (if (prefs.notes.isNotBlank()) "\n\nAbout him and his day: " + prefs.notes else "") +
             (if (her.isNotBlank()) "\nHis partner's name: " + her + "." else "") +
             "\nRight now it is " + now + "." +
+            (if (DriveMode.on) "\nHE IS DRIVING: one short sentence per reply, never ask him to look at or touch the phone." else "") +
+            (Inbox.lastAnnounced?.let { if (System.currentTimeMillis() - it.at < 600_000) "\nYou just read him a message from ${it.sender} on ${it.app}: \"${it.text}\". If he dictates a reply, read it back and ask to send; reply with reply_message who='last'." else "" } ?: "") +
             "\nYou are speaking out loud through his phone, so never use lists, markdown, emojis or URLs." +
             "\nYou can act on his phone with your tools (timers, reminders, alarms, calls, texts, directions, music, weather). Use them when he asks, then confirm in one short line. Times you pass to tools are 24-hour local time."
     }

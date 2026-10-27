@@ -8,6 +8,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
@@ -41,6 +43,7 @@ class JarvisService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var busy = false
     private var followUps = 0
+    private var carWatchOn = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -65,9 +68,10 @@ class JarvisService : Service() {
             ACTION_SAY -> {
                 val moment = intent.getStringExtra("moment")
                 val text = intent.getStringExtra("text")
+                val thenListen = intent.getBooleanExtra("listen", false)
                 thread {
                     val line = moment?.let { Scheduler.momentLine(this, it) } ?: text.orEmpty()
-                    if (line.isNotBlank()) main.post { sayFirst(line) }
+                    if (line.isNotBlank()) main.post { sayFirst(line, thenListen) }
                 }
                 return START_STICKY
             }
@@ -75,6 +79,7 @@ class JarvisService : Service() {
         goForeground()
         prefs.running = true
         Scheduler.rearm(this)
+        if (!carWatchOn) { carWatchOn = true; getSystemService(AudioManager::class.java).registerAudioDeviceCallback(carWatch, main) }
         startWakeWord()
         return START_STICKY
     }
@@ -186,14 +191,35 @@ class JarvisService : Service() {
     }
 
     /** Jarvis speaks up on his own (heads-ups, timers, reminders), then goes back to listening. */
-    private fun sayFirst(line: String) {
+    private fun sayFirst(line: String, thenListen: Boolean = false) {
         note(line)
         if (busy) return
         busy = true
+        followUps = 1
         acquire()
         stopWakeWord()
         try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 90) } catch (_: Exception) {}
-        main.postDelayed({ speak(line) { finishTurn() } }, 300)
+        main.postDelayed({ speak(line) { if (thenListen) listen(firstTurn = false) else finishTurn() } }, 300)
+    }
+
+    /** Driving mode follows the car's Bluetooth (matched by name, no extra permission needed). */
+    private val carWatch = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>) { checkCar() }
+        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>) { checkCar() }
+    }
+
+    private fun checkCar() {
+        val car = prefs.carName
+        if (car.isBlank()) return
+        val am = getSystemService(AudioManager::class.java)
+        val inCar = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
+            (it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) &&
+                it.productName?.toString()?.contains(car, ignoreCase = true) == true
+        }
+        if (inCar != DriveMode.on) {
+            DriveMode.on = inCar
+            sayFirst(if (inCar) "Driving mode, sir. I'll keep it short and read your messages out." else "Driving mode off, sir.")
+        }
     }
 
     private fun finishTurn() {
@@ -217,6 +243,7 @@ class JarvisService : Service() {
             @Deprecated("old api") override fun onError(utteranceId: String?) { if (utteranceId == id) main.post(then) }
         })
         t.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
+        LockView.showIfLocked(this, text)
     }
 
     /** A British male voice when the phone has one; otherwise the phone's UK English voice. */
@@ -261,6 +288,8 @@ class JarvisService : Service() {
     }
 
     override fun onDestroy() {
+        try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(carWatch) } catch (_: Exception) {}
+        DriveMode.on = false
         try { wakeWord?.close() } catch (_: Exception) {}
         recognizer?.destroy()
         tts?.shutdown()

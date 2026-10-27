@@ -42,12 +42,14 @@ class MainActivity : Activity() {
         val city = findViewById<EditText>(R.id.city); val lunch = findViewById<EditText>(R.id.lunch)
         val dinner = findViewById<EditText>(R.id.dinner); val bed = findViewById<EditText>(R.id.bedtime)
         city.setText(prefs.city); lunch.setText(prefs.lunch); dinner.setText(prefs.dinner); bed.setText(prefs.bedtime)
+        val car = findViewById<EditText>(R.id.carName); car.setText(prefs.carName)
 
         findViewById<Button>(R.id.save).setOnClickListener {
             prefs.claudeKey = claude.text.toString(); prefs.picoKey = pico.text.toString()
             prefs.herName = her.text.toString(); prefs.notes = notes.text.toString()
             prefs.city = city.text.toString(); prefs.lunch = lunch.text.toString()
             prefs.dinner = dinner.text.toString(); prefs.bedtime = bed.text.toString()
+            prefs.carName = car.text.toString()
             Scheduler.scheduleDaily(this)
             status.text = "Saved, sir."
             findViewById<View>(R.id.setup).visibility = if (ready()) View.GONE else View.VISIBLE
@@ -68,6 +70,13 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.allowApps).setOnClickListener {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         }
+        findViewById<Button>(R.id.allowMsgs).setOnClickListener {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+        findViewById<Button>(R.id.readMode).setOnClickListener {
+            prefs.readMessages = when (prefs.readMessages) { "driving" -> "always"; "always" -> "off"; else -> "driving" }; render()
+        }
+        findViewById<Button>(R.id.wakeScreen).setOnClickListener { prefs.wakeScreen = !prefs.wakeScreen; render() }
         findViewById<Button>(R.id.talkFirst).setOnClickListener {
             prefs.talkFirst = !prefs.talkFirst; Scheduler.scheduleDaily(this); render()
         }
@@ -131,6 +140,10 @@ class MainActivity : Activity() {
 
     private fun render() {
         findViewById<Button>(R.id.talkFirst).text = if (prefs.talkFirst) "Speaks first: on" else "Speaks first: off"
+        val listening = (Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: "").contains(packageName)
+        findViewById<Button>(R.id.allowMsgs).text = if (listening) "Reading messages: allowed" else "Allow reading messages"
+        findViewById<Button>(R.id.readMode).text = "Read messages aloud: " + when (prefs.readMessages) { "always" -> "always"; "off" -> "never"; else -> "while driving" }
+        findViewById<Button>(R.id.wakeScreen).text = if (prefs.wakeScreen) "Show replies on lock screen: on" else "Show replies on lock screen: off"
         val comms = checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
         findViewById<Button>(R.id.allowComms).text = if (comms) "Calls & texts: allowed" else "Allow calls & texts"

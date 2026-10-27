@@ -85,6 +85,9 @@
             <TextView style="@style/Hint" android:text="Dinner rush (24-hour, start-end)" />
             <EditText android:id="@+id/dinner" style="@style/Field" android:inputType="text" android:hint="17:00-21:00" />
 
+            <TextView style="@style/Hint" android:text="Your car's Bluetooth name (for driving mode)" />
+            <EditText android:id="@+id/carName" style="@style/Field" android:inputType="text" android:hint="e.g. Honda, CAR MULTIMEDIA" />
+
             <TextView style="@style/Hint" android:text="Bedtime (24-hour)" />
             <EditText android:id="@+id/bedtime" style="@style/Field" android:inputType="text" android:hint="00:00" />
 
@@ -129,6 +132,9 @@
             android:orientation="vertical">
             <Button android:id="@+id/allowComms" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:text="Allow calls &amp; texts" />
             <Button android:id="@+id/allowApps" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Allow opening apps" />
+            <Button android:id="@+id/allowMsgs" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Allow reading messages" />
+            <Button android:id="@+id/readMode" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Read messages aloud: while driving" />
+            <Button android:id="@+id/wakeScreen" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Show replies on lock screen: on" />
             <Button android:id="@+id/talkFirst" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Speaks first: on" />
         </LinearLayout>
 
