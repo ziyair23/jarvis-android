@@ -14,7 +14,7 @@ import java.net.URL
 object CloudVoice {
     /** Returns an MP3 file with the spoken text, or null if anything goes wrong (Jarvis then uses the phone's voice). */
     fun synth(context: Context, key: String, text: String, cfg: JSONObject): File? = try {
-        val voice = Prefs(context).voiceName.ifBlank { cfg.optString("cloud_voice", "en-GB-Chirp3-HD-Charon") }
+        val voice = Prefs(context).voiceName.ifBlank { cfg.optString("cloud_voice", "en-GB-Chirp3-HD-Algenib") }
         val lang = voice.split("-").take(2).joinToString("-")
         val body = JSONObject()
             .put("input", JSONObject().put("text", text))
