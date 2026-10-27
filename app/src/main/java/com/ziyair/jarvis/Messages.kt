@@ -29,6 +29,22 @@ object Inbox {
         return items.lastOrNull { it.sender.lowercase().contains(w) } ?: items.lastOrNull { w.contains(it.sender.lowercase()) }
     }
 
+    /** Only an actual name match (no "her/them" guessing), so a text never goes to the wrong person. */
+    @Synchronized fun findByName(who: String): Msg? {
+        val w = who.trim().lowercase()
+        if (w.length < 2) return null
+        return items.lastOrNull { it.sender.lowercase() == w } ?: items.lastOrNull { it.sender.lowercase().split(" ").contains(w) }
+    }
+
+    /** True if this exact message was already read out in the last two minutes (apps re-post the same notification). */
+    private var lastSaid = ""; private var lastSaidAt = 0L
+    @Synchronized fun alreadySaid(m: Msg): Boolean {
+        val k = m.sender + "|" + m.text
+        val dup = k == lastSaid && m.at - lastSaidAt < 120_000
+        lastSaid = k; lastSaidAt = m.at
+        return dup
+    }
+
     /** Reply using the notification's own reply action (works for Messages, Samsung Messages, WhatsApp and most chat apps). */
     fun reply(context: Context, m: Msg, text: String): Boolean {
         val action = m.reply ?: return false
@@ -65,6 +81,8 @@ class MessageListener : NotificationListenerService() {
         val msgs = ex.getParcelableArray(Notification.EXTRA_MESSAGES)
         if (!msgs.isNullOrEmpty()) {
             val last = msgs.last() as? Bundle
+            // no sender (and no sender person) means it's HIS own message, e.g. a reply Jarvis just sent: don't read it back
+            if (last != null && last.getCharSequence("sender") == null && !last.containsKey("sender_person")) return
             last?.getCharSequence("text")?.toString()?.let { text = it }
             last?.getCharSequence("sender")?.toString()?.let { if (it.isNotBlank()) sender = it }
         }
@@ -76,7 +94,7 @@ class MessageListener : NotificationListenerService() {
 
         val prefs = Prefs(this)
         val announce = when (prefs.readMessages) { "always" -> true; "driving" -> DriveMode.on; else -> false }
-        if (announce && prefs.running) {
+        if (announce && prefs.running && !Inbox.alreadySaid(m)) {
             Inbox.lastAnnounced = m
             val ask = if (reply != null) " Want to reply, sir?" else ""
             try {

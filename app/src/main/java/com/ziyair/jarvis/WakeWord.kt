@@ -54,7 +54,7 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
                     var got = 0
                     while (got < CHUNK && running) {
                         val n = rec.read(chunk, got, CHUNK - got)
-                        if (n <= 0) break
+                        if (n <= 0) { try { Thread.sleep(200) } catch (_: Exception) {}; break }
                         got += n
                     }
                     if (!running || got < CHUNK) continue

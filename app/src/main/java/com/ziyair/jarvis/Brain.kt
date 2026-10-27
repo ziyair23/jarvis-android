@@ -67,13 +67,17 @@ class Brain(private val context: Context) {
         }
         // the API wants alternating turns starting with the user
         val clean = JSONArray()
-        var expect = "user"
         for (i in 0 until msgs.length()) {
             val m = msgs.getJSONObject(i)
-            if (m.getString("role") == expect) { clean.put(m); expect = if (expect == "user") "assistant" else "user" }
+            val role = m.getString("role")
+            if (clean.length() == 0 && role != "user") continue
+            val last = if (clean.length() > 0) clean.getJSONObject(clean.length() - 1) else null
+            if (last != null && last.getString("role") == role) last.put("content", last.getString("content") + "\n" + m.getString("content"))
+            else clean.put(JSONObject().put("role", role).put("content", m.getString("content")))
         }
-        if (clean.length() > 0 && clean.getJSONObject(clean.length() - 1).getString("role") == "user") clean.remove(clean.length() - 1)
-        clean.put(JSONObject().put("role", "user").put("content", text))
+        val tail = if (clean.length() > 0) clean.getJSONObject(clean.length() - 1) else null
+        if (tail != null && tail.getString("role") == "user") tail.put("content", tail.getString("content") + "\n" + text)
+        else clean.put(JSONObject().put("role", "user").put("content", text))
 
         val actions = Actions(context)
         val tools = actions.tools()

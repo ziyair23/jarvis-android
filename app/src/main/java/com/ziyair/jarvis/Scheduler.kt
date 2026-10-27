@@ -28,7 +28,7 @@ object Scheduler {
     fun add(context: Context, at: Long, text: String, loud: Boolean, label: String) {
         val prefs = Prefs(context)
         val list = prefs.reminders()
-        val id = (System.currentTimeMillis() % 1_000_000).toInt()
+        val id = 10_000 + (System.currentTimeMillis() % 100_000_000).toInt()
         list.put(JSONObject().put("id", id).put("at", at).put("text", text).put("loud", loud).put("label", label))
         prefs.saveReminders(list)
         setAlarm(context, at, id, Intent(context, AlarmReceiver::class.java).putExtra("id", id))
@@ -139,7 +139,7 @@ object Scheduler {
             nm.createNotificationChannel(c)
         }
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        nm.notify((System.currentTimeMillis() % 100000).toInt(), Notification.Builder(context, ch)
+        nm.notify(1000 + (System.currentTimeMillis() % 100000).toInt(), Notification.Builder(context, ch)
             .setSmallIcon(R.drawable.ic_jarvis).setContentTitle(title).setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).build())
     }
@@ -178,6 +178,11 @@ class AlarmReceiver : BroadcastReceiver() {
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) Scheduler.rearm(context)
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        Scheduler.rearm(context)
+        if (Prefs(context).running) {
+            Prefs(context).running = false
+            Scheduler.notify(context, "Jarvis is ready, sir", "Your phone restarted. Tap to open Jarvis and start him.", false)
+        }
     }
 }

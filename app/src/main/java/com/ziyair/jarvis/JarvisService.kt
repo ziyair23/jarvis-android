@@ -54,6 +54,7 @@ class JarvisService : Service() {
         super.onCreate()
         prefs = Prefs(this)
         brain = Brain(this)
+        restoreSound()
         tone = try { ToneGenerator(AudioManager.STREAM_MUSIC, 60) } catch (_: Exception) { null }
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -65,11 +66,16 @@ class JarvisService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) { stopEverything(); return START_NOT_STICKY }
+        if (!goForeground()) {
+            Scheduler.notify(this, "Jarvis stopped", "Android paused him in the background. Tap to open Jarvis and start him again.", false)
+            prefs.running = false
+            stopSelf()
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
-            ACTION_STOP -> { stopEverything(); return START_NOT_STICKY }
-            ACTION_LISTEN -> { goForeground(); if (!busy) onWake() ; return START_STICKY }
+            ACTION_LISTEN -> { if (!busy) onWake(manual = true); return START_STICKY }
             ACTION_SAY -> {
-                goForeground()
                 val moment = intent.getStringExtra("moment")
                 val text = intent.getStringExtra("text")
                 val thenListen = intent.getBooleanExtra("listen", false)
@@ -80,7 +86,6 @@ class JarvisService : Service() {
                 return START_STICKY
             }
         }
-        goForeground()
         prefs.running = true
         Scheduler.rearm(this)
         if (!carWatchOn) { carWatchOn = true; getSystemService(AudioManager::class.java).registerAudioDeviceCallback(carWatch, main) }
@@ -88,7 +93,9 @@ class JarvisService : Service() {
         return START_STICKY
     }
 
-    private fun goForeground() {
+    private fun goForeground(): Boolean = try { showForeground(); true } catch (_: Exception) { false }
+
+    private fun showForeground() {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null)
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Jarvis listening", NotificationManager.IMPORTANCE_LOW))
@@ -129,8 +136,14 @@ class JarvisService : Service() {
     }
 
     /** Heard "Jarvis" (or the Talk button): chime, then listen for the request. */
-    private fun onWake() {
+    private fun inCall(): Boolean {
+        val mode = getSystemService(AudioManager::class.java).mode
+        return mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_RINGTONE
+    }
+
+    private fun onWake(manual: Boolean = false) {
         if (busy) return
+        if (!manual && inCall()) { startWakeWord(); return }
         busy = true
         followUps = 0
         chatted = false
@@ -152,9 +165,17 @@ class JarvisService : Service() {
         if (on == muted) return
         muted = on
         val am = getSystemService(AudioManager::class.java)
-        for (st in quietStreams) try {
-            am.adjustStreamVolume(st, if (on) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE, 0)
-        } catch (_: Exception) {}
+        if (on) {
+            val did = quietStreams.filter { st -> !am.isStreamMute(st) && try { am.adjustStreamVolume(st, AudioManager.ADJUST_MUTE, 0); true } catch (_: Exception) { false } }
+            prefs.sp.edit().putString("muted_streams", did.joinToString(",")).apply()
+        } else restoreSound()
+    }
+    private fun restoreSound() {
+        val am = getSystemService(AudioManager::class.java)
+        val list = prefs.sp.getString("muted_streams", "").orEmpty().split(",").mapNotNull { it.toIntOrNull() }
+        for (st in list) try { am.adjustStreamVolume(st, AudioManager.ADJUST_UNMUTE, 0) } catch (_: Exception) {}
+        prefs.sp.edit().putString("muted_streams", "").apply()
+        muted = false
     }
 
     private fun listen(firstTurn: Boolean) {
@@ -220,6 +241,7 @@ class JarvisService : Service() {
             return
         }
         quiet(false)
+        acquire()
         try { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         chatted = true
         thread {
@@ -234,6 +256,7 @@ class JarvisService : Service() {
     /** Jarvis speaks up on his own (heads-ups, timers, reminders), then goes back to listening. */
     private fun sayFirst(line: String, thenListen: Boolean = false) {
         note(line)
+        if (inCall()) { Scheduler.notify(this, "Jarvis", line, false); if (!prefs.running && !busy) stopEverything(); return }
         if (busy) return
         busy = true
         followUps = 1
@@ -271,7 +294,7 @@ class JarvisService : Service() {
         busy = false
         release()
         LogBus.changed()
-        startWakeWord()
+        if (prefs.running) startWakeWord() else stopEverything()
     }
 
     private var player: android.media.MediaPlayer? = null
@@ -343,7 +366,7 @@ class JarvisService : Service() {
 
     private fun acquire() {
         if (wakeLock == null) wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "jarvis:turn")
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "jarvis:turn").also { it.setReferenceCounted(false) }
         try { wakeLock?.acquire(60_000L) } catch (_: Exception) {}
     }
 
@@ -351,6 +374,11 @@ class JarvisService : Service() {
 
     private fun stopEverything() {
         prefs.running = false
+        busy = false
+        try { tts?.stop() } catch (_: Exception) {}
+        try { player?.stop(); player?.release() } catch (_: Exception) {}
+        player = null
+        restoreSound()
         try { wakeWord?.close() } catch (_: Exception) {}
         wakeWord = null
         recognizer?.destroy(); recognizer = null

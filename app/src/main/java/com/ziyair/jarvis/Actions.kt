@@ -88,7 +88,7 @@ class Actions(private val context: Context) {
                 if (!input.optBoolean("confirmed")) return "Not sent. Read the message back and ask him to confirm first."
                 val msg = input.getString("message")
                 // if they messaged recently, reply right in that chat (no tap needed)
-                Inbox.find(input.getString("who"))?.takeIf { it.reply != null && input.getString("who").length > 1 }?.let { m ->
+                Inbox.findByName(partnerAlias(input.getString("who")))?.takeIf { it.reply != null }?.let { m ->
                     if (Inbox.reply(context, m, msg)) return "Sent to ${m.sender} on ${m.app}."
                 }
                 if (!canOpenApps()) return NEED_OPEN_APPS
@@ -142,17 +142,25 @@ class Actions(private val context: Context) {
     private fun has(p: String) = context.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
 
     /** Contact lookup by name (partial match), or a raw number. "her"/"my girlfriend" maps to the saved partner name. */
+    private fun partnerAlias(whoIn: String): String {
+        val who = whoIn.trim()
+        return if (Regex("^(her|my girl(friend)?|girlfriend|my partner|partner|wife|bae|my baby mama|baby mama)$", RegexOption.IGNORE_CASE).matches(who) && prefs.herName.isNotBlank()) prefs.herName else who
+    }
+
     private fun findNumber(whoIn: String): Pair<String, String>? {
-        var who = whoIn.trim()
-        if (Regex("^(her|my girl(friend)?|girlfriend|my partner|partner|wife|bae)$", RegexOption.IGNORE_CASE).matches(who) && prefs.herName.isNotBlank()) who = prefs.herName
+        val who = partnerAlias(whoIn)
         if (who.replace(Regex("[^0-9+]"), "").length >= 7) return who to who
         if (!has(Manifest.permission.READ_CONTACTS)) return null
         val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
         val cols = arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER)
+        val found = ArrayList<Pair<String, String>>()
         context.contentResolver.query(uri, cols, "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?", arrayOf("%$who%"), null)?.use { c ->
-            if (c.moveToFirst()) return c.getString(0) to c.getString(1)
+            while (c.moveToNext()) found.add((c.getString(0) ?: "") to (c.getString(1) ?: ""))
         }
-        return null
+        val w = who.lowercase()
+        return found.firstOrNull { it.first.lowercase() == w }
+            ?: found.firstOrNull { it.first.lowercase().startsWith("$w ") || it.first.lowercase().split(" ").contains(w) }
+            ?: found.firstOrNull()
     }
 
     private fun hm(t: String): Pair<Int, Int>? {
