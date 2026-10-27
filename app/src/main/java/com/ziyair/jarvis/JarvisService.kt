@@ -21,21 +21,19 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import ai.picovoice.porcupine.Porcupine
-import ai.picovoice.porcupine.PorcupineManager
 import java.util.Locale
 import kotlin.concurrent.thread
 
 /**
  * Runs in the background with a small notification so Android lets it keep the mic.
- * Loop: listen for "Jarvis" (Porcupine, on-device) -> chime -> hear the request (Android speech)
+ * Loop: listen for "Hey Jarvis" (openWakeWord, on-device) -> chime -> hear the request (Android speech)
  * -> ask Claude -> speak the answer -> listen a few seconds for a follow-up -> back to waiting for "Jarvis".
  */
 class JarvisService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private lateinit var prefs: Prefs
     private lateinit var brain: Brain
-    private var porcupine: PorcupineManager? = null
+    private var wakeWord: WakeWord? = null
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -81,7 +79,7 @@ class JarvisService : Service() {
         val n = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_jarvis)
             .setContentTitle("Jarvis is listening")
-            .setContentText("Say \"Jarvis\" any time, sir.")
+            .setContentText("Say \"Hey Jarvis\" any time, sir.")
             .setContentIntent(open)
             .setOngoing(true)
             .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Talk", talk).build())
@@ -95,27 +93,20 @@ class JarvisService : Service() {
         main.post {
             if (busy) return@post
             try {
-                if (porcupine == null) {
-                    val key = prefs.picoKey
-                    if (key.isBlank()) { note("Add your Picovoice key in the app so I can hear my name, sir."); return@post }
-                    val sens = brain.config().optDouble("wake_sensitivity", 0.6).toFloat()
-                    porcupine = PorcupineManager.Builder()
-                        .setAccessKey(key)
-                        .setKeyword(Porcupine.BuiltInKeyword.JARVIS)
-                        .setSensitivity(sens)
-                        .setErrorCallback { e -> main.post { note("Wake word error: ${e.message}") } }
-                        .build(applicationContext) { _ -> main.post { onWake() } }
+                if (wakeWord == null) {
+                    val th = brain.config().optDouble("wake_threshold", 0.5).toFloat()
+                    wakeWord = WakeWord(applicationContext, th) { main.post { onWake() } }
                 }
-                porcupine?.start()
+                wakeWord?.start()
             } catch (e: Exception) {
-                porcupine = null
+                wakeWord = null
                 note("I couldn't start listening for my name: ${e.message}")
             }
         }
     }
 
     private fun stopWakeWord() {
-        try { porcupine?.stop() } catch (_: Exception) {}
+        try { wakeWord?.stop() } catch (_: Exception) {}
     }
 
     /** Heard "Jarvis" (or the Talk button): chime, then listen for the request. */
@@ -239,8 +230,8 @@ class JarvisService : Service() {
 
     private fun stopEverything() {
         prefs.running = false
-        try { porcupine?.stop(); porcupine?.delete() } catch (_: Exception) {}
-        porcupine = null
+        try { wakeWord?.close() } catch (_: Exception) {}
+        wakeWord = null
         recognizer?.destroy(); recognizer = null
         release()
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -249,7 +240,7 @@ class JarvisService : Service() {
     }
 
     override fun onDestroy() {
-        try { porcupine?.stop(); porcupine?.delete() } catch (_: Exception) {}
+        try { wakeWord?.close() } catch (_: Exception) {}
         recognizer?.destroy()
         tts?.shutdown()
         tone?.release()

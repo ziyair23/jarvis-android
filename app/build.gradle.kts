@@ -49,5 +49,5 @@ android {
 }
 
 dependencies {
-    implementation("ai.picovoice:porcupine-android:3.0.+")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
 }

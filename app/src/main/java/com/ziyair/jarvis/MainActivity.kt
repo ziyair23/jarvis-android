@@ -74,7 +74,7 @@ class MainActivity : Activity() {
     override fun onResume() { super.onResume(); LogBus.listen(refresh); render() }
     override fun onPause() { LogBus.unlisten(refresh); super.onPause() }
 
-    private fun ready() = prefs.claudeKey.isNotBlank() && prefs.picoKey.isNotBlank()
+    private fun ready() = prefs.claudeKey.isNotBlank()
     private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private fun askPermissions() {
@@ -91,7 +91,7 @@ class MainActivity : Activity() {
 
     private var pendingStart = false
     private fun startJarvis() {
-        if (!ready()) { status.text = "Add both keys first, sir."; findViewById<View>(R.id.setup).visibility = View.VISIBLE; return }
+        if (!ready()) { status.text = "Add your Claude key first, sir."; findViewById<View>(R.id.setup).visibility = View.VISIBLE; return }
         if (!hasMic()) { pendingStart = true; askPermissions(); return }
         startForegroundService(Intent(this, JarvisService::class.java))
         prefs.running = true
@@ -115,14 +115,14 @@ class MainActivity : Activity() {
     private fun render() {
         toggle.text = if (prefs.running) "Stop listening" else "Start Jarvis"
         if (status.text.isNullOrBlank() || status.text.startsWith("Listening") || status.text.startsWith("Off"))
-            status.text = if (prefs.running) "Listening for \"Jarvis\", sir. You can lock your phone." else "Off. Tap Start Jarvis."
+            status.text = if (prefs.running) "Listening for \"Hey Jarvis\", sir. You can lock your phone." else "Off. Tap Start Jarvis."
         val h = prefs.history()
         val sb = StringBuilder()
         for (i in 0 until h.length()) {
             val m = h.getJSONObject(i)
             sb.append(if (m.getString("role") == "user") "You: " else "Jarvis: ").append(m.getString("content")).append("\n\n")
         }
-        log.text = if (sb.isEmpty()) "Say \"Jarvis\" and ask anything. Your conversation shows up here." else sb.toString().trim()
+        log.text = if (sb.isEmpty()) "Say \"Hey Jarvis\" and ask anything. Your conversation shows up here." else sb.toString().trim()
         if (findViewById<View>(R.id.setup).visibility != View.VISIBLE)
             findViewById<ScrollView>(R.id.scroll).post { findViewById<ScrollView>(R.id.scroll).fullScroll(View.FOCUS_DOWN) }
     }

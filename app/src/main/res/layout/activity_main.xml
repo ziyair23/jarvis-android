@@ -68,8 +68,7 @@
             <TextView style="@style/Hint" android:text="Claude API key (from platform.claude.com)" />
             <EditText android:id="@+id/claudeKey" style="@style/Field" android:inputType="textPassword" android:hint="sk-ant-..." />
 
-            <TextView style="@style/Hint" android:text="Picovoice AccessKey (from console.picovoice.ai)" />
-            <EditText android:id="@+id/picoKey" style="@style/Field" android:inputType="textPassword" android:hint="AccessKey" />
+            <EditText android:id="@+id/picoKey" style="@style/Field" android:inputType="textPassword" android:visibility="gone" />
 
             <TextView style="@style/Hint" android:text="Your partner's name (optional)" />
             <EditText android:id="@+id/herName" style="@style/Field" android:inputType="textPersonName|textCapWords" />

@@ -41,6 +41,16 @@ jobs:
         with:
           gradle-version: "8.7"
 
+      - name: Get the free "Hey Jarvis" wake-word models (openWakeWord)
+        run: |
+          set -e
+          A=app/src/main/assets
+          B=https://github.com/dscripka/openWakeWord/releases/download/v0.5.1
+          curl -fsSLo $A/melspectrogram.onnx $B/melspectrogram.onnx
+          curl -fsSLo $A/embedding_model.onnx $B/embedding_model.onnx
+          curl -fsSLo $A/hey_jarvis.onnx $B/hey_jarvis_v0.1.onnx
+          ls -la $A
+
       - name: Build the app
         run: gradle :app:assembleRelease -PversionCode=${{ github.run_number }} --no-daemon --stacktrace
 

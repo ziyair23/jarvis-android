@@ -2,7 +2,7 @@
   "model": "claude-haiku-5-5",
   "max_tokens": 300,
   "history_turns": 12,
-  "wake_sensitivity": 0.6,
+  "wake_threshold": 0.5,
   "voice_rate": 0.95,
   "voice_pitch": 0.88,
   "follow_up_seconds": 7,
