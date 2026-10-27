@@ -42,13 +42,21 @@ class Brain(private val context: Context) {
             (if (her.isNotBlank()) "\nHis partner's name: " + her + "." else "") +
             Memory.promptBlock(context) +
             "\nRight now it is " + now + "." +
+            todaySoFar() +
             (if (DriveMode.on) "\nHE IS DRIVING: one short sentence per reply, never ask him to look at or touch the phone." else "") +
             (Inbox.lastAnnounced?.let { if (System.currentTimeMillis() - it.at < 600_000) "\nYou just read him a message from ${it.sender} on ${it.app}: \"${it.text}\". If he dictates a reply, read it back and ask to send; reply with reply_message who='last'." else "" } ?: "") +
             "\nYou are speaking out loud through his phone, so never use lists, markdown, emojis or URLs." +
             "\nYou can act on his phone with your tools (timers, reminders, alarms, calls, texts, directions, music, weather). When he tells you something worth keeping for future days, or asks you to remember something, save it with remember. Use them when he asks, then confirm in one short line. Times you pass to tools are 24-hour local time." +
             "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. If he asked you something and a tool can do it, do it rather than telling him how." +
-            "\nYou can drive his phone: open_app for any app, media_control for play/pause/skip, stop_navigation to cancel directions, and screen_read/screen_tap/screen_type/screen_action to work inside any app step by step (e.g. open YouTube, tap the search icon, type, submit, tap the first video). Keep going until it's done, then confirm in a few words. Never post, send, buy or delete anything through the screen without his clear yes."
+            "\nYou can drive his phone: open_app for any app, media_control for play/pause/skip, stop_navigation to cancel directions, and screen_read/screen_tap/screen_type/screen_action to work inside any app step by step (e.g. open YouTube, tap the search icon, type, submit, tap the first video). Keep going until it's done, then confirm in a few words. Never post, send, buy or delete anything through the screen without his clear yes." +
+            "\nFor anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks."
     }
+
+    private fun todaySoFar(): String = try {
+        val baby = Baby.status(context)
+        val earned = Earnings.today(context)
+        "\nToday so far (from his Jarvis dashboard): baby: $baby Earned today: ${Earnings.money(earned)}."
+    } catch (_: Exception) { "" }
 
     /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. */
     fun ask(text: String): String {
@@ -83,6 +91,10 @@ class Brain(private val context: Context) {
 
         val actions = Actions(context)
         val tools = actions.tools()
+        if (cfg.optBoolean("web_search", true)) tools.put(JSONObject().put("type", "web_search_20250305").put("name", "web_search")
+            .put("max_uses", cfg.optInt("web_search_max", 3))
+            .put("user_location", JSONObject().put("type", "approximate").put("city", prefs.city.ifBlank { "Spokane" })
+                .put("region", "Washington").put("country", "US").put("timezone", java.util.TimeZone.getDefault().id)))
         var rounds = 0
         while (true) {
             val body = JSONObject()
@@ -92,6 +104,9 @@ class Brain(private val context: Context) {
                 .put("tools", tools)
                 .put("messages", clean)
             val (code, resp) = try { post(key, body) } catch (e: Exception) { return "I can't reach the network right now, sir." }
+            // web search not turned on for his Claude account: carry on without it
+            if (code == 400 && resp.contains("web_search", true) && tools.length() > 0 &&
+                tools.getJSONObject(tools.length() - 1).optString("name") == "web_search") { tools.remove(tools.length() - 1); continue }
             when {
                 code == 401 || code == 403 -> return "My Claude key isn't working, sir. Check it in the Jarvis app."
                 code == 402 || resp.contains("credit balance", true) -> return "I'm out of API credit, sir. Top it up in the Claude Console."
@@ -100,6 +115,12 @@ class Brain(private val context: Context) {
             }
             val j = JSONObject(resp)
             val content = j.getJSONArray("content")
+            // a long web search can pause mid-turn: hand it straight back so it finishes
+            if (j.optString("stop_reason") == "pause_turn" && rounds < 10) {
+                rounds++
+                clean.put(JSONObject().put("role", "assistant").put("content", content))
+                continue
+            }
             val sb = StringBuilder()
             val results = JSONArray()
             for (i in 0 until content.length()) {
@@ -128,7 +149,7 @@ class Brain(private val context: Context) {
     private fun post(key: String, body: JSONObject): Pair<Int, String> {
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
         c.requestMethod = "POST"
-        c.connectTimeout = 10000; c.readTimeout = 30000
+        c.connectTimeout = 10000; c.readTimeout = 60000
         c.doOutput = true
         c.setRequestProperty("content-type", "application/json")
         c.setRequestProperty("x-api-key", key)

@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Jarvis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#14110e; --bg2:#1b1713; --card:#231e19; --edge:#3a322a;
+  --ink:#efe6d6; --ink-dim:#b8ac9a; --ink-faint:#8e8475;
+  --accent:#c9a35c; --accent-ink:#17120c; --good:#9fbf8a; --warn:#e0aa66; --bad:#d9826f;
+  --milk:#f2d9a8; --diaper:#a8d8c0; --sleep:#b4c3c6;
+  --serif:"Fraunces",Georgia,serif; --sans:"Barlow",system-ui,sans-serif; --cond:"Barlow Condensed","Barlow",sans-serif;
+  --r:18px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 var(--sans)}
+body{padding:0 16px calc(84px + env(safe-area-inset-bottom));background:radial-gradient(120% 60% at 50% -10%,#2a2219 0%,var(--bg) 60%) fixed}
+header{display:flex;align-items:center;gap:12px;padding:22px 0 14px}
+header h1{font:italic 400 30px/1 var(--serif);margin:0;letter-spacing:.2px}
+header .sub{color:var(--ink-dim);font-size:13px;margin-top:4px}
+header .grow{flex:1}
+.icon{width:42px;height:42px;border-radius:50%;border:1px solid var(--edge);background:var(--card);color:var(--ink-dim);display:grid;place-items:center;font-size:19px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ink-faint);margin-right:6px;vertical-align:1px}
+.dot.on{background:var(--good);box-shadow:0 0 0 4px rgba(159,191,138,.15)}
+.card{background:var(--card);border:1px solid var(--edge);border-radius:var(--r);padding:16px;margin:0 0 12px}
+.label{font:600 12px/1 var(--cond);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:10px}
+.big{font:600 34px/1.05 var(--serif)}
+.mid{font:500 20px/1.2 var(--serif)}
+.dim{color:var(--ink-dim)} .faint{color:var(--ink-faint);font-size:13px}
+.row{display:flex;gap:10px;align-items:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+button{font:600 14px var(--sans);color:var(--ink);background:var(--bg2);border:1px solid var(--edge);border-radius:14px;padding:12px 8px;min-height:44px}
+button:active{transform:scale(.97)}
+.q-feed{border-color:#5c513c;color:var(--milk)} .q-diaper{border-color:#3f5a4d;color:var(--diaper)} .q-sleep{border-color:#45525a;color:var(--sleep)}
+.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.talk{width:100%;padding:16px;font-size:17px;border-radius:16px;margin:0 0 14px}
+.bar{height:10px;border-radius:6px;background:var(--bg2);overflow:hidden;margin:12px 0 6px;border:1px solid var(--edge)}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,#a7864a,var(--accent));border-radius:6px}
+.list{margin:0;padding:0;list-style:none}
+.list li{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--edge)}
+.list li:first-child{border-top:0}
+.list .t{font:500 15px var(--sans);min-width:64px;color:var(--ink-dim)}
+.list .x{margin-left:auto;background:none;border:0;color:var(--ink-faint);min-height:36px;padding:6px 10px;font-size:18px}
+.chip{display:inline-block;font:600 12px var(--cond);letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:999px;border:1px solid var(--edge)}
+.k-feed{color:var(--milk);border-color:#5c513c} .k-diaper{color:var(--diaper);border-color:#3f5a4d} .k-sleep,.k-wake{color:var(--sleep);border-color:#45525a}
+.day{font:600 13px var(--cond);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin:18px 2px 8px}
+input{font:16px var(--sans);color:var(--ink);background:var(--bg2);border:1px solid var(--edge);border-radius:12px;padding:12px;width:100%;min-height:46px}
+input:focus{outline:none;border-color:var(--accent)}
+.bars{display:flex;align-items:flex-end;gap:5px;height:90px;margin-top:8px}
+.bars div{flex:1;background:#4a3f30;border-radius:5px 5px 2px 2px;min-height:3px;position:relative}
+.bars div.today{background:var(--accent)}
+.bars-l{display:flex;gap:5px;margin-top:6px}.bars-l span{flex:1;text-align:center;font:500 11px var(--cond);color:var(--ink-faint)}
+.chat p{margin:0 0 12px}.chat .you{color:var(--ink-dim)}.chat b{font:600 12px var(--cond);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);display:block}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(20,17,14,.94);backdrop-filter:blur(10px);border-top:1px solid var(--edge);padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+nav button{flex:1;background:none;border:0;color:var(--ink-faint);font:600 12px var(--cond);letter-spacing:.1em;text-transform:uppercase;min-height:52px;border-radius:12px}
+nav button.on{color:var(--ink);background:var(--card)}
+section{display:none;animation:fade .25s ease}
+section.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.empty{color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
+@media (prefers-reduced-motion:reduce){section{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="grow">
+    <h1 id="hello">Evening, sir</h1>
+    <div class="sub"><span id="dot" class="dot"></span><span id="state">…</span></div>
+  </div>
+  <button class="icon" aria-label="Setup" onclick="J.openSetup()">⚙</button>
+</header>
+
+<section id="s-today" class="on">
+  <button class="primary talk" onclick="J.talk()">Talk to Jarvis</button>
+  <div class="card">
+    <div class="label">Baby</div>
+    <div class="mid" id="t-feed">—</div>
+    <div class="faint" id="t-baby"></div>
+    <div class="quick">
+      <button class="q-feed" onclick="baby('feed')">Fed</button>
+      <button class="q-diaper" onclick="baby('diaper')">Diaper</button>
+      <button class="q-sleep" onclick="baby('sleep')">Asleep</button>
+      <button class="q-sleep" onclick="baby('wake')">Awake</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">DoorDash today</div>
+    <div class="row"><div class="big" id="t-earn">$0</div><div class="grow"></div><div class="faint" id="t-week"></div></div>
+    <div id="t-goal"></div>
+  </div>
+  <div class="card">
+    <div class="label">Coming up</div>
+    <ul class="list" id="t-rem"></ul>
+  </div>
+</section>
+
+<section id="s-baby">
+  <div class="card">
+    <div class="label">Right now</div>
+    <div class="dim" id="b-status"></div>
+    <div class="quick">
+      <button class="q-feed" onclick="baby('feed')">Fed</button>
+      <button class="q-diaper" onclick="baby('diaper')">Diaper</button>
+      <button class="q-sleep" onclick="baby('sleep')">Asleep</button>
+      <button class="q-sleep" onclick="baby('wake')">Awake</button>
+    </div>
+  </div>
+  <div id="b-log"></div>
+</section>
+
+<section id="s-money">
+  <div class="card">
+    <div class="label" id="m-goal-l">Savings goal</div>
+    <div class="big" id="m-saved">$0</div>
+    <div class="bar"><i id="m-bar" style="width:0"></i></div>
+    <div class="faint" id="m-goaltext"></div>
+  </div>
+  <div class="card">
+    <div class="label">Last 14 days</div>
+    <div class="bars" id="m-bars"></div>
+    <div class="bars-l" id="m-barsl"></div>
+  </div>
+  <div class="card">
+    <div class="label">Log earnings</div>
+    <div class="grid2">
+      <input id="m-amt" type="number" inputmode="decimal" placeholder="Amount $">
+      <button class="primary" onclick="earn('today')">Add to today</button>
+    </div>
+    <div class="row" style="margin-top:8px"><button style="flex:1" onclick="earn('yesterday')">Add to yesterday</button><button style="flex:1" onclick="setGoal()">Set as goal</button></div>
+  </div>
+  <div class="card"><div class="label">Days</div><ul class="list" id="m-days"></ul></div>
+</section>
+
+<section id="s-mem">
+  <div class="card">
+    <div class="label">Teach Jarvis something</div>
+    <div class="grid2"><input id="mem-in" placeholder="e.g. Ziyair takes 3 oz"><button class="primary" onclick="addMem()">Remember</button></div>
+  </div>
+  <div class="card"><div class="label">What Jarvis remembers</div><ul class="list" id="mem-list"></ul></div>
+</section>
+
+<section id="s-chat"><div class="card chat" id="chat"></div></section>
+
+<nav>
+  <button class="on" data-s="today">Today</button>
+  <button data-s="baby">Baby</button>
+  <button data-s="money">Money</button>
+  <button data-s="mem">Memory</button>
+  <button data-s="chat">Chat</button>
+</nav>
+
+<script>
+let D = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = v => '$' + (Math.round(v * 100) / 100).toLocaleString('en-US', {maximumFractionDigits: 2});
+const clock = ms => new Date(ms).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
+const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.floor(m / 60) + 'h ' + (m % 60) + 'm ago'; };
+const KIND = {feed: 'Fed', diaper: 'Diaper', sleep: 'Asleep', wake: 'Awake'};
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === 's-' + b.dataset.s));
+  if (b.dataset.s === 'chat') setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 50);
+});
+
+function baby(k) { J.logBaby(k, ''); }
+function earn(day) { const v = $('m-amt').value; if (!v) return; J.logEarn(v, day, false); $('m-amt').value = ''; }
+function setGoal() { const v = $('m-amt').value; if (!v) return; J.setGoal(v, D.goalName || 'the Macan'); $('m-amt').value = ''; }
+function addMem() { const v = $('mem-in').value.trim(); if (!v) return; J.remember(v); $('mem-in').value = ''; }
+
+function load() {
+  try { D = JSON.parse(J.data()); } catch (e) { return; }
+  const h = new Date().getHours();
+  $('hello').textContent = (h < 5 ? 'Late one, sir' : h < 12 ? 'Morning, sir' : h < 17 ? 'Afternoon, sir' : 'Evening, sir');
+  $('dot').className = 'dot' + (D.running ? ' on' : '');
+  $('state').textContent = D.running ? 'Listening for "Hey Jarvis"' : 'Off — start him in setup';
+
+  // baby
+  const log = [];
+  for (let i = 0; i < D.baby.length; i++) log.push(D.baby[i]);
+  log.sort((a, b) => b.at - a.at);
+  const lastFeed = log.find(e => e.k === 'feed');
+  $('t-feed').textContent = lastFeed ? 'Fed ' + ago(lastFeed.at) : 'No feeds logged yet';
+  $('t-baby').textContent = lastFeed ? 'Next feed around ' + clock(lastFeed.at + D.feedHours * 3600000) : 'Tap Fed, or tell Jarvis "he just ate".';
+  $('b-status').textContent = D.babyStatus;
+  let html = '', cur = '';
+  log.slice(0, 120).forEach(e => {
+    const d = new Date(e.at), key = d.toDateString();
+    if (key !== cur) {
+      if (cur) html += '</ul></div>';
+      cur = key;
+      const today = new Date().toDateString(), yest = new Date(Date.now() - 864e5).toDateString();
+      const name = key === today ? 'Today' : key === yest ? 'Yesterday' : d.toLocaleDateString('en-US', {weekday: 'long', month: 'short', day: 'numeric'});
+      const n = log.filter(x => new Date(x.at).toDateString() === key);
+      const nf = n.filter(x => x.k === 'feed').length, nd = n.filter(x => x.k === 'diaper').length;
+      html += `<div class="day">${name} · ${nf} feed${nf === 1 ? '' : 's'} · ${nd} diaper${nd === 1 ? '' : 's'}</div><div class="card"><ul class="list">`;
+    }
+    html += `<li><span class="t">${clock(e.at)}</span><span class="chip k-${esc(e.k)}">${esc(KIND[e.k] || e.k)}</span><span class="dim">${esc(e.n || '')}</span><button class="x" aria-label="Delete" onclick="if(confirm('Delete this entry?'))J.deleteBaby('${e.at}')">×</button></li>`;
+  });
+  $('b-log').innerHTML = cur ? html + '</ul></div>' : '<p class="empty">Nothing logged yet. Say "Hey Jarvis, he just ate."</p>';
+
+  // money
+  const byDay = {}; let total = 0;
+  for (let i = 0; i < D.earnings.length; i++) { const e = D.earnings[i]; byDay[e.d] = (byDay[e.d] || 0) + e.a; total += e.a; }
+  const now = new Date(), todayK = ymd(now);
+  const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  let week = 0; Object.keys(byDay).forEach(k => { if (k >= ymd(mon)) week += byDay[k]; });
+  $('t-earn').textContent = money(byDay[todayK] || 0);
+  $('t-week').textContent = 'Week ' + money(week);
+  const pct = D.goal > 0 ? Math.min(100, total / D.goal * 100) : 0;
+  $('t-goal').innerHTML = D.goal > 0 ? `<div class="bar"><i style="width:${pct}%"></i></div><div class="faint">${money(total)} of ${money(D.goal)} toward ${esc(D.goalName)} · ${pct.toFixed(1)}%</div>` : '<div class="faint" style="margin-top:8px">Tell Jarvis what the Macan costs to track it here.</div>';
+  $('m-goal-l').textContent = 'Toward ' + (D.goalName || 'the Macan');
+  $('m-saved').textContent = money(total);
+  $('m-bar').style.width = pct + '%';
+  $('m-goaltext').textContent = D.goal > 0 ? money(Math.max(0, D.goal - total)) + ' to go of ' + money(D.goal) : 'No goal set yet. Type the price above and tap Set as goal.';
+  let bars = '', labels = '', max = 1; const days = [];
+  for (let i = 13; i >= 0; i--) { const d = new Date(now); d.setDate(now.getDate() - i); days.push(d); max = Math.max(max, byDay[ymd(d)] || 0); }
+  days.forEach(d => { const v = byDay[ymd(d)] || 0; bars += `<div class="${ymd(d) === todayK ? 'today' : ''}" style="height:${Math.max(3, v / max * 100)}%" title="${money(v)}"></div>`; labels += `<span>${'SMTWTFS'[d.getDay()]}</span>`; });
+  $('m-bars').innerHTML = bars; $('m-barsl').innerHTML = labels;
+  const keys = Object.keys(byDay).sort().reverse().slice(0, 30);
+  $('m-days').innerHTML = keys.length ? keys.map(k => `<li><span class="t">${new Date(k + 'T12:00').toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}</span><span class="mid">${money(byDay[k])}</span><button class="x" aria-label="Delete" onclick="if(confirm('Delete ${k}?'))J.deleteEarn('${k}')">×</button></li>`).join('') : '<li class="empty">Nothing logged yet. Say "Hey Jarvis, made 60 this morning."</li>';
+
+  // reminders
+  const rem = []; for (let i = 0; i < D.reminders.length; i++) rem.push(D.reminders[i]);
+  rem.sort((a, b) => a.at - b.at);
+  $('t-rem').innerHTML = rem.length ? rem.slice(0, 6).map(r => `<li><span class="t">${clock(r.at)}</span><span>${esc(r.label)}</span><button class="x" aria-label="Cancel" onclick="J.cancelReminder(${r.id})">×</button></li>`).join('') : '<li class="empty">Nothing scheduled.</li>';
+
+  // memory
+  const mem = []; for (let i = 0; i < D.memory.length; i++) mem.push(D.memory[i]);
+  $('mem-list').innerHTML = mem.length ? mem.slice().reverse().map(f => `<li><span>${esc(f)}</span><button class="x" aria-label="Forget" data-f="${esc(f)}" onclick="if(confirm('Forget this?'))J.forget(this.dataset.f)">×</button></li>`).join('') : '<li class="empty">Nothing yet. He learns as you talk.</li>';
+
+  // chat
+  let c = '';
+  for (let i = 0; i < D.history.length; i++) { const m = D.history[i]; c += `<p class="${m.role === 'user' ? 'you' : ''}"><b>${m.role === 'user' ? 'You' : 'Jarvis'}${m.at ? ' · ' + clock(m.at) : ''}</b>${esc(m.content)}</p>`; }
+  $('chat').innerHTML = c || '<p class="empty">Your conversations show up here.</p>';
+}
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

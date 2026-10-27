@@ -21,7 +21,16 @@ import java.util.TimeZone
 object Earnings {
     private val day = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
-    private fun all(p: Prefs): JSONArray = try { JSONArray(p.sp.getString("earnings", "[]")) } catch (_: Exception) { JSONArray() }
+    fun all(p: Prefs): JSONArray = try { JSONArray(p.sp.getString("earnings", "[]")) } catch (_: Exception) { JSONArray() }
+    fun delete(context: Context, d: String) {
+        val p = Prefs(context); val a = all(p); val keep = JSONArray()
+        for (i in 0 until a.length()) if (a.getJSONObject(i).optString("d") != d) keep.put(a.get(i))
+        save(p, keep)
+    }
+    fun today(context: Context): Double {
+        val a = all(Prefs(context)); val t = day.format(Date())
+        return (0 until a.length()).map { a.getJSONObject(it) }.filter { it.optString("d") == t }.sumOf { it.optDouble("a") }
+    }
     private fun save(p: Prefs, a: JSONArray) = p.sp.edit().putString("earnings", a.toString()).apply()
 
     fun goal(p: Prefs): Double = p.sp.getFloat("goal_amount", 0f).toDouble()
@@ -97,7 +106,12 @@ object Earnings {
 
 /** Baby log by voice: feeds, diapers, sleep. Sets a "next feed" heads-up after every feed. */
 object Baby {
-    private fun all(p: Prefs): JSONArray = try { JSONArray(p.sp.getString("baby_log", "[]")) } catch (_: Exception) { JSONArray() }
+    fun all(p: Prefs): JSONArray = try { JSONArray(p.sp.getString("baby_log", "[]")) } catch (_: Exception) { JSONArray() }
+    fun delete(context: Context, at: Long) {
+        val p = Prefs(context); val a = all(p); val keep = JSONArray()
+        for (i in 0 until a.length()) if (a.getJSONObject(i).optLong("at") != at) keep.put(a.get(i))
+        p.sp.edit().putString("baby_log", keep.toString()).apply()
+    }
 
     fun feedHours(p: Prefs): Double = p.sp.getFloat("feed_hours", 3f).toDouble()
 
@@ -145,7 +159,8 @@ object Baby {
         fun count(k: String) = (0 until a.length()).count { a.getJSONObject(it).let { e -> e.optString("k") == k && e.optLong("at") >= dayStart } }
         val sb = StringBuilder()
         last("feed")?.let { sb.append("Last feed ${ago(now - it.optLong("at"))} ago at ${Scheduler.clock(it.optLong("at"))}. ") }
-        sb.append("Today: ${count("feed")} feeds, ${count("diaper")} diapers.")
+        val f = count("feed"); val dp = count("diaper")
+        sb.append("Today: $f feed${if (f == 1) "" else "s"}, $dp diaper${if (dp == 1) "" else "s"}.")
         val s = last("sleep"); val w = last("wake")
         if (s != null && (w == null || s.optLong("at") > w.optLong("at"))) sb.append(" Asleep for ${ago(now - s.optLong("at"))}.")
         else if (w != null) sb.append(" Awake since ${Scheduler.clock(w.optLong("at"))}.")

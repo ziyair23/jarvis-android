@@ -21,5 +21,7 @@
   "conversation_seconds": 3,
   "cloud_voice": "en-GB-Chirp3-HD-Algenib",
   "cloud_rate": 1.0,
-  "wake_seconds": 5
+  "wake_seconds": 5,
+  "web_search": true,
+  "web_search_max": 3
 }
