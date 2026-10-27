@@ -44,6 +44,9 @@ class JarvisService : Service() {
     private var busy = false
     private var followUps = 0
     private var carWatchOn = false
+    private var listenUntil = 0L
+    private var retries = 0
+    private var chatted = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -66,6 +69,7 @@ class JarvisService : Service() {
             ACTION_STOP -> { stopEverything(); return START_NOT_STICKY }
             ACTION_LISTEN -> { goForeground(); if (!busy) onWake() ; return START_STICKY }
             ACTION_SAY -> {
+                goForeground()
                 val moment = intent.getStringExtra("moment")
                 val text = intent.getStringExtra("text")
                 val thenListen = intent.getBooleanExtra("listen", false)
@@ -129,63 +133,85 @@ class JarvisService : Service() {
         if (busy) return
         busy = true
         followUps = 0
+        chatted = false
         acquire()
         stopWakeWord()
         try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 120) } catch (_: Exception) {}
+        openWindow(10)
         main.postDelayed({ listen(firstTurn = true) }, 350)
     }
 
+    /** How long he keeps listening without hearing anything before going back to waiting for "Hey Jarvis". */
+    private fun openWindow(seconds: Int) { listenUntil = System.currentTimeMillis() + seconds * 1000L }
+    private fun convoSeconds() = brain.config().optInt("conversation_seconds", 15)
+
     private fun listen(firstTurn: Boolean) {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { speak("Speech recognition isn't available on this phone, sir.") { finishTurn() }; return }
-        recognizer?.destroy()
+        try { recognizer?.destroy() } catch (_: Exception) {}
         recognizer = SpeechRecognizer.createSpeechRecognizer(this)
-        val secs = brain.config().optInt("follow_up_seconds", 7)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1300L)
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1300L)
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, if (firstTurn) 2000L else secs * 1000L)
+            .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
         recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
+                retries = 0
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                 if (text.isBlank()) noSpeech(firstTurn) else handle(text)
             }
-            override fun onError(error: Int) { noSpeech(firstTurn) }
+            override fun onError(error: Int) {
+                // the recognizer wasn't ready yet: try again shortly instead of giving up
+                if ((error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) && retries < 4) {
+                    retries++
+                    main.postDelayed({ listen(firstTurn) }, 400L * retries)
+                    return
+                }
+                retries = 0
+                noSpeech(firstTurn)
+            }
             override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onBeginningOfSpeech() {}
+            override fun onBeginningOfSpeech() { openWindow(convoSeconds()) }
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
-            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onPartialResults(partialResults: Bundle?) { openWindow(convoSeconds()) }
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
         try { recognizer?.startListening(intent) } catch (e: Exception) { noSpeech(firstTurn) }
     }
 
+    /** Heard nothing this round. Keep the conversation open until the window runs out. */
     private fun noSpeech(firstTurn: Boolean) {
-        if (firstTurn) {
+        if (System.currentTimeMillis() < listenUntil) {
+            main.postDelayed({ listen(firstTurn) }, 150)
+            return
+        }
+        if (firstTurn && followUps == 0) {
             // he said "Jarvis" then paused: answer like the films and give him one more go
-            if (followUps == 0) {
-                followUps = 1
-                speak(pick("greetings", "Sir?")) { listen(firstTurn = false) }
-            } else finishTurn()
+            followUps = 1
+            speak(pick("greetings", "Sir?")) { openWindow(8); afterSpeaking { listen(firstTurn = false) } }
         } else finishTurn()
     }
 
+    /** A short pause after Jarvis talks so the mic doesn't hear the end of his own voice. */
+    private fun afterSpeaking(fn: () -> Unit) { main.postDelayed(fn, 350) }
+
     private fun handle(text: String) {
         val lower = text.lowercase(Locale.US)
-        if (Regex("^(stop|never ?mind|that'?s all|thanks?,? (that'?s|thats) (it|all)|go to sleep|nothing)\\b").containsMatchIn(lower)) {
+        if (Regex("^(stop|never ?mind|that'?s all|that'?s it|thanks?,? (that'?s|thats) (it|all)|go to sleep|nothing|no thanks?|i'?m good)\\b").containsMatchIn(lower)) {
             speak(pick("goodbyes", "Very good, sir.")) { finishTurn() }
             return
         }
         try { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
+        chatted = true
         thread {
             val reply = brain.ask(text)
             main.post {
                 LogBus.changed()
-                speak(reply) { listen(firstTurn = false) }
+                speak(reply) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
             }
         }
     }
@@ -199,7 +225,7 @@ class JarvisService : Service() {
         acquire()
         stopWakeWord()
         try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 90) } catch (_: Exception) {}
-        main.postDelayed({ speak(line) { if (thenListen) listen(firstTurn = false) else finishTurn() } }, 300)
+        main.postDelayed({ speak(line) { if (thenListen) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() } }, 300)
     }
 
     /** Driving mode follows the car's Bluetooth (matched by name, no extra permission needed). */
@@ -223,14 +249,44 @@ class JarvisService : Service() {
     }
 
     private fun finishTurn() {
-        recognizer?.destroy(); recognizer = null
+        try { recognizer?.destroy() } catch (_: Exception) {}
+        recognizer = null
+        if (chatted) { chatted = false; thread { Memory.learn(this) } }
         busy = false
         release()
         LogBus.changed()
         startWakeWord()
     }
 
+    private var player: android.media.MediaPlayer? = null
+
+    /** Speak with the realistic Google voice when a key is set, otherwise the phone's own voice. */
     private fun speak(text: String, then: () -> Unit) {
+        LockView.showIfLocked(this, text)
+        val key = prefs.ttsKey
+        if (key.isBlank()) { phoneSpeak(text, then); return }
+        thread {
+            val f = CloudVoice.synth(this, key, text, brain.config())
+            main.post { if (f == null || !playFile(f, then)) phoneSpeak(text, then) }
+        }
+    }
+
+    private fun playFile(f: java.io.File, then: () -> Unit): Boolean = try {
+        player?.release()
+        val mp = android.media.MediaPlayer()
+        mp.setAudioAttributes(android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
+        mp.setDataSource(f.absolutePath)
+        mp.setOnCompletionListener { it.release(); if (player === it) player = null; main.post(then) }
+        mp.setOnErrorListener { p, _, _ -> p.release(); if (player === p) player = null; main.post(then); true }
+        mp.prepare()
+        mp.start()
+        player = mp
+        true
+    } catch (_: Exception) { false }
+
+    private fun phoneSpeak(text: String, then: () -> Unit) {
         val t = tts
         if (t == null || !ttsReady) { main.postDelayed(then, 300); return }
         val cfg = brain.config()
@@ -243,16 +299,16 @@ class JarvisService : Service() {
             @Deprecated("old api") override fun onError(utteranceId: String?) { if (utteranceId == id) main.post(then) }
         })
         t.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
-        LockView.showIfLocked(this, text)
     }
 
     /** A British male voice when the phone has one; otherwise the phone's UK English voice. */
     private fun pickVoice() {
         val t = tts ?: return
         try {
-            val voices = t.voices?.filter { it.locale.language == "en" && !it.isNetworkConnectionRequired } ?: emptyList()
+            val voices = t.voices?.filter { it.locale.language == "en" } ?: emptyList()
             val male = Regex("rjs|gbd|gbb|male|daniel|arthur|george|oliver", RegexOption.IGNORE_CASE)
-            val best = voices.firstOrNull { it.locale.country == "GB" && male.containsMatchIn(it.name) && !it.name.contains("female", true) }
+            fun gbMale(v: android.speech.tts.Voice) = v.locale.country == "GB" && male.containsMatchIn(v.name) && !v.name.contains("female", true)
+            val best = voices.filter { gbMale(it) }.maxByOrNull { (if (it.isNetworkConnectionRequired) 100 else 0) + it.quality }
                 ?: voices.firstOrNull { it.locale.country == "GB" }
             if (best != null) t.voice = best else t.language = Locale.UK
         } catch (_: Exception) { t.language = Locale.UK }
@@ -293,6 +349,7 @@ class JarvisService : Service() {
         try { wakeWord?.close() } catch (_: Exception) {}
         recognizer?.destroy()
         tts?.shutdown()
+        player?.release()
         tone?.release()
         release()
         super.onDestroy()

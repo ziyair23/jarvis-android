@@ -70,6 +70,12 @@
 
             <EditText android:id="@+id/picoKey" style="@style/Field" android:inputType="textPassword" android:visibility="gone" />
 
+            <TextView style="@style/Hint" android:text="Google voice key (optional, for the realistic voice)" />
+            <EditText android:id="@+id/ttsKey" style="@style/Field" android:inputType="textPassword" android:hint="AIza..." />
+
+            <TextView style="@style/Hint" android:text="Voice name (optional)" />
+            <EditText android:id="@+id/voiceName" style="@style/Field" android:inputType="text" android:hint="en-GB-Chirp3-HD-Charon" />
+
             <TextView style="@style/Hint" android:text="Your partner's name (optional)" />
             <EditText android:id="@+id/herName" style="@style/Field" android:inputType="textPersonName|textCapWords" />
 
@@ -132,6 +138,8 @@
             android:orientation="vertical">
             <Button android:id="@+id/allowComms" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:text="Allow calls &amp; texts" />
             <Button android:id="@+id/allowApps" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Allow opening apps" />
+            <Button android:id="@+id/memoryBtn" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="What Jarvis remembers" />
+            <Button android:id="@+id/testVoice" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Test voice" />
             <Button android:id="@+id/allowMsgs" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Allow reading messages" />
             <Button android:id="@+id/readMode" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Read messages aloud: while driving" />
             <Button android:id="@+id/wakeScreen" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Show replies on lock screen: on" />

@@ -76,6 +76,18 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("wake_screen", true)
         set(v) = sp.edit().putBoolean("wake_screen", v).apply()
 
+    /** Realistic voice: Google Cloud Text-to-Speech API key and voice name (blank = default Chirp 3 HD voice). */
+    var ttsKey: String
+        get() = sp.getString("tts_key", "") ?: ""
+        set(v) = sp.edit().putString("tts_key", v.trim()).apply()
+    var voiceName: String
+        get() = sp.getString("voice_name", "") ?: ""
+        set(v) = sp.edit().putString("voice_name", v.trim()).apply()
+
+    /** Long-term memory: [{"t":"fact","at":ms}] */
+    fun memory(): JSONArray = try { JSONArray(sp.getString("memory", "[]")) } catch (e: Exception) { JSONArray() }
+    fun saveMemory(a: JSONArray) = sp.edit().putString("memory", a.toString()).apply()
+
     /** Pending timers and reminders: [{"id":n,"at":ms,"text":"...","loud":bool,"label":"..."}] */
     fun reminders(): JSONArray = try { JSONArray(sp.getString("reminders", "[]")) } catch (e: Exception) { JSONArray() }
     fun saveReminders(a: JSONArray) = sp.edit().putString("reminders", a.toString()).apply()

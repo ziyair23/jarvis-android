@@ -43,6 +43,8 @@ class MainActivity : Activity() {
         val dinner = findViewById<EditText>(R.id.dinner); val bed = findViewById<EditText>(R.id.bedtime)
         city.setText(prefs.city); lunch.setText(prefs.lunch); dinner.setText(prefs.dinner); bed.setText(prefs.bedtime)
         val car = findViewById<EditText>(R.id.carName); car.setText(prefs.carName)
+        val ttsKey = findViewById<EditText>(R.id.ttsKey); ttsKey.setText(prefs.ttsKey)
+        val voiceName = findViewById<EditText>(R.id.voiceName); voiceName.setText(prefs.voiceName)
 
         findViewById<Button>(R.id.save).setOnClickListener {
             prefs.claudeKey = claude.text.toString(); prefs.picoKey = pico.text.toString()
@@ -50,6 +52,7 @@ class MainActivity : Activity() {
             prefs.city = city.text.toString(); prefs.lunch = lunch.text.toString()
             prefs.dinner = dinner.text.toString(); prefs.bedtime = bed.text.toString()
             prefs.carName = car.text.toString()
+            prefs.ttsKey = ttsKey.text.toString(); prefs.voiceName = voiceName.text.toString()
             Scheduler.scheduleDaily(this)
             status.text = "Saved, sir."
             findViewById<View>(R.id.setup).visibility = if (ready()) View.GONE else View.VISIBLE
@@ -69,6 +72,14 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.allowApps).setOnClickListener {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        }
+        findViewById<Button>(R.id.memoryBtn).setOnClickListener { showMemory() }
+        findViewById<Button>(R.id.testVoice).setOnClickListener {
+            if (prefs.claudeKey.isBlank() && prefs.ttsKey.isBlank()) { status.text = "Save your keys first, sir."; return@setOnClickListener }
+            if (!hasMic()) { askPermissions(); return@setOnClickListener }
+            startForegroundService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_SAY)
+                .putExtra("text", "Good evening, sir. This is how I sound. Shall we get to work?"))
+            if (prefs.ttsKey.isNotBlank()) thread { Thread.sleep(6000); runOnUiThread { if (CloudVoice.lastError.isNotBlank()) status.text = CloudVoice.lastError + ". Check the Google voice key." } }
         }
         findViewById<Button>(R.id.allowMsgs).setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
@@ -136,6 +147,16 @@ class MainActivity : Activity() {
     private fun askBattery() {
         try { startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))) }
         catch (_: Exception) { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+    }
+
+    private fun showMemory() {
+        val facts = Memory.all(this)
+        val b = android.app.AlertDialog.Builder(this)
+            .setTitle("What Jarvis remembers")
+            .setMessage(if (facts.isEmpty()) "Nothing yet. Talk to him, or say \"Hey Jarvis, remember that...\"" else facts.joinToString("\n\n") { "• $it" })
+            .setPositiveButton("Close", null)
+        if (facts.isNotEmpty()) b.setNegativeButton("Forget everything") { _, _ -> Memory.clear(this); render() }
+        b.show()
     }
 
     private fun render() {

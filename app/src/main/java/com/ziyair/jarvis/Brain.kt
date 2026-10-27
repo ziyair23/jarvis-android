@@ -40,11 +40,12 @@ class Brain(private val context: Context) {
         return cfg.optString("system") +
             (if (prefs.notes.isNotBlank()) "\n\nAbout him and his day: " + prefs.notes else "") +
             (if (her.isNotBlank()) "\nHis partner's name: " + her + "." else "") +
+            Memory.promptBlock(context) +
             "\nRight now it is " + now + "." +
             (if (DriveMode.on) "\nHE IS DRIVING: one short sentence per reply, never ask him to look at or touch the phone." else "") +
             (Inbox.lastAnnounced?.let { if (System.currentTimeMillis() - it.at < 600_000) "\nYou just read him a message from ${it.sender} on ${it.app}: \"${it.text}\". If he dictates a reply, read it back and ask to send; reply with reply_message who='last'." else "" } ?: "") +
             "\nYou are speaking out loud through his phone, so never use lists, markdown, emojis or URLs." +
-            "\nYou can act on his phone with your tools (timers, reminders, alarms, calls, texts, directions, music, weather). Use them when he asks, then confirm in one short line. Times you pass to tools are 24-hour local time."
+            "\nYou can act on his phone with your tools (timers, reminders, alarms, calls, texts, directions, music, weather). When he tells you something worth keeping for future days, or asks you to remember something, save it with remember. Use them when he asks, then confirm in one short line. Times you pass to tools are 24-hour local time."
     }
 
     /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. */
@@ -54,12 +55,15 @@ class Brain(private val context: Context) {
         val cfg = config()
         val msgs = JSONArray()
         val h = prefs.history()
-        val start = maxOf(0, h.length() - cfg.optInt("history_turns", 12))
+        val start = maxOf(0, h.length() - cfg.optInt("history_turns", 24))
+        val stamp = SimpleDateFormat("EEE MMM d, h:mm a", Locale.US)
         for (i in start until h.length()) {
             val m = h.getJSONObject(i)
-            // only keep recent turns (last 6 hours) so old chats don't confuse him
-            if (System.currentTimeMillis() - m.optLong("at", 0) < 6 * 3600_000L)
-                msgs.put(JSONObject().put("role", m.getString("role")).put("content", m.getString("content")))
+            val at = m.optLong("at", 0)
+            var content = m.getString("content")
+            // older turns carry their time so he knows they're from before, not right now
+            if (m.getString("role") == "user" && System.currentTimeMillis() - at > 2 * 3600_000L) content = "[earlier, ${stamp.format(Date(at))}] $content"
+            msgs.put(JSONObject().put("role", m.getString("role")).put("content", content))
         }
         // the API wants alternating turns starting with the user
         val clean = JSONArray()
