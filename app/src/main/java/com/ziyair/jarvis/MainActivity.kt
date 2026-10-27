@@ -68,10 +68,14 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.battery).setOnClickListener { askBattery() }
         findViewById<Button>(R.id.allowComms).setOnClickListener {
-            requestPermissions(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_CONTACTS), 2)
+            requestPermissions(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_CONTACTS,
+                Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR), 2)
         }
         findViewById<Button>(R.id.allowApps).setOnClickListener {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        }
+        findViewById<Button>(R.id.allowQuiet).setOnClickListener {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
         }
         findViewById<Button>(R.id.memoryBtn).setOnClickListener { showMemory() }
         findViewById<Button>(R.id.testVoice).setOnClickListener {
@@ -167,7 +171,8 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.wakeScreen).text = if (prefs.wakeScreen) "Show replies on lock screen: on" else "Show replies on lock screen: off"
         val comms = checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
-        findViewById<Button>(R.id.allowComms).text = if (comms) "Calls & texts: allowed" else "Allow calls & texts"
+        findViewById<Button>(R.id.allowComms).text = if (comms && Cal.allowed(this)) "Calls, texts & calendar: allowed" else "Allow calls, texts & calendar"
+        findViewById<Button>(R.id.allowQuiet).text = if (PhoneControl.quietAllowed(this)) "Quiet mode: allowed" else "Allow quiet mode"
         findViewById<Button>(R.id.allowApps).text = if (Settings.canDrawOverlays(this)) "Opening apps: allowed" else "Allow opening apps"
         toggle.text = if (prefs.running) "Stop listening" else "Start Jarvis"
         if (status.text.isNullOrBlank() || status.text.startsWith("Listening") || status.text.startsWith("Off"))

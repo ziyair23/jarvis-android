@@ -46,6 +46,19 @@ class Actions(private val context: Context) {
         put(tool("remember", "Save something to long-term memory so you know it in future conversations (a fact about him, a person, a plan, a preference, where he parked, a code).",
             props("fact" to str("One short sentence in third person, e.g. 'His girlfriend's name is Bri.'")), listOf("fact")))
         put(tool("forget", "Delete remembered facts about something he wants forgotten.", props("about" to str("Words that identify what to forget")), listOf("about")))
+        put(tool("log_earnings", "Log money he made DoorDashing. Amounts for the same day add up (two shifts) unless replace is true (he's correcting the day's total). Reply with the result's totals in one or two short sentences.",
+            props("amount" to num("Dollars made"), "day" to str("'today', 'yesterday' or YYYY-MM-DD"), "replace" to bool("true if this is a correction of that day's total")), listOf("amount")))
+        put(tool("earnings_summary", "His earnings so far today, this week, this month, his daily average and progress toward his savings goal (the Macan).", props(), listOf()))
+        put(tool("set_goal", "Set his savings goal amount (e.g. what the Porsche Macan costs).", props("amount" to num("Goal in dollars"), "name" to str("What it's for, e.g. 'the Macan'")), listOf("amount")))
+        put(tool("log_baby", "Log something about the baby: a feed, a diaper, sleep or waking. Feeds also set a heads-up for the next feed.",
+            props("kind" to str("feed, diaper, sleep or wake"), "minutes_ago" to num("How long ago it happened, 0 if just now"), "note" to str("Optional detail, e.g. '4 oz' or 'poop'")), listOf("kind")))
+        put(tool("baby_status", "When the baby last ate, feeds and diapers today, and whether he's asleep.", props(), listOf()))
+        put(tool("set_feed_interval", "Change how many hours between feeds for the next-feed heads-up (default 3).", props("hours" to num("Hours between feeds")), listOf("hours")))
+        put(tool("phone_control", "Control the phone: quiet_on/quiet_off (Do Not Disturb, e.g. 'the baby's asleep'), flashlight_on/flashlight_off, volume (level 0-10).",
+            props("action" to JSONObject().put("type", "string").put("enum", JSONArray(listOf("quiet_on", "quiet_off", "flashlight_on", "flashlight_off", "volume"))), "level" to num("Volume 0-10")), listOf("action")))
+        put(tool("calendar_events", "What's on his calendar.", props("day" to str("'today', 'tomorrow' or YYYY-MM-DD"), "days" to num("How many days to cover, default 1 (7 for 'this week')")), listOf()))
+        put(tool("add_event", "Add an event to his calendar. Confirm the details in your reply.",
+            props("title" to str("What it is"), "date" to str("'today', 'tomorrow' or YYYY-MM-DD"), "time" to str("24-hour HH:MM, leave out for all-day"), "minutes" to num("Length in minutes, default 60")), listOf("title", "date")))
         put(tool("driving_mode", "Turn driving mode on or off (short answers, messages read aloud).", props("on" to bool("true for on")), listOf("on")))
     }
 
@@ -131,6 +144,15 @@ class Actions(private val context: Context) {
             }
             "remember" -> if (Memory.add(context, input.getString("fact"))) "Saved to memory." else "Already remembered."
             "forget" -> { val n = Memory.forget(context, input.getString("about")); if (n > 0) "Forgot $n thing${if (n > 1) "s" else ""}." else "Nothing matched to forget." }
+            "log_earnings" -> Earnings.log(context, input.getDouble("amount"), input.optString("day", "today"), input.optBoolean("replace"))
+            "earnings_summary" -> Earnings.summary(context)
+            "set_goal" -> Earnings.setGoal(context, input.getDouble("amount"), input.optString("name"))
+            "log_baby" -> Baby.log(context, input.getString("kind"), input.optDouble("minutes_ago", 0.0), input.optString("note"))
+            "baby_status" -> Baby.status(context)
+            "set_feed_interval" -> Baby.setFeedHours(context, input.getDouble("hours").coerceIn(0.5, 12.0))
+            "phone_control" -> PhoneControl.run(context, input.getString("action"), if (input.has("level")) input.optInt("level") else null)
+            "calendar_events" -> Cal.events(context, input.optString("day", "today"), input.optInt("days", 1))
+            "add_event" -> Cal.add(context, input.getString("title"), input.optString("date", "today"), input.optString("time").ifBlank { null }, input.optInt("minutes", 60))
             "driving_mode" -> { DriveMode.on = input.optBoolean("on"); if (DriveMode.on) "Driving mode on." else "Driving mode off." }
             else -> "Unknown action."
         }

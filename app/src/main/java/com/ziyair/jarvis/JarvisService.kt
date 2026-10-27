@@ -256,7 +256,7 @@ class JarvisService : Service() {
     /** Jarvis speaks up on his own (heads-ups, timers, reminders), then goes back to listening. */
     private fun sayFirst(line: String, thenListen: Boolean = false) {
         note(line)
-        if (inCall()) { Scheduler.notify(this, "Jarvis", line, false); if (!prefs.running && !busy) stopEverything(); return }
+        if (inCall() || PhoneControl.quietOn(this)) { Scheduler.notify(this, "Jarvis", line, false); if (!prefs.running && !busy) stopEverything(); return }
         if (busy) return
         busy = true
         followUps = 1

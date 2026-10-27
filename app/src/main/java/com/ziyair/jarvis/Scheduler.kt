@@ -25,13 +25,22 @@ object Scheduler {
 
     fun clock(ms: Long): String = SimpleDateFormat("h:mm a", Locale.US).format(Date(ms))
 
-    fun add(context: Context, at: Long, text: String, loud: Boolean, label: String) {
+    fun add(context: Context, at: Long, text: String, loud: Boolean, label: String): Int {
         val prefs = Prefs(context)
         val list = prefs.reminders()
         val id = 10_000 + (System.currentTimeMillis() % 100_000_000).toInt()
         list.put(JSONObject().put("id", id).put("at", at).put("text", text).put("loud", loud).put("label", label))
         prefs.saveReminders(list)
         setAlarm(context, at, id, Intent(context, AlarmReceiver::class.java).putExtra("id", id))
+        return id
+    }
+
+    fun cancel(context: Context, id: Int) {
+        val prefs = Prefs(context)
+        val list = prefs.reminders(); val keep = JSONArray()
+        for (i in 0 until list.length()) if (list.getJSONObject(i).getInt("id") != id) keep.put(list.getJSONObject(i))
+        prefs.saveReminders(keep)
+        context.getSystemService(AlarmManager::class.java).cancel(pi(context, id, Intent(context, AlarmReceiver::class.java).putExtra("id", id)))
     }
 
     fun describe(context: Context): String {
@@ -120,9 +129,9 @@ object Scheduler {
         val roads = if (m.endsWith("_soon") && m != "bed_soon") Weather.roadsNote(context) else ""
         return when (m) {
             "lunch_soon" -> "Lunch rush starts in fifteen minutes, $s.$roads"
-            "lunch_done" -> "That's lunch wrapped, $s. Log what you made when you get a second."
+            "lunch_done" -> "That's the shift wrapped, $s. How much did you make?"
             "dinner_soon" -> "Dinner rush in fifteen, $s.$roads"
-            "dinner_done" -> "Dinner rush is done, $s. Log tonight's earnings when you're ready."
+            "dinner_done" -> "Dinner rush is done, $s. How'd tonight go, what did you make?"
             "bed_soon" -> "Half an hour to bedtime, $s."
             else -> ""
         }
@@ -152,7 +161,8 @@ class AlarmReceiver : BroadcastReceiver() {
         if (moment != null) {
             Scheduler.scheduleDaily(context) // arm tomorrow's
             if (!prefs.talkFirst) return
-            say(context, Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("moment", moment),
+            say(context, Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("moment", moment)
+                .putExtra("listen", moment.endsWith("_done")),
                 fallbackTitle = "Jarvis", fallbackText = Scheduler.momentLine(context, moment), loud = false)
             return
         }
