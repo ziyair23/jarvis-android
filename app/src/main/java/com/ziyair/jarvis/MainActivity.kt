@@ -66,6 +66,10 @@ class MainActivity : Activity() {
             if (!hasMic()) { askPermissions(); return@setOnClickListener }
             startForegroundService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_LISTEN))
         }
+        findViewById<Button>(R.id.openDash).setOnClickListener {
+            if (!ready()) { status.text = "Add your Claude key first, sir."; return@setOnClickListener }
+            startActivity(Intent(this, DashActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)); finish()
+        }
         findViewById<Button>(R.id.battery).setOnClickListener { askBattery() }
         findViewById<Button>(R.id.allowComms).setOnClickListener {
             requestPermissions(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_CONTACTS,
