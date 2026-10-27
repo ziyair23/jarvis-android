@@ -143,11 +143,24 @@ class JarvisService : Service() {
 
     /** How long he keeps listening without hearing anything before going back to waiting for "Hey Jarvis". */
     private fun openWindow(seconds: Int) { listenUntil = System.currentTimeMillis() + seconds * 1000L }
-    private fun convoSeconds() = brain.config().optInt("conversation_seconds", 15)
+    private fun convoSeconds() = brain.config().optInt("conversation_seconds", 10)
+
+    /** Mutes the phone's own "mic on / mic off" beeps while Jarvis listens; always undone before he speaks. */
+    private var muted = false
+    private val quietStreams = intArrayOf(AudioManager.STREAM_MUSIC, AudioManager.STREAM_NOTIFICATION, AudioManager.STREAM_SYSTEM)
+    private fun quiet(on: Boolean) {
+        if (on == muted) return
+        muted = on
+        val am = getSystemService(AudioManager::class.java)
+        for (st in quietStreams) try {
+            am.adjustStreamVolume(st, if (on) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE, 0)
+        } catch (_: Exception) {}
+    }
 
     private fun listen(firstTurn: Boolean) {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { speak("Speech recognition isn't available on this phone, sir.") { finishTurn() }; return }
         try { recognizer?.destroy() } catch (_: Exception) {}
+        quiet(true)
         recognizer = SpeechRecognizer.createSpeechRecognizer(this)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -156,6 +169,7 @@ class JarvisService : Service() {
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)
         recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
                 retries = 0
@@ -186,7 +200,7 @@ class JarvisService : Service() {
     /** Heard nothing this round. Keep the conversation open until the window runs out. */
     private fun noSpeech(firstTurn: Boolean) {
         if (System.currentTimeMillis() < listenUntil) {
-            main.postDelayed({ listen(firstTurn) }, 150)
+            main.postDelayed({ listen(firstTurn) }, 300)
             return
         }
         if (firstTurn && followUps == 0) {
@@ -205,6 +219,7 @@ class JarvisService : Service() {
             speak(pick("goodbyes", "Very good, sir.")) { finishTurn() }
             return
         }
+        quiet(false)
         try { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         chatted = true
         thread {
@@ -251,6 +266,7 @@ class JarvisService : Service() {
     private fun finishTurn() {
         try { recognizer?.destroy() } catch (_: Exception) {}
         recognizer = null
+        main.postDelayed({ if (recognizer == null) quiet(false) }, 400)
         if (chatted) { chatted = false; thread { Memory.learn(this) } }
         busy = false
         release()
@@ -262,6 +278,7 @@ class JarvisService : Service() {
 
     /** Speak with the realistic Google voice when a key is set, otherwise the phone's own voice. */
     private fun speak(text: String, then: () -> Unit) {
+        quiet(false)
         LockView.showIfLocked(this, text)
         val key = prefs.ttsKey
         if (key.isBlank()) { phoneSpeak(text, then); return }
@@ -346,6 +363,7 @@ class JarvisService : Service() {
     override fun onDestroy() {
         try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(carWatch) } catch (_: Exception) {}
         DriveMode.on = false
+        quiet(false)
         try { wakeWord?.close() } catch (_: Exception) {}
         recognizer?.destroy()
         tts?.shutdown()
