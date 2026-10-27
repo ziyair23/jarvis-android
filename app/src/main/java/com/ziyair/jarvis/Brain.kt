@@ -46,7 +46,8 @@ class Brain(private val context: Context) {
             (Inbox.lastAnnounced?.let { if (System.currentTimeMillis() - it.at < 600_000) "\nYou just read him a message from ${it.sender} on ${it.app}: \"${it.text}\". If he dictates a reply, read it back and ask to send; reply with reply_message who='last'." else "" } ?: "") +
             "\nYou are speaking out loud through his phone, so never use lists, markdown, emojis or URLs." +
             "\nYou can act on his phone with your tools (timers, reminders, alarms, calls, texts, directions, music, weather). When he tells you something worth keeping for future days, or asks you to remember something, save it with remember. Use them when he asks, then confirm in one short line. Times you pass to tools are 24-hour local time." +
-            "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. If he asked you something and a tool can do it, do it rather than telling him how."
+            "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. If he asked you something and a tool can do it, do it rather than telling him how." +
+            "\nYou can drive his phone: open_app for any app, media_control for play/pause/skip, stop_navigation to cancel directions, and screen_read/screen_tap/screen_type/screen_action to work inside any app step by step (e.g. open YouTube, tap the search icon, type, submit, tap the first video). Keep going until it's done, then confirm in a few words. Never post, send, buy or delete anything through the screen without his clear yes."
     }
 
     /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. */
@@ -111,7 +112,7 @@ class Brain(private val context: Context) {
                     }
                 }
             }
-            if (results.length() > 0 && rounds < 4) {
+            if (results.length() > 0 && rounds < 10) {
                 rounds++
                 clean.put(JSONObject().put("role", "assistant").put("content", content))
                 clean.put(JSONObject().put("role", "user").put("content", results))

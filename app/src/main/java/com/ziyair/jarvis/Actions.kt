@@ -39,7 +39,17 @@ class Actions(private val context: Context) {
             props("destination" to str("Place name or address")), listOf("destination")))
         put(tool("play_music", "Play a song, artist, album or playlist on YouTube Music.",
             props("query" to str("What to play")), listOf("query")))
-        put(tool("get_weather", "Current weather where he lives.", props(), listOf()))
+        put(tool("get_weather", "Weather right now plus today's and tomorrow's forecast, where he lives or for a place he names.", props("place" to str("Optional city, if not where he lives")), listOf()))
+        put(tool("open_app", "Open any app on his phone by name: camera, YouTube, TikTok, Instagram, Snapchat, DoorDash Dasher, Maps, Settings, anything installed.", props("name" to str("App name as he says it")), listOf("name")))
+        put(tool("media_control", "Control whatever is playing (music, YouTube, podcasts): play, pause, toggle, next, previous, stop.",
+            props("action" to JSONObject().put("type", "string").put("enum", JSONArray(listOf("play", "pause", "toggle", "next", "previous", "stop")))), listOf("action")))
+        put(tool("stop_navigation", "Cancel/end Google Maps directions.", props(), listOf()))
+        put(tool("screen_read", "See what's on his screen right now: the app and the visible buttons and text ([tap] marks tappable things). Use before tapping if unsure.", props(), listOf()))
+        put(tool("screen_tap", "Tap a button, link, tab or item on screen by its visible text or label. Returns what's on screen afterwards, so you can keep going step by step.",
+            props("target" to str("The text or label of what to tap"), "long_press" to bool("Long-press instead")), listOf("target")))
+        put(tool("screen_type", "Type text into the text box on screen (search bars, message boxes).", props("text" to str("What to type"), "submit" to bool("Press enter/search after")), listOf("text")))
+        put(tool("screen_action", "Phone buttons and gestures: back, home, recent_apps, notifications, quick_settings, scroll_down, scroll_up (also next video on TikTok/Reels/Shorts), lock_screen, screenshot.",
+            props("action" to JSONObject().put("type", "string").put("enum", JSONArray(listOf("back", "home", "recent_apps", "notifications", "quick_settings", "scroll_down", "scroll_up", "lock_screen", "screenshot")))), listOf("action")))
         put(tool("read_messages", "Read his recent incoming messages (texts, WhatsApp and similar), newest first.", props(), listOf()))
         put(tool("reply_message", "Reply to someone who messaged him, in the same app. Use who='last' for the message just read out. Read the reply back and get a yes first; only call with confirmed=true after he says yes. In driving mode, if he dictated the reply right after being asked, a quick 'sending: ... ' confirmation question is still required.",
             props("who" to str("Sender name, or 'last'"), "message" to str("The reply text"), "confirmed" to bool("He said yes to sending this exact reply")), listOf("who", "message", "confirmed")))
@@ -130,7 +140,14 @@ class Actions(private val context: Context) {
                 }
                 "Playing $q on YouTube Music."
             }
-            "get_weather" -> Weather.now(context) ?: "Weather isn't available. He may need to set his city in the Jarvis app."
+            "get_weather" -> Weather.report(context, input.optString("place")) ?: "Couldn't get the weather right now."
+            "open_app" -> Apps.open(context, input.getString("name"))
+            "media_control" -> Apps.media(context, input.getString("action"))
+            "stop_navigation" -> JarvisAccess.stopNavigation(context)
+            "screen_read" -> JarvisAccess.read()
+            "screen_tap" -> JarvisAccess.tap(input.getString("target"), input.optBoolean("long_press"))
+            "screen_type" -> JarvisAccess.type(input.getString("text"), input.optBoolean("submit"))
+            "screen_action" -> JarvisAccess.press(input.getString("action"))
             "read_messages" -> {
                 val r = Inbox.recent().take(6)
                 if (r.isEmpty()) (if (!listenerOn()) "Can't see messages yet: he needs to tap Allow reading messages in the Jarvis app." else "No new messages in the last few hours.")
@@ -222,22 +239,44 @@ class Actions(private val context: Context) {
 
 /** Free weather from Open-Meteo (no key). City comes from the Jarvis app setup. */
 object Weather {
-    fun now(context: Context): String? {
-        val prefs = Prefs(context)
-        if (prefs.city.isBlank()) return null
-        try {
-            if (prefs.cityLat.isBlank() || prefs.cityFor != prefs.city) {
-                val g = get("https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + URLEncoder.encode(prefs.city.substringBefore(","), "UTF-8")) ?: return null
-                val r = JSONObject(g).optJSONArray("results")?.optJSONObject(0) ?: return null
-                prefs.cityLat = r.getDouble("latitude").toString(); prefs.cityLon = r.getDouble("longitude").toString(); prefs.cityFor = prefs.city
-            }
-            val f = get("https://api.open-meteo.com/v1/forecast?latitude=${prefs.cityLat}&longitude=${prefs.cityLon}" +
-                "&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto") ?: return null
-            val c = JSONObject(f).getJSONObject("current")
-            val code = c.optInt("weather_code")
-            return "${Math.round(c.optDouble("temperature_2m"))}°F, feels like ${Math.round(c.optDouble("apparent_temperature"))}, ${describe(code)}, wind ${Math.round(c.optDouble("wind_speed_10m"))} mph."
-        } catch (_: Exception) { return null }
+    private const val HOME = "Spokane"
+
+    private fun geocode(place: String): Pair<String, String>? {
+        val g = get("https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + URLEncoder.encode(place.substringBefore(",").trim(), "UTF-8")) ?: return null
+        val r = JSONObject(g).optJSONArray("results")?.optJSONObject(0) ?: return null
+        return r.getDouble("latitude").toString() to r.getDouble("longitude").toString()
     }
+
+    private fun coords(context: Context, place: String?): Pair<String, String>? {
+        if (!place.isNullOrBlank()) return geocode(place)
+        val prefs = Prefs(context)
+        val city = prefs.city.ifBlank { HOME }
+        if (prefs.cityLat.isBlank() || prefs.cityFor != city) {
+            val (la, lo) = geocode(city) ?: return null
+            prefs.cityLat = la; prefs.cityLon = lo; prefs.cityFor = city
+        }
+        return prefs.cityLat to prefs.cityLon
+    }
+
+    private fun forecast(ll: Pair<String, String>): JSONObject? = get("https://api.open-meteo.com/v1/forecast?latitude=${ll.first}&longitude=${ll.second}" +
+        "&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m" +
+        "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&forecast_days=2" +
+        "&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto")?.let { JSONObject(it) }
+
+    fun now(context: Context): String? = try {
+        val c = forecast(coords(context, null) ?: throw Exception())!!.getJSONObject("current")
+        "${Math.round(c.optDouble("temperature_2m"))}°F, feels like ${Math.round(c.optDouble("apparent_temperature"))}, ${describe(c.optInt("weather_code"))}, wind ${Math.round(c.optDouble("wind_speed_10m"))} mph."
+    } catch (_: Exception) { null }
+
+    fun report(context: Context, place: String?): String? = try {
+        val j = forecast(coords(context, place) ?: throw Exception())!!
+        val c = j.getJSONObject("current"); val d = j.getJSONObject("daily")
+        fun day(i: Int) = "high ${Math.round(d.getJSONArray("temperature_2m_max").optDouble(i))}, low ${Math.round(d.getJSONArray("temperature_2m_min").optDouble(i))}, " +
+            "${describe(d.getJSONArray("weather_code").optInt(i))}, ${d.getJSONArray("precipitation_probability_max").optInt(i)}% chance of rain or snow"
+        (if (!place.isNullOrBlank()) "$place: " else "") +
+            "Now ${Math.round(c.optDouble("temperature_2m"))}°F, feels like ${Math.round(c.optDouble("apparent_temperature"))}, ${describe(c.optInt("weather_code"))}, wind ${Math.round(c.optDouble("wind_speed_10m"))} mph. " +
+            "Today: ${day(0)}. Tomorrow: ${day(1)}."
+    } catch (_: Exception) { null }
 
     fun roadsNote(context: Context): String {
         val w = now(context) ?: return ""

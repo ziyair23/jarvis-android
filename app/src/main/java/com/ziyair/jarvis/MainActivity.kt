@@ -77,6 +77,15 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.allowQuiet).setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
         }
+        findViewById<Button>(R.id.allowScreen).setOnClickListener {
+            if (JarvisAccess.on(this)) { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)); return@setOnClickListener }
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Let Jarvis control the screen")
+                .setMessage("Two quick steps, sir:\n\n1. Tap App info, then the ⋮ menu in the top corner, then \"Allow restricted settings\". (If you don't see it, skip this step.)\n\n2. Come back, tap Accessibility, then Installed apps, then Jarvis screen control, and switch it on.")
+                .setPositiveButton("Accessibility") { _, _ -> startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                .setNeutralButton("App info") { _, _ -> startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
+                .show()
+        }
         findViewById<Button>(R.id.memoryBtn).setOnClickListener { showMemory() }
         findViewById<Button>(R.id.testVoice).setOnClickListener {
             if (prefs.claudeKey.isBlank() && prefs.ttsKey.isBlank()) { status.text = "Save your keys first, sir."; return@setOnClickListener }
@@ -187,6 +196,7 @@ class MainActivity : Activity() {
         val comms = checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
         findViewById<Button>(R.id.allowComms).text = if (comms && Cal.allowed(this)) "Calls, texts & calendar: allowed" else "Allow calls, texts & calendar"
+        findViewById<Button>(R.id.allowScreen).text = if (JarvisAccess.on(this)) "Screen control: on" else "Allow screen control"
         findViewById<Button>(R.id.allowQuiet).text = if (PhoneControl.quietAllowed(this)) "Quiet mode: allowed" else "Allow quiet mode"
         findViewById<Button>(R.id.allowApps).text = if (Settings.canDrawOverlays(this)) "Opening apps: allowed" else "Allow opening apps"
         toggle.text = if (prefs.running) "Stop listening" else "Start Jarvis"
