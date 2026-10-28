@@ -95,6 +95,7 @@ class Brain(private val context: Context) {
         if (tail != null && tail.getString("role") == "user") tail.put("content", tail.getString("content") + "\n" + text)
         else clean.put(JSONObject().put("role", "user").put("content", text))
 
+        lastTools.clear()
         val actions = Actions(context)
         val tools = actions.tools()
         // the tool list is the same every time: let Claude cache it (much cheaper on repeat questions)
@@ -113,7 +114,7 @@ class Brain(private val context: Context) {
             val body = JSONObject()
                 .put("model", model)
                 .put("max_tokens", maxTokens)
-                .put("system", systemPrompt(cfg) + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can misfire on TV or nearby conversation. If what you heard is clearly not a request or question for you (background talk, half a sentence, TV), reply with exactly [ignore]." else "") + if (followUp) "\nThis was picked up WITHOUT the wake word, while you waited a few seconds for his answer to your question. If it's not an answer to you or a request for you (he's talking to someone else, background chatter, TV, a phone call), reply with exactly [ignore] and nothing else." else "")
+                .put("system", systemPrompt(cfg) + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can misfire on TV or nearby conversation. If what you heard is clearly not a request or question for you (background talk, half a sentence, TV), reply with exactly [ignore]." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. But if it clearly isn't meant for you (he's talking to someone else, background chatter, TV, a phone call, song lyrics), reply with exactly [ignore] and nothing else." else "")
                 .put("tools", tools)
                 .put("messages", clean)
             val (code, resp) = try {
@@ -144,6 +145,7 @@ class Brain(private val context: Context) {
                 when (part.optString("type")) {
                     "text" -> sb.append(part.getString("text"))
                     "tool_use" -> {
+                        lastTools.add(part.getString("name"))
                         val out: Any = if (part.getString("name") == "look") look() else actions.run(part.getString("name"), part.optJSONObject("input") ?: JSONObject())
                         results.put(JSONObject().put("type", "tool_result").put("tool_use_id", part.getString("id")).put("content", out))
                     }
@@ -311,6 +313,9 @@ class Brain(private val context: Context) {
         if (Regex("^(what('?s| is) the time|what time is it|what day is it)").containsMatchIn(s)) return false
         return s.endsWith("?") || Regex("^(what|who|whose|when|where|why|how|which|is|are|was|were|do|does|did|can|could|should|would|will|tell me|explain|give me|any |did the|who won|what about)\\b").containsMatchIn(s)
     }
+
+    /** Tools used while answering the last question. */
+    val lastTools = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     private val slow = listOf("play_music", "run_protocol", "screen_tap", "screen_type", "screen_read", "stop_navigation", "status_report", "lights", "look", "open_app")
 

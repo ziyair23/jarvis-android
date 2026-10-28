@@ -203,6 +203,8 @@ class JarvisService : Service() {
         busy = true
         followUps = 0
         chatted = false
+        inConvo = true
+        ignoredInRow = 0
         acquire()
         stopWakeWord()
         holdFocus(true)
@@ -213,7 +215,45 @@ class JarvisService : Service() {
 
     /** How long he keeps listening without hearing anything before going back to waiting for "Hey Jarvis". */
     private fun openWindow(seconds: Int) { listenUntil = System.currentTimeMillis() + seconds * 1000L }
-    private fun convoSeconds() = brain.config().optInt("conversation_seconds", 3)
+    private fun convoSeconds() = brain.config().optInt("conversation_seconds", 8)
+
+    /** In a conversation: after each answer he keeps listening (no wake word, no chime) until he's done. */
+    private var inConvo = false
+    private var ignoredInRow = 0
+    private var speechTok = 0
+    private var barge: BargeIn? = null
+
+    /** Stop whatever Jarvis is saying right now. */
+    private fun hush() {
+        speechTok++
+        barge?.stop(); barge = null
+        stream?.cancel(); stream = null
+        try { track?.stop() } catch (_: Exception) {}
+        try { player?.stop() } catch (_: Exception) {}
+        try { tts?.stop() } catch (_: Exception) {}
+        acking = false
+    }
+
+    /** While he talks: if Marcus starts speaking over him, Jarvis stops and listens. */
+    private fun listenForInterruptions() {
+        if (!inConvo || !brain.config().optBoolean("barge_in", true) || Stealth.on(prefs)) return
+        barge?.stop()
+        barge = BargeIn(main) {
+            if (!busy) return@BargeIn
+            hush()
+            thinking = false
+            openWindow(convoSeconds())
+            listen(firstTurn = false)
+        }.also { it.start() }
+    }
+
+    /** Next turn of the conversation, or back to waiting for "Hey Jarvis". */
+    private fun nextTurn(keepGoing: Boolean) {
+        barge?.stop(); barge = null
+        thinking = false
+        if (keepGoing && inConvo && prefs.running) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
+        else finishTurn()
+    }
 
     /** Mutes the phone's own "mic on / mic off" beeps while Jarvis listens; always undone before he speaks. */
     private var muted = false
@@ -324,7 +364,9 @@ class JarvisService : Service() {
 
     private fun handle(text: String, followUp: Boolean = false) {
         val lower = text.lowercase(Locale.US)
-        if (Regex("^(stop|never ?mind|that'?s all|that'?s it|thanks?,? (that'?s|thats) (it|all)|go to sleep|nothing|no thanks?|i'?m good)\\b").containsMatchIn(lower)) {
+        if (Regex("^(stop|never ?mind|that'?s (all|it)|thanks?( you)?,? (jarvis|that'?s (it|all))|thank you,? jarvis|go to sleep|nothing|no thanks?|i'?m good|i'?m done|we'?re done|that'?ll be all|bye|goodbye|later|see you)\\b").containsMatchIn(lower)
+            || Regex("^(thanks|thank you|cheers)[.!]?$").matches(lower)) {
+            inConvo = false
             if (Stealth.on(prefs)) finishTurn() else speak(pick("goodbyes", "Very good, sir.")) { finishTurn() }
             return
         }
@@ -332,7 +374,7 @@ class JarvisService : Service() {
         thinking = true
         quiet(false)
         acquire()
-        if (!followUp && !Stealth.on(prefs)) try { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
+
         chatted = true
         // with Jarvis's own voice he starts talking as soon as the first sentence is ready
         val wasQuiet = Stealth.on(prefs)
@@ -341,15 +383,20 @@ class JarvisService : Service() {
         thread {
             val reply = brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false) }; s.add(line) } }) { main.post { ack() } }
             main.post {
-                if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { live?.cancel(); finishTurn(); return@post }
-                // heard chatter that wasn't for him: drop it silently and go back to waiting for "Hey Jarvis"
-                if (reply.isBlank()) { live?.cancel(); finishTurn(); return@post }
+                if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { live?.cancel(); inConvo = false; finishTurn(); return@post }
+                // heard chatter that wasn't for him: drop it silently; twice in a row and the conversation's over
+                if (reply.isBlank()) { live?.cancel(); ignoredInRow++; nextTurn(ignoredInRow < 2); return@post }
+                ignoredInRow = 0
+                // he asked for music: let it play instead of listening over it
+                if (brain.lastTools.any { it == "play_music" } || (brain.lastTools.contains("media_control") && !reply.contains("paus", true))) inConvo = false
                 // in quiet mode his answers arrive as a silent notification instead of out loud
                 if (wasQuiet && Stealth.on(prefs)) { live?.cancel(); Stealth.silentNote(this, reply); LogBus.changed(); finishTurn(); return@post }
                 LogBus.changed()
-                // only keep listening when he actually asked something back; otherwise the conversation is over
-                val expectsAnswer = reply.trimEnd().endsWith("?")
-                val next = { thinking = false; if (expectsAnswer) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() }
+                // keep the conversation going (he can talk over Jarvis to cut in); a question from Jarvis always waits for an answer
+                val keep = inConvo || reply.trimEnd().endsWith("?")
+                val tok = ++speechTok
+                val next = { if (tok == speechTok) nextTurn(keep) }
+                listenForInterruptions()
                 if (live != null && live.started) { LockView.showIfLocked(this, reply); live.finish { stream = null; next() } }
                 else { live?.cancel(); speak(reply) { next() } }
             }
@@ -427,6 +474,8 @@ class JarvisService : Service() {
 
     private fun finishTurn() {
         thinking = false
+        inConvo = false
+        barge?.stop(); barge = null
         if (pending.isNotEmpty() && prefs.running) {
             val (line, listenAfter) = pending.removeAt(0)
             busy = false
