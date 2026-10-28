@@ -55,6 +55,17 @@ object Apps {
             if (context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) " He'll need to unlock to see it." else ""
     }
 
+    /** The top YouTube result for a song ("Fear NF"), as a video id, or null. Free, no key. */
+    fun youtubeId(query: String): String? = try {
+        val c = java.net.URL("https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode("$query song", "UTF-8")).openConnection() as java.net.HttpURLConnection
+        c.connectTimeout = 6000; c.readTimeout = 8000
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36")
+        c.setRequestProperty("Accept-Language", "en-US,en")
+        val html = c.inputStream.bufferedReader().use { it.readText() }
+        c.disconnect()
+        Regex("\"videoId\":\"([A-Za-z0-9_-]{11})\"").find(html)?.groupValues?.get(1)
+    } catch (_: Exception) { null }
+
     /** The music/video app that's playing (or last played), through Android's media controls. */
     fun player(context: Context, pkg: String? = null): android.media.session.MediaController? = try {
         val msm = context.getSystemService(android.media.session.MediaSessionManager::class.java)

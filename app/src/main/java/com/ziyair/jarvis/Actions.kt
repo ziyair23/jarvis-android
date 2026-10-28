@@ -158,6 +158,18 @@ class Actions(private val context: Context) {
                 val pkg = current ?: listOf(YT_MUSIC, SPOTIFY).firstOrNull { has(it) } ?: return "No music app found (YouTube Music or Spotify)."
                 val name = if (pkg == SPOTIFY) "Spotify" else "YouTube Music"
                 if (q.isBlank() || q.lowercase() in setOf("music", "something", "my music", "anything")) return Apps.media(context, "play")
+                // YouTube Music ignores "play from search" from other apps: find the exact song and open it directly, which starts it playing
+                if (pkg == YT_MUSIC) {
+                    val id = Apps.youtubeId(q)
+                    if (id != null) {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=$id")).setPackage(YT_MUSIC)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            Apps.player(context, pkg)?.let { if (it.playbackState?.state != android.media.session.PlaybackState.STATE_PLAYING) it.transportControls.play() }
+                        }, 4000)
+                        return "Playing $q on YouTube Music."
+                    }
+                }
                 val play = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).setPackage(pkg)
                     .putExtra(SearchManager.QUERY, q).putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
