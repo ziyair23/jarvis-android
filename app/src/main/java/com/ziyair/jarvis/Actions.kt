@@ -73,6 +73,7 @@ class Actions(private val context: Context) {
             props("mode" to str("announcements, everything or off"), "speaker" to str("Speaker or group name")), listOf()))
         put(tool("quiet_mode", "Quiet mode: on = Jarvis goes completely silent (no voice, no updates) and saves everything; off = end it and get the list of what he missed to recap.",
             props("on" to bool("true to go quiet, false to end it"), "minutes" to num("Optional: end automatically after this many minutes")), listOf("on")))
+        put(tool("set_voice", "Change Jarvis's voice: alan, george or lewis (all British men; George and Lewis are smoother).", props("name" to str("alan, george or lewis")), listOf("name")))
         put(tool("spending", "How much Jarvis has cost on his Claude account this month, against his budget.", props(), listOf()))
         put(tool("set_budget", "Set his monthly Claude budget in dollars (he gets a warning near it).", props("dollars" to num("Monthly budget")), listOf("dollars")))
         put(tool("status_report", "Status report: battery, weather and roads, earnings today, the baby, next shift, next reminder. Use for 'status report', 'how are we looking', 'catch me up'.", props(), listOf()))
@@ -203,6 +204,16 @@ class Actions(private val context: Context) {
                 "House speaker: ${Cast.mode(p)}. " + (if (list.isBlank()) "No Cast speakers found on this Wi-Fi right now." else "Found: $list. Using ${Cast.target(p)?.name}.")
             }
             "quiet_mode" -> if (input.optBoolean("on")) Stealth.start(context, if (input.has("minutes")) input.optInt("minutes") else null) else Stealth.end(context)
+            "set_voice" -> {
+                val v = input.getString("name").lowercase().trim()
+                if (v !in Piper.NAMES) "Voices available: Alan, George, Lewis." else {
+                    Piper.setPick(context, v)
+                    if (Piper.pickReady(context)) "Switched to ${v.replaceFirstChar { it.uppercase() }}." else {
+                        Thread { Piper.download(context) }.start()
+                        "Downloading the ${v.replaceFirstChar { it.uppercase() }} voice now (about 100 MB, once); I'll switch over as soon as it's ready."
+                    }
+                }
+            }
             "spending" -> Spend.report(context)
             "set_budget" -> Spend.setBudget(context, input.getDouble("dollars"))
             "status_report" -> Status.report(context)
@@ -213,7 +224,7 @@ class Actions(private val context: Context) {
             "driving_mode" -> { DriveMode.on = input.optBoolean("on"); if (DriveMode.on) "Driving mode on." else "Driving mode off." }
             else -> "Unknown action."
         }
-    } catch (e: Exception) { "That didn't work: ${e.message}" } }
+    } catch (e: Exception) { Problems.log(context, "$name: ${e.message}"); "That didn't work: ${e.message}" } }
 
     private fun canOpenApps() = Settings.canDrawOverlays(context)
     private fun listenerOn() = (Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: "").contains(context.packageName)

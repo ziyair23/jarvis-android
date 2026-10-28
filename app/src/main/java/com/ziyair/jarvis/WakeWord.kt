@@ -84,12 +84,15 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
                 }
             } catch (_: Exception) {
             } finally {
+                running = false   // so it can always be started again (it used to stay "running" after a mic error and go deaf)
                 try { rec.stop() } catch (_: Exception) {}
                 fx.forEach { try { it.release() } catch (_: Exception) {} }
                 rec.release()
             }
         }.also { it.name = "jarvis-wake"; it.start() }
     }
+
+    fun alive() = running && worker?.isAlive == true
 
     fun stop() {
         running = false

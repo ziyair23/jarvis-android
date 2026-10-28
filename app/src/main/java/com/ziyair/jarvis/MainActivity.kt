@@ -100,8 +100,14 @@ class MainActivity : Activity() {
             if (prefs.ttsKey.isNotBlank()) thread { Thread.sleep(6000); runOnUiThread { if (CloudVoice.lastError.isNotBlank()) status.text = CloudVoice.lastError + ". Check the Google voice key." } }
         }
         findViewById<Button>(R.id.voiceDl).setOnClickListener {
-            if (Piper.installed(this) || Piper.downloading) return@setOnClickListener
-            thread { Piper.download(this) }
+            if (Piper.downloading) return@setOnClickListener
+            // tap to cycle Alan -> George -> Lewis; downloads the voice if needed, then says hello in it
+            if (Piper.pickReady(this)) Piper.setPick(this, Piper.NAMES[(Piper.NAMES.indexOf(Piper.pick(this)) + 1) % Piper.NAMES.size])
+            thread {
+                val ok = Piper.download(this)
+                if (ok && prefs.running) startService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_SAY)
+                    .putExtra("text", "Good evening, sir. This is how I sound now."))
+            }
             val b = findViewById<Button>(R.id.voiceDl)
             val tick = object : Runnable { override fun run() { b.text = Piper.label(this@MainActivity); if (Piper.downloading) b.postDelayed(this, 700) } }
             b.postDelayed(tick, 300)

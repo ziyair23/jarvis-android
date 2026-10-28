@@ -64,6 +64,16 @@ class JarvisService : Service() {
         }
         thread { brain.refreshConfig(); Updater.check(this, busy = busy) }
         Cast.discover(this)
+        // watchdog: if his ears ever stop (mic grabbed by another app, an error), quietly start them again
+        main.postDelayed(object : Runnable {
+            override fun run() {
+                try {
+                    if (prefs.running && !busy && wakeWord?.alive() != true && !inCall()) { Problems.log(this@JarvisService, "wake word restarted"); startWakeWord() }
+                    if (Stealth.expired(prefs)) startService(Intent(this@JarvisService, JarvisService::class.java).setAction(ACTION_QUIET_END))
+                } catch (_: Exception) {}
+                main.postDelayed(this, 30_000)
+            }
+        }, 30_000)
         // Jarvis's own voice: fetch it once on Wi-Fi, then keep it warm
         thread {
             val metered = try { getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered } catch (_: Exception) { true }
@@ -318,6 +328,7 @@ class JarvisService : Service() {
             override fun onError(error: Int) {
                 if (!live()) return
                 done = true
+                if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) Problems.log(this@JarvisService, "speech recognizer error $error")
                 // the recognizer wasn't ready yet: try again shortly instead of giving up
                 if ((error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) && retries < 4 && lastPartial.isBlank()) {
                     retries++

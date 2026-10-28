@@ -109,6 +109,7 @@ class Brain(private val context: Context) {
             .put("user_location", JSONObject().put("type", "approximate").put("city", prefs.city.ifBlank { "Spokane" })
                 .put("region", "Washington").put("country", "US").put("timezone", java.util.TimeZone.getDefault().id)))
         var rounds = 0
+        var retried = 0
         var earlierText = ""
         while (true) {
             val body = JSONObject()
@@ -119,15 +120,22 @@ class Brain(private val context: Context) {
                 .put("messages", clean)
             val (code, resp) = try {
                 if (onSentence != null) postStream(key, body) { voice.feed(it) } else post(key, body)
-            } catch (e: Exception) { if (voice.spoke) return voice.all() else return "I can't reach the network right now, sir." }
+            } catch (e: Exception) {
+                if (voice.spoke) return voice.all()
+                Problems.log(context, "network: ${e.message}")
+                if (retried < 1) { retried++; Thread.sleep(800); continue }
+                return "I can't reach the network right now, sir."
+            }
             // web search not turned on for his Claude account: carry on without it
             if (code == 400 && resp.contains("web_search", true) && tools.length() > 0 &&
                 tools.getJSONObject(tools.length() - 1).optString("name") == "web_search") { tools.remove(tools.length() - 1); continue }
+            if (code !in 200..299) Problems.log(context, "Claude $code: ${resp.take(160)}")
+            if ((code == 429 || code == 529 || code >= 500) && retried < 1) { retried++; Thread.sleep(1200); continue }
             when {
                 code == 401 || code == 403 -> return "My Claude key isn't working, sir. Check it in the Jarvis app."
                 code == 402 || resp.contains("credit balance", true) -> return "I'm out of API credit, sir. Top it up in the Claude Console."
                 code == 429 || code == 529 -> return "I'm a bit overloaded, sir. Give me a moment and ask again."
-                code !in 200..299 -> return "Something went wrong on my end, sir. Error $code."
+                code !in 200..299 -> return "That one didn't go through, sir. Try me again."
             }
             val j = JSONObject(resp)
             Spend.record(context, cfg, model, j.optJSONObject("usage"))
