@@ -70,6 +70,7 @@ class MessageListener : NotificationListenerService() {
         if (sbn.packageName == packageName) return
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        if (n.category == Notification.CATEGORY_CALL) { announceCall(n); return }
         val isMsg = n.category == Notification.CATEGORY_MESSAGE || sbn.packageName in MESSAGING_APPS
         if (!isMsg) return
         val ex = n.extras ?: return
@@ -102,6 +103,34 @@ class MessageListener : NotificationListenerService() {
                     .putExtra("text", "Message from $sender: $text.$ask").putExtra("listen", reply != null))
             } catch (_: Exception) {}
         }
+    }
+
+    private var lastCaller = ""; private var lastCallAt = 0L
+
+    /** "Abbey is calling, sir." Only for a ringing call (it has an Answer button), once per call. */
+    private fun announceCall(n: Notification) {
+        val prefs = Prefs(this)
+        if (!prefs.running || !prefs.announceCalls) return
+        val labels = n.actions?.map { it.title?.toString()?.lowercase().orEmpty() }.orEmpty()
+        val canAnswer = labels.any { it.contains("answer") || it.contains("accept") }
+        if (!canAnswer && n.fullScreenIntent == null) return
+        if (!canAnswer && labels.any { it.contains("hang up") || it.contains("end") }) return
+        val ex = n.extras ?: return
+        val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
+        val text = ex.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
+        var who = if (Regex("incoming|call", RegexOption.IGNORE_CASE).containsMatchIn(title) && text.isNotBlank()) text else title
+        who = who.replace(Regex("(?i)incoming (voice |video )?call( from)?"), "").trim()
+        if (who.isBlank()) return
+        val now = System.currentTimeMillis()
+        if (who == lastCaller && now - lastCallAt < 60_000) return
+        lastCaller = who; lastCallAt = now
+        val digits = who.replace(Regex("[^0-9]"), "")
+        val line = when {
+            digits.length >= 7 && digits.length >= who.length - 4 -> "Unknown number calling, sir."
+            Regex("unknown|private|spam|scam", RegexOption.IGNORE_CASE).containsMatchIn(who) -> "${who.replaceFirstChar { it.uppercase() }} calling, sir."
+            else -> "$who is calling, sir."
+        }
+        try { startService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", line).putExtra("ringing", true)) } catch (_: Exception) {}
     }
 
     private fun appName(pkg: String) = when (pkg) {

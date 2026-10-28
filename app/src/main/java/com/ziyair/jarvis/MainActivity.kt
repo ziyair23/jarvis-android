@@ -104,6 +104,7 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.readMode).setOnClickListener {
             prefs.readMessages = when (prefs.readMessages) { "driving" -> "always"; "always" -> "off"; else -> "driving" }; render()
         }
+        findViewById<Button>(R.id.announceCalls).setOnClickListener { prefs.announceCalls = !prefs.announceCalls; render() }
         findViewById<Button>(R.id.wakeScreen).setOnClickListener { prefs.wakeScreen = !prefs.wakeScreen; render() }
         findViewById<Button>(R.id.talkFirst).setOnClickListener {
             prefs.talkFirst = !prefs.talkFirst; Scheduler.scheduleDaily(this); render()
@@ -196,6 +197,7 @@ class MainActivity : Activity() {
         val listening = (Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: "").contains(packageName)
         findViewById<Button>(R.id.allowMsgs).text = if (listening) "Reading messages: allowed" else "Allow reading messages"
         findViewById<Button>(R.id.readMode).text = "Read messages aloud: " + when (prefs.readMessages) { "always" -> "always"; "off" -> "never"; else -> "while driving" }
+        findViewById<Button>(R.id.announceCalls).text = if (prefs.announceCalls) "Say who's calling: on" else "Say who's calling: off"
         findViewById<Button>(R.id.wakeScreen).text = if (prefs.wakeScreen) "Show replies on lock screen: on" else "Show replies on lock screen: off"
         val comms = checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED

@@ -18,6 +18,7 @@ import java.nio.FloatBuffer
  * 76 mel frames become one 96-value embedding; the last 16 embeddings are scored by the wake model.
  */
 class WakeWord(context: Context, private val threshold: Float, private val onWake: () -> Unit) {
+    private val audio = context.getSystemService(android.media.AudioManager::class.java)
     private val env = OrtEnvironment.getEnvironment()
     private val mel: OrtSession
     private val emb: OrtSession
@@ -42,6 +43,9 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
             val min = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             val rec = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, RATE, AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT, maxOf(min, CHUNK * 4))
+            val fx = ArrayList<android.media.audiofx.AudioEffect>()
+            try { if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) android.media.audiofx.AcousticEchoCanceler.create(rec.audioSessionId)?.let { it.enabled = true; fx.add(it) } } catch (_: Exception) {}
+            try { if (android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(rec.audioSessionId)?.let { it.enabled = true; fx.add(it) } } catch (_: Exception) {}
             val chunk = ShortArray(CHUNK)
             val raw = ShortArray(CHUNK + 480)          // this chunk plus 3 hops of context, like the Python code
             val melFrames = ArrayList<FloatArray>()     // rows of 32
@@ -69,7 +73,8 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
                     if (embeddings.size < 16) continue
 
                     val score = score(embeddings)
-                    hits = if (score >= threshold) hits + 1 else 0
+                    val th = if (audio.isMusicActive) threshold * 0.7f else threshold
+                    hits = if (score >= th) hits + 1 else 0
                     if (hits >= 1) {
                         hits = 0
                         embeddings.clear()           // don't fire twice on the same words
@@ -80,6 +85,7 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
             } catch (_: Exception) {
             } finally {
                 try { rec.stop() } catch (_: Exception) {}
+                fx.forEach { try { it.release() } catch (_: Exception) {} }
                 rec.release()
             }
         }.also { it.name = "jarvis-wake"; it.start() }

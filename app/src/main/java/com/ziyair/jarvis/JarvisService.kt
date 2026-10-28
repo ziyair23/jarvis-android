@@ -85,9 +85,10 @@ class JarvisService : Service() {
                 val moment = intent.getStringExtra("moment")
                 val text = intent.getStringExtra("text")
                 val thenListen = intent.getBooleanExtra("listen", false)
+                val ringing = intent.getBooleanExtra("ringing", false)
                 thread {
                     val line = moment?.let { Scheduler.momentLine(this, it) } ?: text.orEmpty()
-                    if (line.isNotBlank()) main.post { sayFirst(line, thenListen) }
+                    if (line.isNotBlank()) main.post { sayFirst(line, thenListen, ringing) }
                 }
                 return START_STICKY
             }
@@ -155,6 +156,7 @@ class JarvisService : Service() {
         chatted = false
         acquire()
         stopWakeWord()
+        holdFocus(true)
         try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 120) } catch (_: Exception) {}
         openWindow(brain.config().optInt("wake_seconds", 5))
         main.postDelayed({ listen(firstTurn = true) }, 350)
@@ -259,7 +261,13 @@ class JarvisService : Service() {
     }
 
     /** Jarvis speaks up on his own (heads-ups, timers, reminders), then goes back to listening. */
-    private fun sayFirst(line: String, thenListen: Boolean = false) {
+    private fun sayFirst(line: String, thenListen: Boolean = false, ringing: Boolean = false) {
+        if (ringing) {
+            if (busy || PhoneControl.quietOn(this)) return
+            busy = true; acquire(); stopWakeWord()
+            speak(line) { finishTurn() }
+            return
+        }
         note(line)
         if (inCall() || PhoneControl.quietOn(this)) { Scheduler.notify(this, "Jarvis", line, false); if (!prefs.running && !busy) stopEverything(); return }
         if (busy) return
@@ -267,6 +275,7 @@ class JarvisService : Service() {
         followUps = 1
         acquire()
         stopWakeWord()
+        holdFocus(true)
         try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 90) } catch (_: Exception) {}
         main.postDelayed({ speak(line) { if (thenListen) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() } }, 300)
     }
@@ -291,9 +300,25 @@ class JarvisService : Service() {
         }
     }
 
+    /** Pauses (or turns down) music and videos while he's talking to Jarvis, then lets them carry on. */
+    private var focus: android.media.AudioFocusRequest? = null
+    private fun holdFocus(on: Boolean) {
+        val am = getSystemService(AudioManager::class.java)
+        try {
+            if (on && focus == null) {
+                focus = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                    .setOnAudioFocusChangeListener { }.build()
+                am.requestAudioFocus(focus!!)
+            } else if (!on) focus?.let { am.abandonAudioFocusRequest(it); focus = null }
+        } catch (_: Exception) {}
+    }
+
     private fun finishTurn() {
         try { recognizer?.destroy() } catch (_: Exception) {}
         recognizer = null
+        main.postDelayed({ if (!busy) holdFocus(false) }, 500)
         main.postDelayed({ if (recognizer == null) quiet(false) }, 400)
         if (chatted) { chatted = false; thread { Memory.learn(this) } }
         busy = false
@@ -384,6 +409,7 @@ class JarvisService : Service() {
         try { player?.stop(); player?.release() } catch (_: Exception) {}
         player = null
         restoreSound()
+        holdFocus(false)
         try { wakeWord?.close() } catch (_: Exception) {}
         wakeWord = null
         recognizer?.destroy(); recognizer = null

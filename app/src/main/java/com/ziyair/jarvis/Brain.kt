@@ -49,6 +49,7 @@ class Brain(private val context: Context) {
             "\nYou can act on his phone with your tools (timers, reminders, alarms, calls, texts, directions, music, weather). When he tells you something worth keeping for future days, or asks you to remember something, save it with remember. Use them when he asks, then confirm in one short line. Times you pass to tools are 24-hour local time." +
             "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. If he asked you something and a tool can do it, do it rather than telling him how." +
             "\nYou can drive his phone: open_app for any app, media_control for play/pause/skip, stop_navigation to cancel directions, and screen_read/screen_tap/screen_type/screen_action to work inside any app step by step (e.g. open YouTube, tap the search icon, type, submit, tap the first video). Keep going until it's done, then confirm in a few words. Never post, send, buy or delete anything through the screen without his clear yes." +
+            "\nOne reply per request: when you use a tool, don't write any words alongside the tool call, wait for the result and then answer once. Tool results that say Logged, Set, Opened, Sent, Done and the like mean it worked: say so plainly and never follow up with a 'correction', a second answer or an apology. Only answer what he just asked; don't add notes about earlier conversation, the dashboard numbers or older messages unless he asks." +
             "\nFor anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks."
     }
 
@@ -96,6 +97,7 @@ class Brain(private val context: Context) {
             .put("user_location", JSONObject().put("type", "approximate").put("city", prefs.city.ifBlank { "Spokane" })
                 .put("region", "Washington").put("country", "US").put("timezone", java.util.TimeZone.getDefault().id)))
         var rounds = 0
+        var earlierText = ""
         while (true) {
             val body = JSONObject()
                 .put("model", cfg.optString("model", "claude-haiku-5-5"))
@@ -135,11 +137,15 @@ class Brain(private val context: Context) {
             }
             if (results.length() > 0 && rounds < 10) {
                 rounds++
+                if (sb.isNotBlank()) earlierText = sb.toString().trim()
                 clean.put(JSONObject().put("role", "assistant").put("content", content))
                 clean.put(JSONObject().put("role", "user").put("content", results))
                 continue
             }
-            val reply = sb.toString().trim().ifBlank { "Done, sir." }
+            // speak one final answer only; strip any "correction" second-guessing
+            val reply = sb.toString().trim().ifBlank { earlierText.ifBlank { "Done, sir." } }
+                .replace(Regex("^(correction|actually|apologies|my apologies|sorry)[,.:!]?\\s*(sir[,.]?\\s*)?", RegexOption.IGNORE_CASE), "")
+                .replaceFirstChar { it.uppercase() }
             prefs.addTurn("user", text)
             prefs.addTurn("assistant", reply)
             return reply

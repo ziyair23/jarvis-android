@@ -72,6 +72,9 @@ class Prefs(context: Context) {
     var readMessages: String
         get() = sp.getString("read_messages", "driving") ?: "driving"
         set(v) = sp.edit().putString("read_messages", v).apply()
+    var announceCalls: Boolean
+        get() = sp.getBoolean("announce_calls", true)
+        set(v) = sp.edit().putBoolean("announce_calls", v).apply()
     var wakeScreen: Boolean
         get() = sp.getBoolean("wake_screen", true)
         set(v) = sp.edit().putBoolean("wake_screen", v).apply()
