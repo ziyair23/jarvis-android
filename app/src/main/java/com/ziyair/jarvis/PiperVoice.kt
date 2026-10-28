@@ -127,10 +127,12 @@ object Piper {
     }
 
     /** Float samples and sample rate, or null (then Jarvis uses the phone's voice). Blocking. */
-    @Synchronized fun synth(c: Context, text: String, speed: Float): Pair<FloatArray, Int>? = try {
+    @Synchronized fun synth(c: Context, text: String, speed: Float): Pair<FloatArray, Int>? {
         val (m, sid) = current(c) ?: return null
-        engine(c, m)?.generate(text, sid, speed)?.let { it.samples to it.sampleRate }?.takeIf { it.first.isNotEmpty() }
-    } catch (e: Throwable) { Problems.log(c, "voice: ${e.message}"); null }
+        return try {
+            engine(c, m)?.generate(text, sid, speed)?.let { it.samples to it.sampleRate }?.takeIf { it.first.isNotEmpty() }
+        } catch (e: Throwable) { Problems.log(c, "voice: ${e.message}"); null }
+    }
 
     /** Load the voice ahead of time so the first reply isn't slow. */
     fun warm(c: Context) { try { current(c)?.let { engine(c, it.first) } } catch (_: Throwable) {} }
