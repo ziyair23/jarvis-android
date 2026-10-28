@@ -99,6 +99,13 @@ class MainActivity : Activity() {
                 .putExtra("text", "Good evening, sir. This is how I sound. Shall we get to work?"))
             if (prefs.ttsKey.isNotBlank()) thread { Thread.sleep(6000); runOnUiThread { if (CloudVoice.lastError.isNotBlank()) status.text = CloudVoice.lastError + ". Check the Google voice key." } }
         }
+        findViewById<Button>(R.id.voiceDl).setOnClickListener {
+            if (Piper.installed(this) || Piper.downloading) return@setOnClickListener
+            thread { Piper.download(this) }
+            val b = findViewById<Button>(R.id.voiceDl)
+            val tick = object : Runnable { override fun run() { b.text = Piper.label(this@MainActivity); if (Piper.downloading) b.postDelayed(this, 700) } }
+            b.postDelayed(tick, 300)
+        }
         findViewById<Button>(R.id.allowMsgs).setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
@@ -204,6 +211,7 @@ class MainActivity : Activity() {
             checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
         val cam = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         findViewById<Button>(R.id.allowComms).text = if (comms && Cal.allowed(this) && cam) "Calls, texts, calendar & camera: allowed" else "Allow calls, texts, calendar & camera"
+        findViewById<Button>(R.id.voiceDl).text = Piper.label(this)
         findViewById<Button>(R.id.allowScreen).text = if (JarvisAccess.on(this)) "Screen control: on" else "Allow screen control"
         findViewById<Button>(R.id.allowQuiet).text = if (PhoneControl.quietAllowed(this)) "Quiet mode: allowed" else "Allow quiet mode"
         findViewById<Button>(R.id.allowApps).text = if (Settings.canDrawOverlays(this)) "Opening apps: allowed" else "Allow opening apps"

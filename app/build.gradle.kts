@@ -47,8 +47,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    packaging { resources { excludes += listOf("META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/DEPENDENCIES") } }
 }
 
 dependencies {
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
+    implementation("org.apache.commons:commons-compress:1.26.2")
 }

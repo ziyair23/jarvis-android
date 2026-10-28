@@ -40,6 +40,8 @@ class Brain(private val context: Context) {
         return cfg.optString("system") +
             (if (prefs.notes.isNotBlank()) "\n\nAbout him and his day: " + prefs.notes else "") +
             (if (her.isNotBlank()) "\nHis partner's name: " + her + "." else "") +
+            (if (prefs.babyName.isNotBlank()) "\nHis baby son is ${prefs.babyName}. Speech-to-text often mishears that name (as Zaire, Zyair, Ziair, Isaiah, Xavier, Sahir, Zayer, 'the air' and similar): treat any of those as ${prefs.babyName}." else "") +
+            "\nHe talks naturally, not in commands, and speech-to-text garbles words. Work out what he means from loose wording and act on it: 'note that we just fed him', 'he ate', 'bottle's done', 'we fed the baby' all mean log_baby feed; 'changed him', 'he pooped' mean a diaper; 'he's down', 'he's out' mean asleep. If the meaning is reasonably clear, do it and confirm in a few words; only ask a short question when it's genuinely ambiguous. Never ask him to rephrase or use specific words." +
             Memory.promptBlock(context) +
             "\nRight now it is " + now + "." +
             todaySoFar() +

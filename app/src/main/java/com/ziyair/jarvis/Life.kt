@@ -174,6 +174,14 @@ object Baby {
 /** Hands-free phone controls: quiet mode, flashlight, volume. */
 object PhoneControl {
     fun quietAllowed(context: Context) = context.getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted
+    /** Goodnight quiet hours: the only time Jarvis keeps his voice down and uses notifications instead. */
+    fun nightQuiet(context: Context): Boolean {
+        val until = Prefs(context).sp.getLong("quiet_until", 0L)
+        if (until == 0L) return false
+        if (System.currentTimeMillis() > until || !quietOn(context)) { Prefs(context).sp.edit().putLong("quiet_until", 0L).apply(); return false }
+        return true
+    }
+
     fun quietOn(context: Context) = context.getSystemService(NotificationManager::class.java).currentInterruptionFilter.let {
         it != NotificationManager.INTERRUPTION_FILTER_ALL && it != NotificationManager.INTERRUPTION_FILTER_UNKNOWN }
 
@@ -184,7 +192,8 @@ object PhoneControl {
             "quiet_on", "quiet_off" -> {
                 if (!nm.isNotificationPolicyAccessGranted) return "He needs to allow quiet mode: open the Jarvis app and tap Allow quiet mode."
                 nm.setInterruptionFilter(if (action == "quiet_on") NotificationManager.INTERRUPTION_FILTER_PRIORITY else NotificationManager.INTERRUPTION_FILTER_ALL)
-                if (action == "quiet_on") "Do Not Disturb on. Jarvis will stay quiet too and only show notifications." else "Do Not Disturb off."
+                if (action == "quiet_off") Prefs(context).sp.edit().putLong("quiet_until", 0L).apply()
+                if (action == "quiet_on") "Do Not Disturb on." else "Do Not Disturb off."
             }
             "flashlight_on", "flashlight_off" -> {
                 val cm = context.getSystemService(CameraManager::class.java)

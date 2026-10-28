@@ -76,6 +76,9 @@ class Prefs(context: Context) {
     var goveeKey: String
         get() = sp.getString("govee_key", "") ?: ""
         set(v) = sp.edit().putString("govee_key", v.trim()).apply()
+    var babyName: String
+        get() = sp.getString("baby_name", "Ziyair") ?: "Ziyair"
+        set(v) = sp.edit().putString("baby_name", v.trim()).apply()
     var announceCalls: Boolean
         get() = sp.getBoolean("announce_calls", true)
         set(v) = sp.edit().putBoolean("announce_calls", v).apply()

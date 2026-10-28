@@ -49,6 +49,20 @@ jobs:
           curl -fsSLo $A/melspectrogram.onnx $B/melspectrogram.onnx
           curl -fsSLo $A/embedding_model.onnx $B/embedding_model.onnx
           curl -fsSLo $A/hey_jarvis.onnx $B/hey_jarvis_v0.1.onnx
+
+      - name: Voice engine (sherpa-onnx, renamed so it doesn't clash with the wake-word engine)
+        run: |
+          sudo apt-get install -y patchelf > /dev/null
+          V=v1.13.8
+          curl -fsSL -o /tmp/s.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/$V/sherpa-onnx-$V-android.tar.bz2
+          mkdir -p /tmp/s && tar xjf /tmp/s.tar.bz2 -C /tmp/s
+          D=app/src/main/jniLibs/arm64-v8a; mkdir -p $D
+          cp /tmp/s/jniLibs/arm64-v8a/libonnxruntime.so $D/libonnxruntime_sherpa.so
+          cp /tmp/s/jniLibs/arm64-v8a/libsherpa-onnx-jni.so $D/
+          patchelf --set-soname libonnxruntime_sherpa.so $D/libonnxruntime_sherpa.so
+          patchelf --replace-needed libonnxruntime.so libonnxruntime_sherpa.so $D/libsherpa-onnx-jni.so
+          readelf -d $D/libsherpa-onnx-jni.so | grep NEEDED
+          readelf -d $D/libonnxruntime_sherpa.so | grep SONAME
           ls -la $A
 
       - name: Build the app

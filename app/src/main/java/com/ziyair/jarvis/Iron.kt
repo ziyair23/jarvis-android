@@ -189,6 +189,7 @@ object Protocols {
             } catch (_: Exception) {}
             nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
             val until = Shifts.next(context)
+            Prefs(context).sp.edit().putLong("quiet_until", (until?.minus(30 * 60_000L)) ?: (System.currentTimeMillis() + 8 * 3600_000L)).apply()
             if (until != null) {
                 Scheduler.addAction(context, until - 30 * 60_000L, "quiet_off", "end quiet mode")
                 out.add("Phone quiet until ${Scheduler.clock(until - 30 * 60_000L)}; starred contacts and alarms still get through.")

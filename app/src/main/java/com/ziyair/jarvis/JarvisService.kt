@@ -63,6 +63,12 @@ class JarvisService : Service() {
             }
         }
         thread { brain.refreshConfig(); Updater.check(this, busy = busy) }
+        // Jarvis's own voice: fetch it once on Wi-Fi, then keep it warm
+        thread {
+            val metered = try { getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered } catch (_: Exception) { true }
+            if (!Piper.installed(this) && !metered) Piper.download(this)
+            Piper.warm(this)
+        }
         // whenever he unlocks the phone, see if there's a new build to slip in (checks GitHub at most hourly)
         registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT))
         registerReceiver(batteryWatch, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -231,6 +237,8 @@ class JarvisService : Service() {
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            .also { if (Build.VERSION.SDK_INT >= 33) it.putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS,
+                arrayListOf("Jarvis", prefs.babyName, prefs.herName, "DoorDash", "Dasher", "Macan").filter { s -> s.isNotBlank() } as ArrayList<String>) }
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
         recognizer?.setRecognitionListener(object : RecognitionListener {
@@ -299,14 +307,17 @@ class JarvisService : Service() {
     /** Jarvis speaks up on his own (heads-ups, timers, reminders), then goes back to listening. */
     private fun sayFirst(line: String, thenListen: Boolean = false, ringing: Boolean = false) {
         if (ringing) {
-            if (busy || PhoneControl.quietOn(this)) return
+            if (busy || PhoneControl.nightQuiet(this)) return
             busy = true; acquire(); stopWakeWord(); followUps = 1
             speak(line) { if (thenListen && CallControl.ringingNow()) { openWindow(5); afterSpeaking { listen(firstTurn = false) } } else finishTurn() }
             return
         }
+        // say it out loud; only a live phone call or goodnight quiet hours turn it into a notification
+        val onCall = getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL
+        if (onCall || PhoneControl.nightQuiet(this)) { note(line); Scheduler.notify(this, "Jarvis", line, false); if (!prefs.running && !busy) stopEverything(); return }
+        // mid-conversation: hold it and say it right after
+        if (busy) { if (pending.size < 5) pending.add(line to thenListen); return }
         note(line)
-        if (inCall() || PhoneControl.quietOn(this)) { Scheduler.notify(this, "Jarvis", line, false); if (!prefs.running && !busy) stopEverything(); return }
-        if (busy) return
         busy = true
         followUps = 1
         acquire()
@@ -358,7 +369,15 @@ class JarvisService : Service() {
         } catch (_: Exception) {}
     }
 
+    private val pending = ArrayList<Pair<String, Boolean>>()
+
     private fun finishTurn() {
+        if (pending.isNotEmpty() && prefs.running) {
+            val (line, listenAfter) = pending.removeAt(0)
+            busy = false
+            main.postDelayed({ sayFirst(line, listenAfter) }, 400)
+            return
+        }
         try { recognizer?.destroy() } catch (_: Exception) {}
         recognizer = null
         main.postDelayed({ if (!busy) holdFocus(false) }, 500)
@@ -385,12 +404,45 @@ class JarvisService : Service() {
         quiet(false)
         LockView.showIfLocked(this, text)
         val key = prefs.ttsKey
-        if (key.isBlank()) { phoneSpeak(text, then); return }
+        if (key.isBlank()) {
+            if (!Piper.installed(this)) { phoneSpeak(text, then); return }
+            thread {
+                val a = Piper.synth(this, text, brain.config().optDouble("piper_speed", 1.0).toFloat())
+                main.post { if (a == null || !playPcm(a.first, a.second, then)) phoneSpeak(text, then) }
+            }
+            return
+        }
         thread {
             val f = CloudVoice.synth(this, key, text, brain.config())
             main.post { if (f == null || !playFile(f, then)) phoneSpeak(text, then) }
         }
     }
+
+    private var track: android.media.AudioTrack? = null
+
+    /** Plays Piper's audio; calls then() once when it finishes. */
+    private fun playPcm(samples: FloatArray, rate: Int, then: () -> Unit): Boolean = try {
+        track?.let { try { it.stop() } catch (_: Exception) {}; it.release() }
+        val t = android.media.AudioTrack.Builder()
+            .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
+            .setAudioFormat(android.media.AudioFormat.Builder().setEncoding(android.media.AudioFormat.ENCODING_PCM_FLOAT)
+                .setSampleRate(rate).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
+            .setTransferMode(android.media.AudioTrack.MODE_STATIC)
+            .setBufferSizeInBytes(samples.size * 4).build()
+        t.write(samples, 0, samples.size, android.media.AudioTrack.WRITE_BLOCKING)
+        var fired = false
+        val finish = { if (!fired) { fired = true; main.post(then) } }
+        t.notificationMarkerPosition = maxOf(1, samples.size - 1)
+        t.setPlaybackPositionUpdateListener(object : android.media.AudioTrack.OnPlaybackPositionUpdateListener {
+            override fun onMarkerReached(tr: android.media.AudioTrack) { finish() }
+            override fun onPeriodicNotification(tr: android.media.AudioTrack) {}
+        }, main)
+        main.postDelayed({ finish() }, samples.size * 1000L / rate + 700)
+        t.play()
+        track = t
+        true
+    } catch (_: Exception) { false }
 
     private fun playFile(f: java.io.File, then: () -> Unit): Boolean = try {
         player?.release()
@@ -459,6 +511,8 @@ class JarvisService : Service() {
         try { tts?.stop() } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
         player = null
+        try { track?.stop(); track?.release() } catch (_: Exception) {}
+        track = null
         restoreSound()
         holdFocus(false)
         try { wakeWord?.close() } catch (_: Exception) {}

@@ -185,6 +185,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val r = hit ?: return
         if (r.optString("action") == "quiet_off") {
             try { context.getSystemService(NotificationManager::class.java).setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL) } catch (_: Exception) {}
+            prefs.sp.edit().putLong("quiet_until", 0L).apply()
             return
         }
         val loud = r.optBoolean("loud")

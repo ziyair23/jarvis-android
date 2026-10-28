@@ -153,6 +153,7 @@
             <Button android:id="@+id/allowScreen" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Allow screen control" />
             <Button android:id="@+id/memoryBtn" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="What Jarvis remembers" />
             <Button android:id="@+id/testVoice" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Test voice" />
+            <Button android:id="@+id/voiceDl" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Download Jarvis voice" />
             <Button android:id="@+id/allowMsgs" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Allow reading messages" />
             <Button android:id="@+id/readMode" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Read messages aloud: while driving" />
             <Button android:id="@+id/announceCalls" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Say who's calling: on" />
