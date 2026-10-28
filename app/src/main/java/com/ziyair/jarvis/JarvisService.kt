@@ -290,11 +290,7 @@ class JarvisService : Service() {
             main.postDelayed({ listen(firstTurn) }, 300)
             return
         }
-        if (firstTurn && followUps == 0) {
-            // he said "Jarvis" then paused: answer like the films and give him one more go
-            followUps = 1
-            speak(pick("greetings", "Sir?")) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
-        } else finishTurn()
+        finishTurn()
     }
 
     /** A short pause after Jarvis talks so the mic doesn't hear the end of his own voice. */

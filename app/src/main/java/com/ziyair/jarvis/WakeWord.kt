@@ -73,9 +73,9 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
                     if (embeddings.size < 16) continue
 
                     val score = score(embeddings)
-                    val th = if (audio.isMusicActive) threshold * 0.7f else threshold
+                    val th = if (audio.isMusicActive) threshold * 0.85f else threshold
                     hits = if (score >= th) hits + 1 else 0
-                    if (hits >= 1) {
+                    if (hits >= 2) {
                         hits = 0
                         embeddings.clear()           // don't fire twice on the same words
                         running = false
