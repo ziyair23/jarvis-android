@@ -56,6 +56,7 @@ class DashActivity : Activity() {
                 .put("goalName", Earnings.goalName(p))
                 .put("memory", JSONArray(Memory.all(ctx)))
                 .put("journal", Journal.all(p))
+                .put("stealth", Stealth.on(p))
                 .put("spend", Spend.thisMonth(p)).put("budget", Spend.budget(p))
                 .put("reminders", p.reminders())
                 .put("history", p.history())
@@ -82,6 +83,8 @@ class DashActivity : Activity() {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { openSetup(); return@runOnUiThread }
             startForegroundService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_LISTEN))
         }
+        @JavascriptInterface fun quietEnd() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_QUIET_END)) }
+        @JavascriptInterface fun quietStart() { Stealth.start(ctx, null); LogBus.changed() }
         @JavascriptInterface fun openSetup() = runOnUiThread { startActivity(Intent(ctx, MainActivity::class.java)) }
     }
 }

@@ -183,6 +183,12 @@ class AlarmReceiver : BroadcastReceiver() {
         for (i in 0 until list.length()) { val r = list.getJSONObject(i); if (r.getInt("id") == id) hit = r else keep.put(r) }
         prefs.saveReminders(keep)
         val r = hit ?: return
+        if (r.optString("action") == "stealth_off") {
+            if (Prefs(context).sp.getBoolean("stealth", false)) try {
+                context.startService(Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_QUIET_END))
+            } catch (_: Exception) { Stealth.end(context) }
+            return
+        }
         if (r.optString("action") == "quiet_off") {
             try { context.getSystemService(NotificationManager::class.java).setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL) } catch (_: Exception) {}
             prefs.sp.edit().putLong("quiet_until", 0L).apply()

@@ -96,7 +96,7 @@ object OfferJudge {
         if (now - lastCheck < 700) return
         lastCheck = now
         val p = Prefs(context)
-        if (!on(p) || !p.running) return
+        if (!on(p) || !p.running || Stealth.on(p)) return
         val all = texts.joinToString(" | ")
         if (!Regex("\\baccept\\b", RegexOption.IGNORE_CASE).containsMatchIn(all)) return
         val pay = Regex("\\$\\s?(\\d{1,3}(?:\\.\\d{2})?)").findAll(all).mapNotNull { it.groupValues[1].toDoubleOrNull() }.filter { it in 1.0..200.0 }.maxOrNull() ?: return

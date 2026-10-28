@@ -76,6 +76,7 @@ section.on{display:block}
 
 <section id="s-today" class="on">
   <button class="primary talk" onclick="J.talk()">Talk to Jarvis</button>
+  <button id="quietBtn" class="talk" style="margin-top:-6px" onclick="D && D.stealth ? J.quietEnd() : J.quietStart()">Quiet mode</button>
   <div class="card">
     <div class="label">Baby</div>
     <div class="mid" id="t-feed">—</div>
@@ -187,7 +188,8 @@ function load() {
   const h = new Date().getHours();
   $('hello').textContent = (h < 5 ? 'Late one, sir' : h < 12 ? 'Morning, sir' : h < 17 ? 'Afternoon, sir' : 'Evening, sir');
   $('dot').className = 'dot' + (D.running ? ' on' : '');
-  $('state').textContent = D.running ? 'Listening for "Hey Jarvis"' : 'Off — start him in setup';
+  $('state').textContent = D.stealth ? 'Quiet mode — saving everything for later' : D.running ? 'Listening for "Hey Jarvis"' : 'Off — start him in setup';
+  $('quietBtn').textContent = D.stealth ? 'End quiet mode & catch me up' : 'Quiet mode';
 
   // baby
   const log = [];

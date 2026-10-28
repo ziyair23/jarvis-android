@@ -71,6 +71,8 @@ class Actions(private val context: Context) {
             props("title" to str("What it is"), "date" to str("'today', 'tomorrow' or YYYY-MM-DD"), "time" to str("24-hour HH:MM, leave out for all-day"), "minutes" to num("Length in minutes, default 60")), listOf("title", "date")))
         put(tool("house_speaker", "Jarvis's voice through his Google Nest Hub / Cast speakers at home. mode: 'announcements' (greetings, heads-ups, reminders), 'everything' (all replies), or 'off'. Optional speaker name. With no arguments, lists speakers found.",
             props("mode" to str("announcements, everything or off"), "speaker" to str("Speaker or group name")), listOf()))
+        put(tool("quiet_mode", "Quiet mode: on = Jarvis goes completely silent (no voice, no updates) and saves everything; off = end it and get the list of what he missed to recap.",
+            props("on" to bool("true to go quiet, false to end it"), "minutes" to num("Optional: end automatically after this many minutes")), listOf("on")))
         put(tool("spending", "How much Jarvis has cost on his Claude account this month, against his budget.", props(), listOf()))
         put(tool("set_budget", "Set his monthly Claude budget in dollars (he gets a warning near it).", props("dollars" to num("Monthly budget")), listOf("dollars")))
         put(tool("status_report", "Status report: battery, weather and roads, earnings today, the baby, next shift, next reminder. Use for 'status report', 'how are we looking', 'catch me up'.", props(), listOf()))
@@ -200,6 +202,7 @@ class Actions(private val context: Context) {
                 val list = Cast.speakers().joinToString { it.name }
                 "House speaker: ${Cast.mode(p)}. " + (if (list.isBlank()) "No Cast speakers found on this Wi-Fi right now." else "Found: $list. Using ${Cast.target(p)?.name}.")
             }
+            "quiet_mode" -> if (input.optBoolean("on")) Stealth.start(context, if (input.has("minutes")) input.optInt("minutes") else null) else Stealth.end(context)
             "spending" -> Spend.report(context)
             "set_budget" -> Spend.setBudget(context, input.getDouble("dollars"))
             "status_report" -> Status.report(context)

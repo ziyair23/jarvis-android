@@ -114,6 +114,14 @@ class JarvisService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stopEverything(); return START_NOT_STICKY }
+        if (intent?.action == ACTION_QUIET_END) {
+            if (goForeground()) thread {
+                val notes = Stealth.end(this)
+                val line = brain.recap(notes)
+                main.post { sayFirst(line) }
+            }
+            return START_STICKY
+        }
         if (!goForeground()) {
             Scheduler.notify(this, "Jarvis stopped", "Android paused him in the background. Tap to open Jarvis and start him again.", false)
             prefs.running = false
@@ -198,7 +206,7 @@ class JarvisService : Service() {
         acquire()
         stopWakeWord()
         holdFocus(true)
-        try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 120) } catch (_: Exception) {}
+        if (!Stealth.on(prefs)) try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 120) } catch (_: Exception) {}
         openWindow(brain.config().optInt("wake_seconds", 5))
         main.postDelayed({ listen(firstTurn = true) }, 200)
     }
@@ -229,6 +237,9 @@ class JarvisService : Service() {
     }
 
     private var lastPartial = ""
+    private var listenSession = 0
+    /** True from the moment he's asked something until Jarvis has finished answering: nothing else gets in. */
+    @Volatile private var thinking = false
 
     private fun googleRecognizer(): android.content.ComponentName? {
         val list = packageManager.queryIntentServices(Intent(android.speech.RecognitionService.SERVICE_INTERFACE), 0)
@@ -244,6 +255,10 @@ class JarvisService : Service() {
         quiet(true)
         recognizer = googleRecognizer()?.let { SpeechRecognizer.createSpeechRecognizer(this, it) } ?: SpeechRecognizer.createSpeechRecognizer(this)
         lastPartial = ""
+        val session = ++listenSession
+        var done = false
+        fun live() = session == listenSession && !done && !thinking
+        fun take(t: String) { done = true; try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}; recognizer = null; handle(t, followUp = !firstTurn) }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
@@ -255,19 +270,22 @@ class JarvisService : Service() {
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, brain.config().optLong("end_silence_ms", 1500L))
         recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
+                if (!live()) return
                 retries = 0
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty().ifBlank { lastPartial }
-                if (text.isBlank()) noSpeech(firstTurn) else handle(text, followUp = !firstTurn)
+                if (text.isBlank()) { done = true; noSpeech(firstTurn) } else take(text)
             }
             override fun onError(error: Int) {
+                if (!live()) return
+                done = true
                 // the recognizer wasn't ready yet: try again shortly instead of giving up
-                if ((error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) && retries < 4) {
+                if ((error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) && retries < 4 && lastPartial.isBlank()) {
                     retries++
                     main.postDelayed({ listen(firstTurn) }, 400L * retries)
                     return
                 }
                 retries = 0
-                if (lastPartial.isNotBlank() && error != SpeechRecognizer.ERROR_CLIENT) { handle(lastPartial, followUp = !firstTurn); return }
+                if (lastPartial.isNotBlank() && error != SpeechRecognizer.ERROR_CLIENT) { done = false; take(lastPartial); return }
                 noSpeech(firstTurn)
             }
             override fun onReadyForSpeech(params: Bundle?) {}
@@ -284,7 +302,7 @@ class JarvisService : Service() {
                 val wait = brain.config().optLong("done_talking_ms", 900L)
                 main.postDelayed({
                     // same words as a moment ago and he's said something real: he's finished, answer now
-                    if (recognizer === mine && lastPartial == p && p.split(" ").size >= 2) try { mine?.stopListening() } catch (_: Exception) {}
+                    if (live() && recognizer === mine && lastPartial == p && p.split(" ").size >= 2) try { mine?.stopListening() } catch (_: Exception) {}
                 }, wait)
             }
             override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -307,15 +325,18 @@ class JarvisService : Service() {
     private fun handle(text: String, followUp: Boolean = false) {
         val lower = text.lowercase(Locale.US)
         if (Regex("^(stop|never ?mind|that'?s all|that'?s it|thanks?,? (that'?s|thats) (it|all)|go to sleep|nothing|no thanks?|i'?m good)\\b").containsMatchIn(lower)) {
-            speak(pick("goodbyes", "Very good, sir.")) { finishTurn() }
+            if (Stealth.on(prefs)) finishTurn() else speak(pick("goodbyes", "Very good, sir.")) { finishTurn() }
             return
         }
+        if (thinking) return
+        thinking = true
         quiet(false)
         acquire()
-        if (!followUp) try { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
+        if (!followUp && !Stealth.on(prefs)) try { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         chatted = true
         // with Jarvis's own voice he starts talking as soon as the first sentence is ready
-        val live = if (Piper.installed(this) && prefs.ttsKey.isBlank() && Cast.mode(prefs) != "everything")
+        val wasQuiet = Stealth.on(prefs)
+        val live = if (!wasQuiet && Piper.installed(this) && prefs.ttsKey.isBlank() && Cast.mode(prefs) != "everything")
             SpeechStream(this, brain.config().optDouble("piper_speed", 1.0).toFloat(), main) { acking }.also { stream = it } else null
         thread {
             val reply = brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false) }; s.add(line) } }) { main.post { ack() } }
@@ -323,10 +344,12 @@ class JarvisService : Service() {
                 if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { live?.cancel(); finishTurn(); return@post }
                 // heard chatter that wasn't for him: drop it silently and go back to waiting for "Hey Jarvis"
                 if (reply.isBlank()) { live?.cancel(); finishTurn(); return@post }
+                // in quiet mode his answers arrive as a silent notification instead of out loud
+                if (wasQuiet && Stealth.on(prefs)) { live?.cancel(); Stealth.silentNote(this, reply); LogBus.changed(); finishTurn(); return@post }
                 LogBus.changed()
                 // only keep listening when he actually asked something back; otherwise the conversation is over
                 val expectsAnswer = reply.trimEnd().endsWith("?")
-                val next = { if (expectsAnswer) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() }
+                val next = { thinking = false; if (expectsAnswer) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() }
                 if (live != null && live.started) { LockView.showIfLocked(this, reply); live.finish { stream = null; next() } }
                 else { live?.cancel(); speak(reply) { next() } }
             }
@@ -335,6 +358,7 @@ class JarvisService : Service() {
 
     /** Jarvis speaks up on his own (heads-ups, timers, reminders), then goes back to listening. */
     private fun sayFirst(line: String, thenListen: Boolean = false, ringing: Boolean = false) {
+        if (Stealth.on(prefs)) { Stealth.miss(this, line.replace(" Answer it?", "").replace(" Decline it?", "").replace(" Want to reply, sir?", "")); if (!prefs.running && !busy) stopEverything(); return }
         if (ringing) {
             if (busy || PhoneControl.nightQuiet(this)) return
             busy = true; acquire(); stopWakeWord(); followUps = 1
@@ -402,6 +426,7 @@ class JarvisService : Service() {
     private val pending = ArrayList<Pair<String, Boolean>>()
 
     private fun finishTurn() {
+        thinking = false
         if (pending.isNotEmpty() && prefs.running) {
             val (line, listenAfter) = pending.removeAt(0)
             busy = false
@@ -425,6 +450,7 @@ class JarvisService : Service() {
     private var casting = false
     private val ACKS = listOf("On it, sir.", "Right away, sir.", "One moment, sir.", "On it.")
     private fun ack() {
+        if (stream?.started == true || Stealth.on(prefs)) return
         speak(ACKS.random()) { acking = false }
         acking = true
         main.postDelayed({ acking = false }, 6000)
@@ -552,6 +578,7 @@ class JarvisService : Service() {
     private fun release() { try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Exception) {} }
 
     private fun stopEverything() {
+        thinking = false
         prefs.running = false
         busy = false
         try { tts?.stop() } catch (_: Exception) {}
@@ -593,6 +620,7 @@ class JarvisService : Service() {
         const val ACTION_STOP = "com.ziyair.jarvis.STOP"
         const val ACTION_LISTEN = "com.ziyair.jarvis.LISTEN"
         const val ACTION_SAY = "com.ziyair.jarvis.SAY"
+        const val ACTION_QUIET_END = "com.ziyair.jarvis.QUIET_END"
     }
 }
 

@@ -51,6 +51,8 @@ class Brain(private val context: Context) {
             "\nYou can act on his phone with your tools (timers, reminders, alarms, calls, texts, directions, music, weather). When he tells you something worth keeping for future days, or asks you to remember something, save it with remember. Use them when he asks, then confirm in one short line. Times you pass to tools are 24-hour local time." +
             "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. If he asked you something and a tool can do it, do it rather than telling him how." +
             "\nYou can drive his phone: open_app for any app, media_control for play/pause/skip, stop_navigation to cancel directions, and screen_read/screen_tap/screen_type/screen_action to work inside any app step by step (e.g. open YouTube, tap the search icon, type, submit, tap the first video). Keep going until it's done, then confirm in a few words. Never post, send, buy or delete anything through the screen without his clear yes." +
+            "\nQuiet mode: when he says he's going somewhere he can't have you talking (work, a meeting, class, church, a movie, 'go quiet', 'stealth mode'), call quiet_mode on, with minutes if he gives a time, and confirm in three or four words. When he says he's out, back, or done ('I'm out', 'quiet mode off', 'catch me up'), call quiet_mode off and turn what it returns into a short spoken catch-up starting 'Welcome back, sir.'" +
+            (if (Stealth.on(prefs)) "\nQUIET MODE IS ON: your reply will be shown silently as text, so keep it short." else "") +
             "\nOne reply per request: when you use one of his phone tools, don't write any words alongside the tool call, wait for the result and then answer once. After a web_search, always say the actual answer (scores, times, facts); never reply with just 'Done'. Tool results that say Logged, Set, Opened, Sent, Done and the like mean it worked: say so plainly and never follow up with a 'correction', a second answer or an apology. Only answer what he just asked; don't add notes about earlier conversation, the dashboard numbers or older messages unless he asks." +
             "\nWhen he asks what something is, to read something, or anything that needs eyes ('what's this', 'read this', 'what does this say'), use look, then answer from the photo in a sentence or two. For anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks."
     }
@@ -270,6 +272,26 @@ class Brain(private val context: Context) {
         c.disconnect()
         val content = JSONArray(); blocks.filter { it.length() > 0 }.forEach { content.put(it) }
         return code to JSONObject().put("content", content).put("stop_reason", stop).put("usage", usage).toString()
+    }
+
+    /** The catch-up after quiet mode: a few spoken sentences, most important first. */
+    fun recap(notes: String): String {
+        val key = prefs.claudeKey
+        val fallback = notes.substringAfter(": ", notes)
+        if (key.isBlank() || notes.startsWith("Quiet mode off. Nothing")) return "Welcome back, sir. Nothing to report while you were away."
+        val cfg = config()
+        val model = cfg.optString("model", "claude-haiku-5-5")
+        val body = JSONObject().put("model", model).put("max_tokens", 400)
+            .put("system", cfg.optString("system") + "\nQuiet mode just ended. Give him a spoken catch-up of what he missed: start with 'Welcome back, sir.', then the important things first (people who called or messaged and what they said, the baby, reminders), two to five natural sentences, no lists. Skip trivia.")
+            .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", notes)))
+        return try {
+            val (code, resp) = post(key, body)
+            if (code !in 200..299) return "Welcome back, sir. $fallback"
+            val j = JSONObject(resp); Spend.record(context, cfg, model, j.optJSONObject("usage"))
+            val c = j.getJSONArray("content"); val sb = StringBuilder()
+            for (i in 0 until c.length()) if (c.getJSONObject(i).optString("type") == "text") sb.append(c.getJSONObject(i).getString("text"))
+            sb.toString().trim().ifBlank { "Welcome back, sir. $fallback" }.also { prefs.addTurn("assistant", it) }
+        } catch (_: Exception) { "Welcome back, sir. $fallback" }
     }
 
     /** Jarvis's eyes: a photo from the back camera, sent to Claude to look at. */
