@@ -69,6 +69,12 @@ class Actions(private val context: Context) {
         put(tool("calendar_events", "What's on his calendar.", props("day" to str("'today', 'tomorrow' or YYYY-MM-DD"), "days" to num("How many days to cover, default 1 (7 for 'this week')")), listOf()))
         put(tool("add_event", "Add an event to his calendar. Confirm the details in your reply.",
             props("title" to str("What it is"), "date" to str("'today', 'tomorrow' or YYYY-MM-DD"), "time" to str("24-hour HH:MM, leave out for all-day"), "minutes" to num("Length in minutes, default 60")), listOf("title", "date")))
+        put(tool("status_report", "Status report: battery, weather and roads, earnings today, the baby, next shift, next reminder. Use for 'status report', 'how are we looking', 'catch me up'.", props(), listOf()))
+        put(tool("run_protocol", "Run one of his named protocols: 'dash' (heading out to DoorDash: driving mode, opens Dasher, starts music, weather), 'baby' (night feed: quiet phone, dim warm lights, low volume, baby status), 'home' (done for the night: driving off, lights on, earnings and baby recap), 'goodnight' (lights off, phone quiet until before his next shift with starred contacts still ringing, next shift time).",
+            props("name" to str("dash, baby, home or goodnight")), listOf("name")))
+        put(tool("lights", "Control his Govee lights: on/off, brightness 1-100, color (red, orange, yellow, green, blue, purple, pink, white, warm, cool). which = a light's name or 'all'.",
+            props("which" to str("Light name or 'all'"), "on" to bool("true on, false off"), "brightness" to num("1-100"), "color" to str("Color name")), listOf()))
+        put(tool("find_phone", "He can't find his phone and asked where you are: ring loudly (even on silent) and flash the light.", props(), listOf()))
         put(tool("driving_mode", "Turn driving mode on or off (short answers, messages read aloud).", props("on" to bool("true for on")), listOf("on")))
     }
 
@@ -170,6 +176,11 @@ class Actions(private val context: Context) {
             "phone_control" -> PhoneControl.run(context, input.getString("action"), if (input.has("level")) input.optInt("level") else null)
             "calendar_events" -> Cal.events(context, input.optString("day", "today"), input.optInt("days", 1))
             "add_event" -> Cal.add(context, input.getString("title"), input.optString("date", "today"), input.optString("time").ifBlank { null }, input.optInt("minutes", 60))
+            "status_report" -> Status.report(context)
+            "run_protocol" -> Protocols.run(context, input.getString("name"))
+            "lights" -> Lights.set(context, input.optString("which", "all"), if (input.has("on")) input.optBoolean("on") else null,
+                if (input.has("brightness")) input.optInt("brightness") else null, input.optString("color").ifBlank { null })
+            "find_phone" -> FindPhone.ring(context)
             "driving_mode" -> { DriveMode.on = input.optBoolean("on"); if (DriveMode.on) "Driving mode on." else "Driving mode off." }
             else -> "Unknown action."
         }

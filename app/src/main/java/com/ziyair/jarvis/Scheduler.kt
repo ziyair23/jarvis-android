@@ -35,6 +35,16 @@ object Scheduler {
         return id
     }
 
+    /** A silent scheduled action (e.g. end quiet mode in the morning). */
+    fun addAction(context: Context, at: Long, action: String, label: String) {
+        val prefs = Prefs(context)
+        val list = prefs.reminders(); val keep = JSONArray()
+        for (i in 0 until list.length()) { val r = list.getJSONObject(i); if (r.optString("action") == action) cancel(context, r.getInt("id")) else keep.put(r) }
+        val id = 10_000 + (System.currentTimeMillis() % 100_000_000).toInt()
+        prefs.reminders().let { l -> l.put(JSONObject().put("id", id).put("at", at).put("text", "").put("loud", false).put("label", label).put("action", action)); prefs.saveReminders(l) }
+        setAlarm(context, at, id, Intent(context, AlarmReceiver::class.java).putExtra("id", id))
+    }
+
     fun cancel(context: Context, id: Int) {
         val prefs = Prefs(context)
         val list = prefs.reminders(); val keep = JSONArray()
@@ -173,6 +183,10 @@ class AlarmReceiver : BroadcastReceiver() {
         for (i in 0 until list.length()) { val r = list.getJSONObject(i); if (r.getInt("id") == id) hit = r else keep.put(r) }
         prefs.saveReminders(keep)
         val r = hit ?: return
+        if (r.optString("action") == "quiet_off") {
+            try { context.getSystemService(NotificationManager::class.java).setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL) } catch (_: Exception) {}
+            return
+        }
         val loud = r.optBoolean("loud")
         Scheduler.notify(context, if (loud) "Timer: ${r.optString("label")}" else "Reminder", r.getString("text"), loud)
         say(context, Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", r.getString("text")),

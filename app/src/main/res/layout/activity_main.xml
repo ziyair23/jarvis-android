@@ -102,6 +102,9 @@
             <TextView style="@style/Hint" android:text="Your car's Bluetooth name (for driving mode)" />
             <EditText android:id="@+id/carName" style="@style/Field" android:inputType="text" android:hint="e.g. Honda, CAR MULTIMEDIA" />
 
+            <TextView style="@style/Hint" android:text="Govee lights key (optional)" />
+            <EditText android:id="@+id/goveeKey" style="@style/Field" android:inputType="textPassword" android:hint="From the Govee Home app" />
+
             <TextView style="@style/Hint" android:text="Bedtime (24-hour)" />
             <EditText android:id="@+id/bedtime" style="@style/Field" android:inputType="text" android:hint="00:00" />
 

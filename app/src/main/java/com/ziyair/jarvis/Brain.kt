@@ -60,7 +60,7 @@ class Brain(private val context: Context) {
     } catch (_: Exception) { "" }
 
     /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. */
-    fun ask(text: String): String {
+    fun ask(text: String, onAck: (() -> Unit)? = null): String {
         val key = prefs.claudeKey
         if (key.isBlank()) return "I need my Claude key first, sir. Open the Jarvis app and add it."
         val cfg = config()
@@ -136,6 +136,7 @@ class Brain(private val context: Context) {
                 }
             }
             if (results.length() > 0 && rounds < 10) {
+                if (rounds == 0 && slow.any { resp.contains("\"name\":\"$it\"") }) onAck?.invoke()
                 rounds++
                 if (sb.isNotBlank()) earlierText = sb.toString().trim()
                 clean.put(JSONObject().put("role", "assistant").put("content", content))
@@ -151,6 +152,8 @@ class Brain(private val context: Context) {
             return reply
         }
     }
+
+    private val slow = listOf("run_protocol", "screen_tap", "screen_type", "screen_read", "stop_navigation", "status_report", "lights", "look", "open_app")
 
     private fun post(key: String, body: JSONObject): Pair<Int, String> {
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection

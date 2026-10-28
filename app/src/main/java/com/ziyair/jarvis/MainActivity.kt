@@ -43,6 +43,7 @@ class MainActivity : Activity() {
         val dinner = findViewById<EditText>(R.id.dinner); val bed = findViewById<EditText>(R.id.bedtime)
         city.setText(prefs.city); lunch.setText(prefs.lunch); dinner.setText(prefs.dinner); bed.setText(prefs.bedtime)
         val car = findViewById<EditText>(R.id.carName); car.setText(prefs.carName)
+        val govee = findViewById<EditText>(R.id.goveeKey); govee.setText(prefs.goveeKey)
         val ttsKey = findViewById<EditText>(R.id.ttsKey); ttsKey.setText(prefs.ttsKey)
         val voiceName = findViewById<EditText>(R.id.voiceName); voiceName.setText(prefs.voiceName)
 
@@ -51,7 +52,7 @@ class MainActivity : Activity() {
             prefs.herName = her.text.toString(); prefs.notes = notes.text.toString()
             prefs.city = city.text.toString(); prefs.lunch = lunch.text.toString()
             prefs.dinner = dinner.text.toString(); prefs.bedtime = bed.text.toString()
-            prefs.carName = car.text.toString()
+            prefs.carName = car.text.toString(); prefs.goveeKey = govee.text.toString()
             prefs.ttsKey = ttsKey.text.toString(); prefs.voiceName = voiceName.text.toString()
             Scheduler.scheduleDaily(this)
             status.text = "Saved, sir."

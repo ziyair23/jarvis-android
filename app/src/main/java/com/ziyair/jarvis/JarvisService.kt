@@ -65,6 +65,38 @@ class JarvisService : Service() {
         thread { brain.refreshConfig(); Updater.check(this, busy = busy) }
         // whenever he unlocks the phone, see if there's a new build to slip in (checks GitHub at most hourly)
         registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT))
+        registerReceiver(batteryWatch, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        try { getSystemService(android.net.ConnectivityManager::class.java).registerNetworkCallback(
+            android.net.NetworkRequest.Builder().addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI).build(), wifiWatch) } catch (_: Exception) {}
+    }
+
+    /** "Battery's at 15 percent, sir." Once at 15 and once at 5, reset when he plugs in. */
+    private var warnedAt = 101
+    private val batteryWatch = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            val lvl = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) * 100 / maxOf(1, i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100))
+            if (i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0) { warnedAt = 101; return }
+            if (!prefs.running || lvl < 0) return
+            val mark = when { lvl <= 5 -> 5; lvl <= 15 -> 15; else -> return }
+            if (mark >= warnedAt) return
+            warnedAt = mark
+            sayFirst(if (mark == 5) "Battery's at $lvl percent, sir. I won't last much longer." else "Battery's at $lvl percent, sir. Might want to plug in.")
+        }
+    }
+
+    /** Home Wi-Fi after being out for a while: "Welcome home, sir," and the lights come on. */
+    private val wifiWatch = object : android.net.ConnectivityManager.NetworkCallback() {
+        override fun onLost(network: android.net.Network) { prefs.sp.edit().putLong("wifi_lost_at", System.currentTimeMillis()).apply() }
+        override fun onAvailable(network: android.net.Network) {
+            val lost = prefs.sp.getLong("wifi_lost_at", 0L)
+            if (lost == 0L || System.currentTimeMillis() - lost < 15 * 60_000L || !prefs.running) return
+            prefs.sp.edit().putLong("wifi_lost_at", 0L).apply()
+            thread {
+                val lights = if (prefs.goveeKey.isNotBlank()) Lights.set(this@JarvisService, "all", true, if (Lights.late()) 15 else 80, "warm") else ""
+                val dim = lights.startsWith("Done") && Lights.late()
+                main.post { sayFirst("Welcome home, sir." + (if (lights.startsWith("Done")) (if (dim) " Lights are on, kept them low." else " Lights are on.") else "")) }
+            }
+        }
     }
 
     private val unlocked = object : android.content.BroadcastReceiver() {
@@ -252,7 +284,7 @@ class JarvisService : Service() {
         try { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         chatted = true
         thread {
-            val reply = brain.ask(text)
+            val reply = brain.ask(text) { main.post { ack() } }
             main.post {
                 LogBus.changed()
                 speak(reply) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
@@ -296,7 +328,14 @@ class JarvisService : Service() {
         }
         if (inCar != DriveMode.on) {
             DriveMode.on = inCar
-            sayFirst(if (inCar) "Driving mode, sir. I'll keep it short and read your messages out." else "Driving mode off, sir.")
+            if (!inCar) { sayFirst("Driving mode off, sir."); return }
+            thread {
+                val w = Weather.now(this)
+                val roads = if (w == null) "" else Weather.roadsNote(this).ifBlank { " Roads look clear." }
+                val bat = Status.battery(this).first
+                val line = "Welcome back, sir.$roads" + (if (bat in 0..20) " Battery's at $bat percent, you'll want to plug in." else "")
+                main.post { sayFirst(line) }
+            }
         }
     }
 
@@ -328,9 +367,17 @@ class JarvisService : Service() {
     }
 
     private var player: android.media.MediaPlayer? = null
+    private var acking = false
+    private val ACKS = listOf("On it, sir.", "Right away, sir.", "One moment, sir.", "On it.")
+    private fun ack() {
+        speak(ACKS.random()) { acking = false }
+        acking = true
+        main.postDelayed({ acking = false }, 6000)
+    }
 
     /** Speak with the realistic Google voice when a key is set, otherwise the phone's own voice. */
     private fun speak(text: String, then: () -> Unit) {
+        if (acking) { main.postDelayed({ speak(text, then) }, 150); return }
         quiet(false)
         LockView.showIfLocked(this, text)
         val key = prefs.ttsKey
@@ -421,6 +468,8 @@ class JarvisService : Service() {
 
     override fun onDestroy() {
         try { unregisterReceiver(unlocked) } catch (_: Exception) {}
+        try { unregisterReceiver(batteryWatch) } catch (_: Exception) {}
+        try { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(wifiWatch) } catch (_: Exception) {}
         try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(carWatch) } catch (_: Exception) {}
         DriveMode.on = false
         quiet(false)

@@ -72,6 +72,10 @@ class Prefs(context: Context) {
     var readMessages: String
         get() = sp.getString("read_messages", "driving") ?: "driving"
         set(v) = sp.edit().putString("read_messages", v).apply()
+    /** Govee lights developer key (free, from the Govee Home app). */
+    var goveeKey: String
+        get() = sp.getString("govee_key", "") ?: ""
+        set(v) = sp.edit().putString("govee_key", v.trim()).apply()
     var announceCalls: Boolean
         get() = sp.getBoolean("announce_calls", true)
         set(v) = sp.edit().putBoolean("announce_calls", v).apply()
