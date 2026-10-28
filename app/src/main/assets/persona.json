@@ -24,7 +24,7 @@
   "wake_seconds": 5,
   "web_search": true,
   "web_search_max": 3,
-  "end_silence_ms": 2000,
+  "end_silence_ms": 1500,
   "smart_answers": true,
   "smart_model": "claude-sonnet-5-5",
   "smart_max_tokens": 700,
@@ -41,5 +41,6 @@
       5,
       25
     ]
-  }
+  },
+  "done_talking_ms": 900
 }

@@ -251,8 +251,8 @@ class JarvisService : Service() {
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             .also { if (Build.VERSION.SDK_INT >= 33) it.putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS,
                 arrayListOf("Jarvis", prefs.babyName, prefs.herName, "DoorDash", "Dasher", "Macan").filter { s -> s.isNotBlank() } as ArrayList<String>) }
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, brain.config().optLong("end_silence_ms", 2000L))
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, brain.config().optLong("end_silence_ms", 2000L))
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, brain.config().optLong("end_silence_ms", 1500L))
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, brain.config().optLong("end_silence_ms", 1500L))
         recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
                 retries = 0
@@ -277,7 +277,15 @@ class JarvisService : Service() {
             override fun onEndOfSpeech() {}
             override fun onPartialResults(partialResults: Bundle?) {
                 openWindow(convoSeconds())
-                partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()?.let { if (it.isNotBlank()) lastPartial = it }
+                val p = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
+                if (p.isBlank() || p == lastPartial) return
+                lastPartial = p
+                val mine = recognizer
+                val wait = brain.config().optLong("done_talking_ms", 900L)
+                main.postDelayed({
+                    // same words as a moment ago and he's said something real: he's finished, answer now
+                    if (recognizer === mine && lastPartial == p && p.split(" ").size >= 2) try { mine?.stopListening() } catch (_: Exception) {}
+                }, wait)
             }
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
@@ -306,16 +314,21 @@ class JarvisService : Service() {
         acquire()
         if (!followUp) try { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         chatted = true
+        // with Jarvis's own voice he starts talking as soon as the first sentence is ready
+        val live = if (Piper.installed(this) && prefs.ttsKey.isBlank() && Cast.mode(prefs) != "everything")
+            SpeechStream(this, brain.config().optDouble("piper_speed", 1.0).toFloat(), main) { acking }.also { stream = it } else null
         thread {
-            val reply = brain.ask(text, followUp) { main.post { ack() } }
+            val reply = brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false) }; s.add(line) } }) { main.post { ack() } }
             main.post {
-                if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { finishTurn(); return@post }
+                if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { live?.cancel(); finishTurn(); return@post }
                 // heard chatter that wasn't for him: drop it silently and go back to waiting for "Hey Jarvis"
-                if (reply.isBlank()) { finishTurn(); return@post }
+                if (reply.isBlank()) { live?.cancel(); finishTurn(); return@post }
                 LogBus.changed()
                 // only keep listening when he actually asked something back; otherwise the conversation is over
                 val expectsAnswer = reply.trimEnd().endsWith("?")
-                speak(reply) { if (expectsAnswer) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() }
+                val next = { if (expectsAnswer) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() }
+                if (live != null && live.started) { LockView.showIfLocked(this, reply); live.finish { stream = null; next() } }
+                else { live?.cancel(); speak(reply) { next() } }
             }
         }
     }
@@ -408,6 +421,7 @@ class JarvisService : Service() {
 
     private var player: android.media.MediaPlayer? = null
     private var acking = false
+    private var stream: SpeechStream? = null
     private var casting = false
     private val ACKS = listOf("On it, sir.", "Right away, sir.", "One moment, sir.", "On it.")
     private fun ack() {
@@ -543,6 +557,7 @@ class JarvisService : Service() {
         try { tts?.stop() } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
         player = null
+        stream?.cancel(); stream = null
         try { track?.stop(); track?.release() } catch (_: Exception) {}
         track = null
         restoreSound()

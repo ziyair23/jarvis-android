@@ -62,7 +62,8 @@ class Brain(private val context: Context) {
     } catch (_: Exception) { "" }
 
     /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. */
-    fun ask(text: String, followUp: Boolean = false, onAck: (() -> Unit)? = null): String {
+    fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, onAck: (() -> Unit)? = null): String {
+        val voice = Sentences(onSentence)
         val key = prefs.claudeKey
         if (key.isBlank()) return "I need my Claude key first, sir. Open the Jarvis app and add it."
         val cfg = config()
@@ -113,7 +114,9 @@ class Brain(private val context: Context) {
                 .put("system", systemPrompt(cfg) + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can misfire on TV or nearby conversation. If what you heard is clearly not a request or question for you (background talk, half a sentence, TV), reply with exactly [ignore]." else "") + if (followUp) "\nThis was picked up WITHOUT the wake word, while you waited a few seconds for his answer to your question. If it's not an answer to you or a request for you (he's talking to someone else, background chatter, TV, a phone call), reply with exactly [ignore] and nothing else." else "")
                 .put("tools", tools)
                 .put("messages", clean)
-            val (code, resp) = try { post(key, body) } catch (e: Exception) { return "I can't reach the network right now, sir." }
+            val (code, resp) = try {
+                if (onSentence != null) postStream(key, body) { voice.feed(it) } else post(key, body)
+            } catch (e: Exception) { if (voice.spoke) return voice.all() else return "I can't reach the network right now, sir." }
             // web search not turned on for his Claude account: carry on without it
             if (code == 400 && resp.contains("web_search", true) && tools.length() > 0 &&
                 tools.getJSONObject(tools.length() - 1).optString("name") == "web_search") { tools.remove(tools.length() - 1); continue }
@@ -144,6 +147,7 @@ class Brain(private val context: Context) {
                     }
                 }
             }
+            if (results.length() > 0) voice.drop() else if (sb.isNotBlank()) voice.flush()
             if (results.length() > 0 && rounds < 10) {
                 if (rounds == 0 && slow.any { resp.contains("\"name\":\"$it\"") }) onAck?.invoke()
                 rounds++
@@ -168,6 +172,104 @@ class Brain(private val context: Context) {
             prefs.addTurn("assistant", reply)
             return reply
         }
+    }
+
+    /**
+     * Hands finished sentences to the voice as they stream in, so he starts talking after the first one.
+     * Holds back "[ignore]" and strips a leading "correction".
+     */
+    private class Sentences(val out: ((String) -> Unit)?) {
+        private val buf = StringBuilder()
+        private val said = StringBuilder()
+        var spoke = false; private set
+        private var ignored = false
+
+        fun feed(t: String) {
+            if (out == null || ignored) return
+            buf.append(t)
+            if (buf.contains("[ignore]", true)) { ignored = true; buf.setLength(0); return }
+            if (buf.startsWith("[") && buf.length < 10) return
+            while (true) {
+                val m = Regex("[.!?](\\s|$)").find(buf) ?: break
+                val end = m.range.first + 1
+                if (end < 2 || m.range.last + 1 > buf.length || (m.groupValues[1].isEmpty())) break
+                emit(buf.substring(0, end)); buf.delete(0, end)
+            }
+        }
+        fun flush() { if (out != null && !ignored && buf.isNotBlank()) emit(buf.toString()); buf.setLength(0) }
+        fun drop() { buf.setLength(0) }
+        fun all() = said.toString().trim()
+        private fun emit(s0: String) {
+            var s = s0.trim()
+            if (!spoke) s = s.replace(Regex("^(correction|actually|apologies|my apologies|sorry)[,.:!]?\\s*(sir[,.]?\\s*)?", RegexOption.IGNORE_CASE), "").replaceFirstChar { it.uppercase() }
+            if (s.isBlank()) return
+            spoke = true; said.append(s).append(' ')
+            out?.invoke(s)
+        }
+    }
+
+    /**
+     * Same as post(), but streams the reply: text is handed to onText as it arrives, and the full message is
+     * rebuilt (text, tool calls, web search results) so the rest of Jarvis works the same.
+     */
+    private fun postStream(key: String, body: JSONObject, onText: (String) -> Unit): Pair<Int, String> {
+        body.put("stream", true)
+        val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
+        c.requestMethod = "POST"
+        c.connectTimeout = 10000; c.readTimeout = 60000
+        c.doOutput = true
+        c.setRequestProperty("content-type", "application/json")
+        c.setRequestProperty("x-api-key", key)
+        c.setRequestProperty("anthropic-version", "2023-06-01")
+        c.outputStream.use { it.write(body.toString().toByteArray()) }
+        val code = c.responseCode
+        if (code !in 200..299) {
+            val err = c.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+            c.disconnect(); return code to err
+        }
+        val blocks = ArrayList<JSONObject>()
+        val partial = HashMap<Int, StringBuilder>()
+        val usage = JSONObject()
+        var stop = ""
+        var toolStarted = false
+        c.inputStream.bufferedReader().use { r ->
+            while (true) {
+                val line = r.readLine() ?: break
+                if (!line.startsWith("data:")) continue
+                val ev = try { JSONObject(line.substring(5).trim()) } catch (_: Exception) { continue }
+                when (ev.optString("type")) {
+                    "message_start" -> ev.optJSONObject("message")?.optJSONObject("usage")?.let { u -> u.keys().forEach { k -> usage.put(k, u.get(k)) } }
+                    "content_block_start" -> {
+                        val b = ev.getJSONObject("content_block")
+                        if (b.optString("type") == "tool_use") toolStarted = true
+                        if (b.optString("type") == "text") b.remove("citations")
+                        val i = ev.optInt("index", blocks.size)
+                        while (blocks.size <= i) blocks.add(JSONObject())
+                        blocks[i] = b
+                    }
+                    "content_block_delta" -> {
+                        val i = ev.optInt("index"); val d = ev.getJSONObject("delta")
+                        val b = blocks.getOrNull(i) ?: continue
+                        when (d.optString("type")) {
+                            "text_delta" -> { val t = d.optString("text"); b.put("text", b.optString("text") + t); if (!toolStarted) onText(t) }
+                            "input_json_delta" -> partial.getOrPut(i) { StringBuilder() }.append(d.optString("partial_json"))
+                        }
+                    }
+                    "content_block_stop" -> {
+                        val i = ev.optInt("index")
+                        partial.remove(i)?.let { js -> blocks.getOrNull(i)?.put("input", try { JSONObject(js.toString().ifBlank { "{}" }) } catch (_: Exception) { JSONObject() }) }
+                    }
+                    "message_delta" -> {
+                        ev.optJSONObject("delta")?.optString("stop_reason")?.let { if (it.isNotBlank() && it != "null") stop = it }
+                        ev.optJSONObject("usage")?.let { u -> u.keys().forEach { k -> usage.put(k, u.get(k)) } }
+                    }
+                    "error" -> { c.disconnect(); return 529 to ev.toString() }
+                }
+            }
+        }
+        c.disconnect()
+        val content = JSONArray(); blocks.filter { it.length() > 0 }.forEach { content.put(it) }
+        return code to JSONObject().put("content", content).put("stop_reason", stop).put("usage", usage).toString()
     }
 
     /** Jarvis's eyes: a photo from the back camera, sent to Claude to look at. */
