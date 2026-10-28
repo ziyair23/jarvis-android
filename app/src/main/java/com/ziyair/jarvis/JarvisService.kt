@@ -94,7 +94,9 @@ class JarvisService : Service() {
             thread {
                 val lights = if (prefs.goveeKey.isNotBlank()) Lights.set(this@JarvisService, "all", true, if (Lights.late()) 15 else 80, "warm") else ""
                 val dim = lights.startsWith("Done") && Lights.late()
-                main.post { sayFirst("Welcome home, sir." + (if (lights.startsWith("Done")) (if (dim) " Lights are on, kept them low." else " Lights are on.") else "")) }
+                val todo = HomeReminders.take(this@JarvisService)
+                val rem = if (todo.isEmpty()) "" else " You asked me to remind you: " + todo.joinToString(", and ") + "."
+                main.post { sayFirst("Welcome home, sir." + (if (lights.startsWith("Done")) (if (dim) " Lights are on, kept them low." else " Lights are on.") else "") + rem) }
             }
         }
     }

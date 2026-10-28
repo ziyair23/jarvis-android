@@ -37,6 +37,22 @@ object Journal {
     }
 }
 
+/** "Remind me when I get home": said out loud with the welcome-home greeting. */
+object HomeReminders {
+    fun all(p: Prefs): JSONArray = try { JSONArray(p.sp.getString("home_reminders", "[]")) } catch (_: Exception) { JSONArray() }
+    fun add(context: Context, text: String): String {
+        val p = Prefs(context); val a = all(p); a.put(text.trim())
+        p.sp.edit().putString("home_reminders", a.toString()).apply()
+        return "I'll remind him when he gets home (when the phone joins home Wi-Fi)."
+    }
+    /** Returns and clears them. */
+    fun take(context: Context): List<String> {
+        val p = Prefs(context); val a = all(p)
+        p.sp.edit().putString("home_reminders", "[]").apply()
+        return (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }
+    }
+}
+
 /** The phone's ringing-call notification, so Jarvis can answer or decline by voice. */
 object CallControl {
     @Volatile private var answer: Notification.Action? = null
