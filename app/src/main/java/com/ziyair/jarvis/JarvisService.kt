@@ -199,7 +199,7 @@ class JarvisService : Service() {
         holdFocus(true)
         try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 120) } catch (_: Exception) {}
         openWindow(brain.config().optInt("wake_seconds", 5))
-        main.postDelayed({ listen(firstTurn = true) }, 350)
+        main.postDelayed({ listen(firstTurn = true) }, 200)
     }
 
     /** How long he keeps listening without hearing anything before going back to waiting for "Hey Jarvis". */
@@ -227,11 +227,22 @@ class JarvisService : Service() {
         muted = false
     }
 
+    private var lastPartial = ""
+
+    private fun googleRecognizer(): android.content.ComponentName? {
+        val list = packageManager.queryIntentServices(Intent(android.speech.RecognitionService.SERVICE_INTERFACE), 0)
+        return list.firstOrNull { it.serviceInfo.packageName == "com.google.android.googlequicksearchbox" }
+            ?.let { android.content.ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) }
+            ?: list.firstOrNull { it.serviceInfo.packageName == "com.google.android.tts" }
+                ?.let { android.content.ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) }
+    }
+
     private fun listen(firstTurn: Boolean) {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { speak("Speech recognition isn't available on this phone, sir.") { finishTurn() }; return }
         try { recognizer?.destroy() } catch (_: Exception) {}
         quiet(true)
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        recognizer = googleRecognizer()?.let { SpeechRecognizer.createSpeechRecognizer(this, it) } ?: SpeechRecognizer.createSpeechRecognizer(this)
+        lastPartial = ""
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
@@ -239,12 +250,12 @@ class JarvisService : Service() {
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             .also { if (Build.VERSION.SDK_INT >= 33) it.putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS,
                 arrayListOf("Jarvis", prefs.babyName, prefs.herName, "DoorDash", "Dasher", "Macan").filter { s -> s.isNotBlank() } as ArrayList<String>) }
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, brain.config().optLong("end_silence_ms", 2000L))
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, brain.config().optLong("end_silence_ms", 2000L))
         recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
                 retries = 0
-                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
+                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty().ifBlank { lastPartial }
                 if (text.isBlank()) noSpeech(firstTurn) else handle(text, followUp = !firstTurn)
             }
             override fun onError(error: Int) {
@@ -255,6 +266,7 @@ class JarvisService : Service() {
                     return
                 }
                 retries = 0
+                if (lastPartial.isNotBlank() && error != SpeechRecognizer.ERROR_CLIENT) { handle(lastPartial, followUp = !firstTurn); return }
                 noSpeech(firstTurn)
             }
             override fun onReadyForSpeech(params: Bundle?) {}
@@ -262,7 +274,10 @@ class JarvisService : Service() {
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
-            override fun onPartialResults(partialResults: Bundle?) { openWindow(convoSeconds()) }
+            override fun onPartialResults(partialResults: Bundle?) {
+                openWindow(convoSeconds())
+                partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()?.let { if (it.isNotBlank()) lastPartial = it }
+            }
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
         try { recognizer?.startListening(intent) } catch (e: Exception) { noSpeech(firstTurn) }

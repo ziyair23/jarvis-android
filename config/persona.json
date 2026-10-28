@@ -23,5 +23,6 @@
   "cloud_rate": 1.0,
   "wake_seconds": 5,
   "web_search": true,
-  "web_search_max": 3
+  "web_search_max": 3,
+  "end_silence_ms": 2000
 }
