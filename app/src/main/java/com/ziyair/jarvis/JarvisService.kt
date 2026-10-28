@@ -251,7 +251,7 @@ class JarvisService : Service() {
     private fun nextTurn(keepGoing: Boolean) {
         barge?.stop(); barge = null
         thinking = false
-        if (keepGoing && inConvo && prefs.running) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
+        if (keepGoing && prefs.running) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
         else finishTurn()
     }
 
