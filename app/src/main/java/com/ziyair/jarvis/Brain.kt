@@ -270,7 +270,8 @@ class Brain(private val context: Context) {
             }
         }
         c.disconnect()
-        val content = JSONArray(); blocks.filter { it.length() > 0 }.forEach { content.put(it) }
+        val content = JSONArray()
+        blocks.filter { it.length() > 0 && !(it.optString("type") == "text" && it.optString("text").isBlank()) }.forEach { content.put(it) }
         return code to JSONObject().put("content", content).put("stop_reason", stop).put("usage", usage).toString()
     }
 

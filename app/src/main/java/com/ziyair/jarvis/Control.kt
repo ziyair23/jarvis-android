@@ -55,8 +55,28 @@ object Apps {
             if (context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) " He'll need to unlock to see it." else ""
     }
 
-    /** Same signal as headphone buttons, so it works for YouTube Music, Spotify, YouTube, podcasts... */
+    /** The music/video app that's playing (or last played), through Android's media controls. */
+    fun player(context: Context, pkg: String? = null): android.media.session.MediaController? = try {
+        val msm = context.getSystemService(android.media.session.MediaSessionManager::class.java)
+        val list = msm.getActiveSessions(android.content.ComponentName(context, MessageListener::class.java))
+        val pool = if (pkg != null) list.filter { it.packageName == pkg } else list
+        pool.firstOrNull { it.playbackState?.state == android.media.session.PlaybackState.STATE_PLAYING } ?: pool.firstOrNull()
+    } catch (_: Exception) { null }
+
+    /** Play/pause/skip: tells the music app directly (works even while Jarvis has the music ducked); falls back to headphone-button signals. */
     fun media(context: Context, action: String): String {
+        player(context)?.let { mc ->
+            val tc = mc.transportControls
+            val playing = mc.playbackState?.state == android.media.session.PlaybackState.STATE_PLAYING
+            when (action) {
+                "play" -> tc.play(); "pause" -> tc.pause(); "toggle" -> if (playing) tc.pause() else tc.play()
+                "next" -> tc.skipToNext(); "previous" -> tc.skipToPrevious(); "stop" -> tc.stop()
+                else -> return "Unknown music control."
+            }
+            val app = try { context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(mc.packageName, 0)).toString() } catch (_: Exception) { "the music app" }
+            return when (action) { "play" -> "Playing on $app."; "pause" -> "Paused $app."; "toggle" -> if (playing) "Paused." else "Playing."
+                "next" -> "Skipped to the next track on $app."; "previous" -> "Went back a track on $app."; else -> "Stopped $app." }
+        }
         val code = when (action) {
             "play" -> KeyEvent.KEYCODE_MEDIA_PLAY; "pause" -> KeyEvent.KEYCODE_MEDIA_PAUSE
             "toggle" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE; "next" -> KeyEvent.KEYCODE_MEDIA_NEXT
