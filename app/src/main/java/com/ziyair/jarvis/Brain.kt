@@ -62,7 +62,7 @@ class Brain(private val context: Context) {
     } catch (_: Exception) { "" }
 
     /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. */
-    fun ask(text: String, onAck: (() -> Unit)? = null): String {
+    fun ask(text: String, followUp: Boolean = false, onAck: (() -> Unit)? = null): String {
         val key = prefs.claudeKey
         if (key.isBlank()) return "I need my Claude key first, sir. Open the Jarvis app and add it."
         val cfg = config()
@@ -104,7 +104,7 @@ class Brain(private val context: Context) {
             val body = JSONObject()
                 .put("model", cfg.optString("model", "claude-haiku-5-5"))
                 .put("max_tokens", cfg.optInt("max_tokens", 300))
-                .put("system", systemPrompt(cfg))
+                .put("system", systemPrompt(cfg) + if (followUp) "\nThis was picked up WITHOUT the wake word, while you waited a few seconds for his answer to your question. If it's not an answer to you or a request for you (he's talking to someone else, background chatter, TV, a phone call), reply with exactly [ignore] and nothing else." else "")
                 .put("tools", tools)
                 .put("messages", clean)
             val (code, resp) = try { post(key, body) } catch (e: Exception) { return "I can't reach the network right now, sir." }
@@ -149,6 +149,7 @@ class Brain(private val context: Context) {
             val reply = sb.toString().trim().ifBlank { earlierText.ifBlank { "Done, sir." } }
                 .replace(Regex("^(correction|actually|apologies|my apologies|sorry)[,.:!]?\\s*(sir[,.]?\\s*)?", RegexOption.IGNORE_CASE), "")
                 .replaceFirstChar { it.uppercase() }
+            if (reply.contains("[ignore]", true)) return ""
             prefs.addTurn("user", text)
             prefs.addTurn("assistant", reply)
             return reply

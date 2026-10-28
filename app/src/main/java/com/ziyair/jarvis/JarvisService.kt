@@ -245,7 +245,7 @@ class JarvisService : Service() {
             override fun onResults(results: Bundle?) {
                 retries = 0
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
-                if (text.isBlank()) noSpeech(firstTurn) else handle(text)
+                if (text.isBlank()) noSpeech(firstTurn) else handle(text, followUp = !firstTurn)
             }
             override fun onError(error: Int) {
                 // the recognizer wasn't ready yet: try again shortly instead of giving up
@@ -284,7 +284,7 @@ class JarvisService : Service() {
     /** A short pause after Jarvis talks so the mic doesn't hear the end of his own voice. */
     private fun afterSpeaking(fn: () -> Unit) { main.postDelayed(fn, 350) }
 
-    private fun handle(text: String) {
+    private fun handle(text: String, followUp: Boolean = false) {
         val lower = text.lowercase(Locale.US)
         if (Regex("^(stop|never ?mind|that'?s all|that'?s it|thanks?,? (that'?s|thats) (it|all)|go to sleep|nothing|no thanks?|i'?m good)\\b").containsMatchIn(lower)) {
             speak(pick("goodbyes", "Very good, sir.")) { finishTurn() }
@@ -292,14 +292,18 @@ class JarvisService : Service() {
         }
         quiet(false)
         acquire()
-        try { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
+        if (!followUp) try { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         chatted = true
         thread {
-            val reply = brain.ask(text) { main.post { ack() } }
+            val reply = brain.ask(text, followUp) { main.post { ack() } }
             main.post {
                 if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { finishTurn(); return@post }
+                // heard chatter that wasn't for him: drop it silently and go back to waiting for "Hey Jarvis"
+                if (reply.isBlank()) { finishTurn(); return@post }
                 LogBus.changed()
-                speak(reply) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
+                // only keep listening when he actually asked something back; otherwise the conversation is over
+                val expectsAnswer = reply.trimEnd().endsWith("?")
+                speak(reply) { if (expectsAnswer) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() }
             }
         }
     }
