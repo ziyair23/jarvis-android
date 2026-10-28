@@ -125,12 +125,18 @@ class MessageListener : NotificationListenerService() {
         if (who == lastCaller && now - lastCallAt < 60_000) return
         lastCaller = who; lastCallAt = now
         val digits = who.replace(Regex("[^0-9]"), "")
-        val line = when {
-            digits.length >= 7 && digits.length >= who.length - 4 -> "Unknown number calling, sir."
-            Regex("unknown|private|spam|scam", RegexOption.IGNORE_CASE).containsMatchIn(who) -> "${who.replaceFirstChar { it.uppercase() }} calling, sir."
-            else -> "$who is calling, sir."
+        CallControl.ringing(n.actions?.firstOrNull { a -> a.title?.toString()?.lowercase()?.let { it.contains("answer") || it.contains("accept") } == true },
+            n.actions?.firstOrNull { a -> a.title?.toString()?.lowercase()?.let { it.contains("decline") || it.contains("reject") || it.contains("dismiss") } == true })
+        val unknown = digits.length >= 7 && digits.length >= who.length - 4
+        val spammy = Regex("unknown|private|spam|scam|no caller", RegexOption.IGNORE_CASE).containsMatchIn(who)
+        // unknown numbers: offer to decline; known people: offer to answer while driving
+        val (line, ask) = when {
+            unknown -> "Unknown number calling, sir. Probably spam. Decline it?" to true
+            spammy -> "${who.replaceFirstChar { it.uppercase() }} calling, sir. Probably spam. Decline it?" to true
+            DriveMode.on -> "$who is calling, sir. Answer it?" to true
+            else -> "$who is calling, sir." to false
         }
-        try { startService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", line).putExtra("ringing", true)) } catch (_: Exception) {}
+        try { startService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", line).putExtra("ringing", true).putExtra("listen", ask)) } catch (_: Exception) {}
     }
 
     private fun appName(pkg: String) = when (pkg) {

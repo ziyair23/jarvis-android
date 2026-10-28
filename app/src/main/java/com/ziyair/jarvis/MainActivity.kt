@@ -74,7 +74,7 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.battery).setOnClickListener { askBattery() }
         findViewById<Button>(R.id.allowComms).setOnClickListener {
             requestPermissions(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_CONTACTS,
-                Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR), 2)
+                Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR, Manifest.permission.CAMERA), 2)
         }
         findViewById<Button>(R.id.allowApps).setOnClickListener {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -202,7 +202,8 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.wakeScreen).text = if (prefs.wakeScreen) "Show replies on lock screen: on" else "Show replies on lock screen: off"
         val comms = checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
-        findViewById<Button>(R.id.allowComms).text = if (comms && Cal.allowed(this)) "Calls, texts & calendar: allowed" else "Allow calls, texts & calendar"
+        val cam = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        findViewById<Button>(R.id.allowComms).text = if (comms && Cal.allowed(this) && cam) "Calls, texts, calendar & camera: allowed" else "Allow calls, texts, calendar & camera"
         findViewById<Button>(R.id.allowScreen).text = if (JarvisAccess.on(this)) "Screen control: on" else "Allow screen control"
         findViewById<Button>(R.id.allowQuiet).text = if (PhoneControl.quietAllowed(this)) "Quiet mode: allowed" else "Allow quiet mode"
         findViewById<Button>(R.id.allowApps).text = if (Settings.canDrawOverlays(this)) "Opening apps: allowed" else "Allow opening apps"

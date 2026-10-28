@@ -109,6 +109,12 @@ section.on{display:block}
       <button class="q-sleep" onclick="baby('wake')">Awake</button>
     </div>
   </div>
+  <div class="card">
+    <div class="label">Journal</div>
+    <div class="grid2"><input id="j-in" placeholder="He smiled today…"><button class="primary" onclick="addJ()">Save</button></div>
+    <ul class="list" id="j-list" style="margin-top:8px"></ul>
+  </div>
+  <div class="day" style="margin-top:6px">Log</div>
   <div id="b-log"></div>
 </section>
 
@@ -170,6 +176,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 });
 
 function baby(k) { J.logBaby(k, ''); }
+function addJ() { const v = $('j-in').value.trim(); if (!v) return; J.addJournal(v); $('j-in').value = ''; }
 function earn(day) { const v = $('m-amt').value; if (!v) return; J.logEarn(v, day, false); $('m-amt').value = ''; }
 function setGoal() { const v = $('m-amt').value; if (!v) return; J.setGoal(v, D.goalName || 'the Macan'); $('m-amt').value = ''; }
 function addMem() { const v = $('mem-in').value.trim(); if (!v) return; J.remember(v); $('mem-in').value = ''; }
@@ -204,6 +211,11 @@ function load() {
     html += `<li><span class="t">${clock(e.at)}</span><span class="chip k-${esc(e.k)}">${esc(KIND[e.k] || e.k)}</span><span class="dim">${esc(e.n || '')}</span><button class="x" aria-label="Delete" onclick="if(confirm('Delete this entry?'))J.deleteBaby('${e.at}')">×</button></li>`;
   });
   $('b-log').innerHTML = cur ? html + '</ul></div>' : '<p class="empty">Nothing logged yet. Say "Hey Jarvis, he just ate."</p>';
+
+  // journal
+  const jr = []; for (let i = 0; i < (D.journal || []).length; i++) jr.push(D.journal[i]);
+  jr.sort((a, b) => b.at - a.at);
+  $('j-list').innerHTML = jr.length ? jr.slice(0, 60).map(e => `<li><span class="t">${new Date(e.at).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span><span>${esc(e.t)}</span><button class="x" aria-label="Delete" onclick="if(confirm('Delete this moment?'))J.deleteJournal('${e.at}')">×</button></li>`).join('') : '<li class="empty">Little moments go here. Say "Hey Jarvis, Ziyair smiled today."</li>';
 
   // money
   const byDay = {}; let total = 0;

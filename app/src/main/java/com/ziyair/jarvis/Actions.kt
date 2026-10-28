@@ -75,6 +75,12 @@ class Actions(private val context: Context) {
         put(tool("lights", "Control his Govee lights: on/off, brightness 1-100, color (red, orange, yellow, green, blue, purple, pink, white, warm, cool). which = a light's name or 'all'.",
             props("which" to str("Light name or 'all'"), "on" to bool("true on, false off"), "brightness" to num("1-100"), "color" to str("Color name")), listOf()))
         put(tool("find_phone", "He can't find his phone and asked where you are: ring loudly (even on silent) and flash the light.", props(), listOf()))
+        put(tool("look", "Take a photo with the back camera and look at it (he points the phone at something). Use for 'what's this', 'read this', 'what does this say', 'what's wrong with this'.", props(), listOf()))
+        put(tool("journal_add", "Save a moment to the baby journal (e.g. 'Ziyair smiled today', 'first bath'). Dated automatically.", props("text" to str("The moment, short, in his words")), listOf("text")))
+        put(tool("journal_read", "Read back baby journal moments, optionally about something.", props("about" to str("Optional word to search")), listOf()))
+        put(tool("answer_call", "Answer the phone call that's ringing right now.", props(), listOf()))
+        put(tool("decline_call", "Decline the phone call that's ringing right now.", props(), listOf()))
+        put(tool("offer_rule", "Change DoorDash order judging: minimum dollars per mile, or turn it on/off.", props("per_mile" to num("Minimum $ per mile"), "on" to bool("Judge offers or not")), listOf()))
         put(tool("driving_mode", "Turn driving mode on or off (short answers, messages read aloud).", props("on" to bool("true for on")), listOf("on")))
     }
 
@@ -176,6 +182,11 @@ class Actions(private val context: Context) {
             "phone_control" -> PhoneControl.run(context, input.getString("action"), if (input.has("level")) input.optInt("level") else null)
             "calendar_events" -> Cal.events(context, input.optString("day", "today"), input.optInt("days", 1))
             "add_event" -> Cal.add(context, input.getString("title"), input.optString("date", "today"), input.optString("time").ifBlank { null }, input.optInt("minutes", 60))
+            "journal_add" -> Journal.add(context, input.getString("text"))
+            "journal_read" -> Journal.read(context, input.optString("about"))
+            "answer_call" -> CallControl.answer(context)
+            "decline_call" -> CallControl.decline(context)
+            "offer_rule" -> OfferJudge.setRule(context, if (input.has("per_mile")) input.optDouble("per_mile") else null, if (input.has("on")) input.optBoolean("on") else null)
             "status_report" -> Status.report(context)
             "run_protocol" -> Protocols.run(context, input.getString("name"))
             "lights" -> Lights.set(context, input.optString("which", "all"), if (input.has("on")) input.optBoolean("on") else null,

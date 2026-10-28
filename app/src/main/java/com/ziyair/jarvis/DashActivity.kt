@@ -55,12 +55,15 @@ class DashActivity : Activity() {
                 .put("goal", Earnings.goal(p))
                 .put("goalName", Earnings.goalName(p))
                 .put("memory", JSONArray(Memory.all(ctx)))
+                .put("journal", Journal.all(p))
                 .put("reminders", p.reminders())
                 .put("history", p.history())
                 .toString()
         }
 
         @JavascriptInterface fun logBaby(kind: String, note: String) { Baby.log(ctx, kind, 0.0, note); LogBus.changed() }
+        @JavascriptInterface fun addJournal(text: String) { if (text.isNotBlank()) Journal.add(ctx, text); LogBus.changed() }
+        @JavascriptInterface fun deleteJournal(at: String) { Journal.delete(ctx, at.toLong()); LogBus.changed() }
         @JavascriptInterface fun deleteBaby(at: String) { Baby.delete(ctx, at.toLong()); LogBus.changed() }
         @JavascriptInterface fun logEarn(amount: String, day: String, replace: Boolean) {
             amount.toDoubleOrNull()?.let { Earnings.log(ctx, it, day, replace) }; LogBus.changed()

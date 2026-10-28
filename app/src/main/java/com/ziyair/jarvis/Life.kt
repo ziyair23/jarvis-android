@@ -279,5 +279,5 @@ object Cal {
         return "Added \"$title\" " + (if (allDay) "on ${SimpleDateFormat("EEEE MMM d", Locale.US).format(start.time)}" else "at ${Scheduler.clock(start.timeInMillis)} ${SimpleDateFormat("EEEE MMM d", Locale.US).format(start.time)}") + "."
     }
 
-    private const val NEED = "He needs to allow the calendar: open the Jarvis app and tap Allow calls, texts & calendar."
+    private const val NEED = "He needs to allow the calendar: open the Jarvis app and tap Allow calls, texts, calendar & camera."
 }

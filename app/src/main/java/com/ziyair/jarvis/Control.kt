@@ -77,7 +77,15 @@ object Apps {
  */
 class JarvisAccess : AccessibilityService() {
     override fun onServiceConnected() { me = this }
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // DoorDash offers: read pay and miles off the Dasher screen and give a verdict
+        if (event?.packageName?.toString() != OfferJudge.DASHER) return
+        try {
+            val texts = ArrayList<String>()
+            walk(rootInActiveWindow) { n -> (n.text ?: n.contentDescription)?.toString()?.let { if (it.isNotBlank() && it.length < 80) texts.add(it) } }
+            OfferJudge.check(this, texts)
+        } catch (_: Exception) {}
+    }
     override fun onInterrupt() {}
     override fun onDestroy() { if (me === this) me = null; super.onDestroy() }
 
@@ -92,7 +100,7 @@ class JarvisAccess : AccessibilityService() {
 
         private fun pause(ms: Long) = try { Thread.sleep(ms) } catch (_: Exception) {}
 
-        private fun walk(n: AccessibilityNodeInfo?, depth: Int = 0, fn: (AccessibilityNodeInfo) -> Unit) {
+        fun walk(n: AccessibilityNodeInfo?, depth: Int = 0, fn: (AccessibilityNodeInfo) -> Unit) {
             if (n == null || depth > 40) return
             fn(n)
             for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1, fn)

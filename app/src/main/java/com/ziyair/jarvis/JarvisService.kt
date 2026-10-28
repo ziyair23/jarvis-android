@@ -206,7 +206,8 @@ class JarvisService : Service() {
         muted = on
         val am = getSystemService(AudioManager::class.java)
         if (on) {
-            val did = quietStreams.filter { st -> !am.isStreamMute(st) && try { am.adjustStreamVolume(st, AudioManager.ADJUST_MUTE, 0); true } catch (_: Exception) { false } }
+            val streams = if (CallControl.ringingNow()) quietStreams + AudioManager.STREAM_RING else quietStreams
+            val did = streams.filter { st -> !am.isStreamMute(st) && try { am.adjustStreamVolume(st, AudioManager.ADJUST_MUTE, 0); true } catch (_: Exception) { false } }
             prefs.sp.edit().putString("muted_streams", did.joinToString(",")).apply()
         } else restoreSound()
     }
@@ -286,6 +287,7 @@ class JarvisService : Service() {
         thread {
             val reply = brain.ask(text) { main.post { ack() } }
             main.post {
+                if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { finishTurn(); return@post }
                 LogBus.changed()
                 speak(reply) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
             }
@@ -296,8 +298,8 @@ class JarvisService : Service() {
     private fun sayFirst(line: String, thenListen: Boolean = false, ringing: Boolean = false) {
         if (ringing) {
             if (busy || PhoneControl.quietOn(this)) return
-            busy = true; acquire(); stopWakeWord()
-            speak(line) { finishTurn() }
+            busy = true; acquire(); stopWakeWord(); followUps = 1
+            speak(line) { if (thenListen && CallControl.ringingNow()) { openWindow(5); afterSpeaking { listen(firstTurn = false) } } else finishTurn() }
             return
         }
         note(line)

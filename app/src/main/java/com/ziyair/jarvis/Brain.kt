@@ -50,7 +50,7 @@ class Brain(private val context: Context) {
             "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. If he asked you something and a tool can do it, do it rather than telling him how." +
             "\nYou can drive his phone: open_app for any app, media_control for play/pause/skip, stop_navigation to cancel directions, and screen_read/screen_tap/screen_type/screen_action to work inside any app step by step (e.g. open YouTube, tap the search icon, type, submit, tap the first video). Keep going until it's done, then confirm in a few words. Never post, send, buy or delete anything through the screen without his clear yes." +
             "\nOne reply per request: when you use a tool, don't write any words alongside the tool call, wait for the result and then answer once. Tool results that say Logged, Set, Opened, Sent, Done and the like mean it worked: say so plainly and never follow up with a 'correction', a second answer or an apology. Only answer what he just asked; don't add notes about earlier conversation, the dashboard numbers or older messages unless he asks." +
-            "\nFor anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks."
+            "\nWhen he asks what something is, to read something, or anything that needs eyes ('what's this', 'read this', 'what does this say'), use look, then answer from the photo in a sentence or two. For anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks."
     }
 
     private fun todaySoFar(): String = try {
@@ -130,7 +130,7 @@ class Brain(private val context: Context) {
                 when (part.optString("type")) {
                     "text" -> sb.append(part.getString("text"))
                     "tool_use" -> {
-                        val out = actions.run(part.getString("name"), part.optJSONObject("input") ?: JSONObject())
+                        val out: Any = if (part.getString("name") == "look") look() else actions.run(part.getString("name"), part.optJSONObject("input") ?: JSONObject())
                         results.put(JSONObject().put("type", "tool_result").put("tool_use_id", part.getString("id")).put("content", out))
                     }
                 }
@@ -151,6 +151,15 @@ class Brain(private val context: Context) {
             prefs.addTurn("assistant", reply)
             return reply
         }
+    }
+
+    /** Jarvis's eyes: a photo from the back camera, sent to Claude to look at. */
+    private fun look(): Any {
+        val f = Eyes.capture(context) ?: return Eyes.why
+        val data = android.util.Base64.encodeToString(f.readBytes(), android.util.Base64.NO_WRAP)
+        return JSONArray()
+            .put(JSONObject().put("type", "text").put("text", "Photo just taken with his phone's back camera, pointed at what he's asking about."))
+            .put(JSONObject().put("type", "image").put("source", JSONObject().put("type", "base64").put("media_type", "image/jpeg").put("data", data)))
     }
 
     private val slow = listOf("run_protocol", "screen_tap", "screen_type", "screen_read", "stop_navigation", "status_report", "lights", "look", "open_app")
