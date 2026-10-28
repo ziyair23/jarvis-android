@@ -312,7 +312,7 @@ class Brain(private val context: Context) {
         return s.endsWith("?") || Regex("^(what|who|whose|when|where|why|how|which|is|are|was|were|do|does|did|can|could|should|would|will|tell me|explain|give me|any |did the|who won|what about)\\b").containsMatchIn(s)
     }
 
-    private val slow = listOf("run_protocol", "screen_tap", "screen_type", "screen_read", "stop_navigation", "status_report", "lights", "look", "open_app")
+    private val slow = listOf("play_music", "run_protocol", "screen_tap", "screen_type", "screen_read", "stop_navigation", "status_report", "lights", "look", "open_app")
 
     private fun post(key: String, body: JSONObject): Pair<Int, String> {
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection

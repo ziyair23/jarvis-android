@@ -38,7 +38,7 @@ class Actions(private val context: Context) {
         put(tool("navigate", "Start Google Maps driving directions to a place.",
             props("destination" to str("Place name or address")), listOf("destination")))
         put(tool("play_music", "Play a specific song, artist, album or playlist (in YouTube Music or Spotify, whichever he uses). For resuming or skipping use media_control instead.",
-            props("query" to str("What to play")), listOf("query")))
+            props("query" to str("What to play, song and artist, e.g. 'Fear NF'"), "song" to str("Just the song title, e.g. 'Fear'")), listOf("query")))
         put(tool("get_weather", "Weather right now plus today's and tomorrow's forecast, where he lives or for a place he names.", props("place" to str("Optional city, if not where he lives")), listOf()))
         put(tool("open_app", "Open any app on his phone by name: camera, YouTube, TikTok, Instagram, Snapchat, DoorDash Dasher, Maps, Settings, anything installed.", props("name" to str("App name as he says it")), listOf("name")))
         put(tool("media_control", "Control whatever is playing (music, YouTube, podcasts): play/resume, pause, toggle, next (skip), previous, stop. Use this for 'skip', 'next song', 'pause', 'resume', 'turn it back on'.",
@@ -149,7 +149,6 @@ class Actions(private val context: Context) {
                 "Directions started. Unlock the phone to see the map if it's locked."
             }
             "play_music" -> {
-                if (!canOpenApps()) return NEED_OPEN_APPS
                 val q = input.getString("query").trim()
                 val pm = context.packageManager
                 fun has(p: String) = pm.getLaunchIntentForPackage(p) != null
@@ -158,30 +157,7 @@ class Actions(private val context: Context) {
                 val pkg = current ?: listOf(YT_MUSIC, SPOTIFY).firstOrNull { has(it) } ?: return "No music app found (YouTube Music or Spotify)."
                 val name = if (pkg == SPOTIFY) "Spotify" else "YouTube Music"
                 if (q.isBlank() || q.lowercase() in setOf("music", "something", "my music", "anything")) return Apps.media(context, "play")
-                // YouTube Music ignores "play from search" from other apps: find the exact song and open it directly, which starts it playing
-                if (pkg == YT_MUSIC) {
-                    val id = Apps.youtubeId(q)
-                    if (id != null) {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=$id")).setPackage(YT_MUSIC)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            Apps.player(context, pkg)?.let { if (it.playbackState?.state != android.media.session.PlaybackState.STATE_PLAYING) it.transportControls.play() }
-                        }, 4000)
-                        return "Playing $q on YouTube Music."
-                    }
-                }
-                val play = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).setPackage(pkg)
-                    .putExtra(SearchManager.QUERY, q).putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                try { context.startActivity(play) } catch (_: Exception) {
-                    val url = if (pkg == SPOTIFY) "spotify:search:" + Uri.encode(q) else "https://music.youtube.com/search?q=" + Uri.encode(q)
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }
-                // some apps open the song but wait for a tap: nudge it to start
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    Apps.player(context, pkg)?.let { if (it.playbackState?.state != android.media.session.PlaybackState.STATE_PLAYING) it.transportControls.play() }
-                }, 4000)
-                "Playing $q on $name."
+                Music.play(context, pkg, name, q, input.optString("song").ifBlank { null })
             }
             "get_weather" -> Weather.report(context, input.optString("place")) ?: "Couldn't get the weather right now."
             "open_app" -> Apps.open(context, input.getString("name"))
