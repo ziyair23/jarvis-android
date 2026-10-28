@@ -94,6 +94,7 @@ section.on{display:block}
   </div>
   <div class="card">
     <div class="label">Coming up</div>
+    <div class="faint" id="t-spend" style="margin:-4px 0 6px"></div>
     <ul class="list" id="t-rem"></ul>
   </div>
 </section>
@@ -237,6 +238,8 @@ function load() {
   $('m-bars').innerHTML = bars; $('m-barsl').innerHTML = labels;
   const keys = Object.keys(byDay).sort().reverse().slice(0, 30);
   $('m-days').innerHTML = keys.length ? keys.map(k => `<li><span class="t">${new Date(k + 'T12:00').toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}</span><span class="mid">${money(byDay[k])}</span><button class="x" aria-label="Delete" onclick="if(confirm('Delete ${k}?'))J.deleteEarn('${k}')">×</button></li>`).join('') : '<li class="empty">Nothing logged yet. Say "Hey Jarvis, made 60 this morning."</li>';
+
+  $('t-spend').textContent = D.budget ? 'Jarvis this month: ' + money(D.spend || 0) + ' of ' + money(D.budget) + ' Claude budget' : '';
 
   // reminders
   const rem = []; for (let i = 0; i < D.reminders.length; i++) rem.push(D.reminders[i]);

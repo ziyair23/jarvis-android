@@ -157,6 +157,7 @@
             <Button android:id="@+id/allowMsgs" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Allow reading messages" />
             <Button android:id="@+id/readMode" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Read messages aloud: while driving" />
             <Button android:id="@+id/announceCalls" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Say who's calling: on" />
+            <Button android:id="@+id/castMode" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Nest Hub voice: announcements" />
             <Button android:id="@+id/wakeScreen" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Show replies on lock screen: on" />
             <Button android:id="@+id/talkFirst" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Speaks first: on" />
         </LinearLayout>

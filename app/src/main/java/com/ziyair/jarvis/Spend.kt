@@ -17,7 +17,7 @@ object Spend {
     fun budget(p: Prefs) = p.sp.getFloat("budget", 5f).toDouble()
     fun thisMonth(p: Prefs): Double = if (p.sp.getString("spend_month", "") == month()) p.sp.getFloat("spend", 0f).toDouble() else 0.0
 
-    /** Dollars per million tokens: [input, output]. Defaults are Claude's published per-token prices; adjustable from config. */
+    /** Dollars per million tokens: [input, output]. Defaults are estimates of Claude's per-token prices; adjustable from config. */
     private fun price(cfg: JSONObject, model: String): Pair<Double, Double> {
         val table = cfg.optJSONObject("prices")
         val k = when { model.contains("opus") -> "opus"; model.contains("sonnet") -> "sonnet"; else -> "haiku" }

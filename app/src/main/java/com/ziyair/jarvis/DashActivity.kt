@@ -56,6 +56,7 @@ class DashActivity : Activity() {
                 .put("goalName", Earnings.goalName(p))
                 .put("memory", JSONArray(Memory.all(ctx)))
                 .put("journal", Journal.all(p))
+                .put("spend", Spend.thisMonth(p)).put("budget", Spend.budget(p))
                 .put("reminders", p.reminders())
                 .put("history", p.history())
                 .toString()
