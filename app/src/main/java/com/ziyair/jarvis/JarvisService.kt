@@ -63,6 +63,7 @@ class JarvisService : Service() {
             }
         }
         thread { brain.refreshConfig(); Updater.check(this, busy = busy) }
+        Cast.discover(this)
         // Jarvis's own voice: fetch it once on Wi-Fi, then keep it warm
         thread {
             val metered = try { getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered } catch (_: Exception) { true }
@@ -343,7 +344,8 @@ class JarvisService : Service() {
         stopWakeWord()
         holdFocus(true)
         try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 90) } catch (_: Exception) {}
-        main.postDelayed({ speak(line) { if (thenListen) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() } }, 300)
+        val say: (String, () -> Unit) -> Unit = if (Cast.mode(prefs) != "off") { t, f -> speakHouse(t, f) } else { t, f -> speak(t, f) }
+        main.postDelayed({ say(line) { if (thenListen) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() } }, 300)
     }
 
     /** Driving mode follows the car's Bluetooth (matched by name, no extra permission needed). */
@@ -410,6 +412,7 @@ class JarvisService : Service() {
 
     private var player: android.media.MediaPlayer? = null
     private var acking = false
+    private var casting = false
     private val ACKS = listOf("On it, sir.", "Right away, sir.", "One moment, sir.", "On it.")
     private fun ack() {
         speak(ACKS.random()) { acking = false }
@@ -418,8 +421,22 @@ class JarvisService : Service() {
     }
 
     /** Speak with the realistic Google voice when a key is set, otherwise the phone's own voice. */
+    /** At home with a Nest Hub: say it through the speaker (blocks until done), else on the phone. */
+    private fun speakHouse(text: String, then: () -> Unit) {
+        if (Cast.target(prefs) == null || !Piper.installed(this) || prefs.ttsKey.isNotBlank()) { speak(text, then); return }
+        if (acking) { main.postDelayed({ speakHouse(text, then) }, 150); return }
+        quiet(false)
+        LockView.showIfLocked(this, text)
+        thread {
+            val a = Piper.synth(this, text, brain.config().optDouble("piper_speed", 1.0).toFloat())
+            val ok = a != null && Cast.play(this, Cast.wav(this, a.first, a.second), "audio/wav", a.first.size * 1000L / a.second + 3000)
+            main.post { if (ok) then() else if (a != null && playPcm(a.first, a.second, then)) Unit else phoneSpeak(text, then) }
+        }
+    }
+
     private fun speak(text: String, then: () -> Unit) {
         if (acking) { main.postDelayed({ speak(text, then) }, 150); return }
+        if (Cast.mode(prefs) == "everything" && Cast.target(prefs) != null && !casting) { casting = true; speakHouse(text) { casting = false; then() }; return }
         quiet(false)
         LockView.showIfLocked(this, text)
         val key = prefs.ttsKey

@@ -69,6 +69,10 @@ class Actions(private val context: Context) {
         put(tool("calendar_events", "What's on his calendar.", props("day" to str("'today', 'tomorrow' or YYYY-MM-DD"), "days" to num("How many days to cover, default 1 (7 for 'this week')")), listOf()))
         put(tool("add_event", "Add an event to his calendar. Confirm the details in your reply.",
             props("title" to str("What it is"), "date" to str("'today', 'tomorrow' or YYYY-MM-DD"), "time" to str("24-hour HH:MM, leave out for all-day"), "minutes" to num("Length in minutes, default 60")), listOf("title", "date")))
+        put(tool("house_speaker", "Jarvis's voice through his Google Nest Hub / Cast speakers at home. mode: 'announcements' (greetings, heads-ups, reminders), 'everything' (all replies), or 'off'. Optional speaker name. With no arguments, lists speakers found.",
+            props("mode" to str("announcements, everything or off"), "speaker" to str("Speaker or group name")), listOf()))
+        put(tool("spending", "How much Jarvis has cost on his Claude account this month, against his budget.", props(), listOf()))
+        put(tool("set_budget", "Set his monthly Claude budget in dollars (he gets a warning near it).", props("dollars" to num("Monthly budget")), listOf("dollars")))
         put(tool("status_report", "Status report: battery, weather and roads, earnings today, the baby, next shift, next reminder. Use for 'status report', 'how are we looking', 'catch me up'.", props(), listOf()))
         put(tool("run_protocol", "Run one of his named protocols: 'dash' (heading out to DoorDash: driving mode, opens Dasher, starts music, weather), 'baby' (night feed: quiet phone, dim warm lights, low volume, baby status), 'home' (done for the night: driving off, lights on, earnings and baby recap), 'goodnight' (lights off, phone quiet until before his next shift with starred contacts still ringing, next shift time).",
             props("name" to str("dash, baby, home or goodnight")), listOf("name")))
@@ -189,6 +193,15 @@ class Actions(private val context: Context) {
             "answer_call" -> CallControl.answer(context)
             "decline_call" -> CallControl.decline(context)
             "offer_rule" -> OfferJudge.setRule(context, if (input.has("per_mile")) input.optDouble("per_mile") else null, if (input.has("on")) input.optBoolean("on") else null)
+            "house_speaker" -> {
+                val p = prefs
+                input.optString("mode").takeIf { it in setOf("announcements", "everything", "off") }?.let { Cast.setMode(p, it) }
+                input.optString("speaker").takeIf { it.isNotBlank() }?.let { p.sp.edit().putString("cast_speaker", it).apply() }
+                val list = Cast.speakers().joinToString { it.name }
+                "House speaker: ${Cast.mode(p)}. " + (if (list.isBlank()) "No Cast speakers found on this Wi-Fi right now." else "Found: $list. Using ${Cast.target(p)?.name}.")
+            }
+            "spending" -> Spend.report(context)
+            "set_budget" -> Spend.setBudget(context, input.getDouble("dollars"))
             "status_report" -> Status.report(context)
             "run_protocol" -> Protocols.run(context, input.getString("name"))
             "lights" -> Lights.set(context, input.optString("which", "all"), if (input.has("on")) input.optBoolean("on") else null,

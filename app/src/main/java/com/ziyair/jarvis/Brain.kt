@@ -51,7 +51,7 @@ class Brain(private val context: Context) {
             "\nYou can act on his phone with your tools (timers, reminders, alarms, calls, texts, directions, music, weather). When he tells you something worth keeping for future days, or asks you to remember something, save it with remember. Use them when he asks, then confirm in one short line. Times you pass to tools are 24-hour local time." +
             "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. If he asked you something and a tool can do it, do it rather than telling him how." +
             "\nYou can drive his phone: open_app for any app, media_control for play/pause/skip, stop_navigation to cancel directions, and screen_read/screen_tap/screen_type/screen_action to work inside any app step by step (e.g. open YouTube, tap the search icon, type, submit, tap the first video). Keep going until it's done, then confirm in a few words. Never post, send, buy or delete anything through the screen without his clear yes." +
-            "\nOne reply per request: when you use a tool, don't write any words alongside the tool call, wait for the result and then answer once. Tool results that say Logged, Set, Opened, Sent, Done and the like mean it worked: say so plainly and never follow up with a 'correction', a second answer or an apology. Only answer what he just asked; don't add notes about earlier conversation, the dashboard numbers or older messages unless he asks." +
+            "\nOne reply per request: when you use one of his phone tools, don't write any words alongside the tool call, wait for the result and then answer once. After a web_search, always say the actual answer (scores, times, facts); never reply with just 'Done'. Tool results that say Logged, Set, Opened, Sent, Done and the like mean it worked: say so plainly and never follow up with a 'correction', a second answer or an apology. Only answer what he just asked; don't add notes about earlier conversation, the dashboard numbers or older messages unless he asks." +
             "\nWhen he asks what something is, to read something, or anything that needs eyes ('what's this', 'read this', 'what does this say'), use look, then answer from the photo in a sentence or two. For anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks."
     }
 
@@ -94,6 +94,12 @@ class Brain(private val context: Context) {
 
         val actions = Actions(context)
         val tools = actions.tools()
+        // the tool list is the same every time: let Claude cache it (much cheaper on repeat questions)
+        if (tools.length() > 0) tools.getJSONObject(tools.length() - 1).put("cache_control", JSONObject().put("type", "ephemeral"))
+        // real questions get the smarter model and room for a proper answer; quick commands stay fast and cheap
+        val deep = !followUp && realQuestion(text) && cfg.optBoolean("smart_answers", true)
+        val model = if (deep) cfg.optString("smart_model", "claude-sonnet-5-5") else cfg.optString("model", "claude-haiku-5-5")
+        val maxTokens = if (deep) cfg.optInt("smart_max_tokens", 700) else cfg.optInt("max_tokens", 400)
         if (cfg.optBoolean("web_search", true)) tools.put(JSONObject().put("type", "web_search_20250305").put("name", "web_search")
             .put("max_uses", cfg.optInt("web_search_max", 3))
             .put("user_location", JSONObject().put("type", "approximate").put("city", prefs.city.ifBlank { "Spokane" })
@@ -102,9 +108,9 @@ class Brain(private val context: Context) {
         var earlierText = ""
         while (true) {
             val body = JSONObject()
-                .put("model", cfg.optString("model", "claude-haiku-5-5"))
-                .put("max_tokens", cfg.optInt("max_tokens", 300))
-                .put("system", systemPrompt(cfg) + if (followUp) "\nThis was picked up WITHOUT the wake word, while you waited a few seconds for his answer to your question. If it's not an answer to you or a request for you (he's talking to someone else, background chatter, TV, a phone call), reply with exactly [ignore] and nothing else." else "")
+                .put("model", model)
+                .put("max_tokens", maxTokens)
+                .put("system", systemPrompt(cfg) + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + if (followUp) "\nThis was picked up WITHOUT the wake word, while you waited a few seconds for his answer to your question. If it's not an answer to you or a request for you (he's talking to someone else, background chatter, TV, a phone call), reply with exactly [ignore] and nothing else." else "")
                 .put("tools", tools)
                 .put("messages", clean)
             val (code, resp) = try { post(key, body) } catch (e: Exception) { return "I can't reach the network right now, sir." }
@@ -118,6 +124,7 @@ class Brain(private val context: Context) {
                 code !in 200..299 -> return "Something went wrong on my end, sir. Error $code."
             }
             val j = JSONObject(resp)
+            Spend.record(context, cfg, model, j.optJSONObject("usage"))
             val content = j.getJSONArray("content")
             // a long web search can pause mid-turn: hand it straight back so it finishes
             if (j.optString("stop_reason") == "pause_turn" && rounds < 10) {
@@ -145,6 +152,13 @@ class Brain(private val context: Context) {
                 clean.put(JSONObject().put("role", "user").put("content", results))
                 continue
             }
+            // searched (or thought) but said nothing: ask for the spoken answer instead of "Done"
+            if (sb.isBlank() && earlierText.isBlank() && content.length() > 0 && rounds < 10) {
+                rounds++
+                clean.put(JSONObject().put("role", "assistant").put("content", content))
+                clean.put(JSONObject().put("role", "user").put("content", "(Now tell him the answer out loud, with the actual details.)"))
+                continue
+            }
             // speak one final answer only; strip any "correction" second-guessing
             val reply = sb.toString().trim().ifBlank { earlierText.ifBlank { "Done, sir." } }
                 .replace(Regex("^(correction|actually|apologies|my apologies|sorry)[,.:!]?\\s*(sir[,.]?\\s*)?", RegexOption.IGNORE_CASE), "")
@@ -163,6 +177,14 @@ class Brain(private val context: Context) {
         return JSONArray()
             .put(JSONObject().put("type", "text").put("text", "Photo just taken with his phone's back camera, pointed at what he's asking about."))
             .put(JSONObject().put("type", "image").put("source", JSONObject().put("type", "base64").put("media_type", "image/jpeg").put("data", data)))
+    }
+
+    /** A genuine question (scores, how/why, advice), as opposed to a quick command for the phone. */
+    private fun realQuestion(t: String): Boolean {
+        val s = t.lowercase().trim()
+        if (Regex("^(log|set|remind|start|stop|cancel|turn|call|text|send|open|play|pause|skip|resume|navigate|take me|lights?|fed|he (just )?(ate|pooped)|changed|made|note|remember|forget|run|dash|goodnight|good night|status report|answer|decline|volume|flashlight)\\b").containsMatchIn(s)) return false
+        if (Regex("^(what('?s| is) the time|what time is it|what day is it)").containsMatchIn(s)) return false
+        return s.endsWith("?") || Regex("^(what|who|whose|when|where|why|how|which|is|are|was|were|do|does|did|can|could|should|would|will|tell me|explain|give me|any |did the|who won|what about)\\b").containsMatchIn(s)
     }
 
     private val slow = listOf("run_protocol", "screen_tap", "screen_type", "screen_read", "stop_navigation", "status_report", "lights", "look", "open_app")

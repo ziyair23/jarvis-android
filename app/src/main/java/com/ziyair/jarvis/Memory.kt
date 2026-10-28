@@ -91,6 +91,7 @@ object Memory {
             if (c.responseCode !in 200..299) { c.disconnect(); return }
             val resp = c.inputStream.bufferedReader().use { it.readText() }
             c.disconnect()
+            Spend.record(context, Brain(context).config(), body.optString("model"), JSONObject(resp).optJSONObject("usage"))
             val content = JSONObject(resp).getJSONArray("content")
             var text = ""
             for (i in 0 until content.length()) if (content.getJSONObject(i).optString("type") == "text") text += content.getJSONObject(i).getString("text")
