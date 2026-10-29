@@ -4,10 +4,12 @@ plugins {
 }
 
 val buildNumber = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+val withHome = rootProject.file("homesdk").exists()
 
 android {
     namespace = "com.ziyair.jarvis"
-    compileSdk = 34
+    compileSdk = 35
+    sourceSets["main"].java.srcDir(if (withHome) "src/home/java" else "src/nohome/java")
 
     defaultConfig {
         applicationId = "com.ziyair.jarvis"
@@ -16,6 +18,7 @@ android {
         versionCode = buildNumber
         versionName = "1.$buildNumber"
         ndk { abiFilters += listOf("arm64-v8a") }
+        buildConfigField("boolean", "HOME_SDK", withHome.toString())
     }
 
     signingConfigs {
@@ -46,11 +49,18 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     packaging { resources { excludes += listOf("META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/DEPENDENCIES") } }
 }
 
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
+
 dependencies {
+    if (withHome) {
+        implementation("com.google.android.gms:play-services-home:17.1.0")
+        implementation("com.google.android.gms:play-services-home-types:17.1.0")
+        implementation("androidx.activity:activity-ktx:1.9.3")
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    }
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
     implementation("org.apache.commons:commons-compress:1.26.2")
 }

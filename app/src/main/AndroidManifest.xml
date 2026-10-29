@@ -92,6 +92,11 @@
         </service>
 
         <activity
+            android:name=".HomeConnectActivity"
+            android:exported="false"
+            android:theme="@style/Jarvis" />
+
+        <activity
             android:name=".LookActivity"
             android:exported="false"
             android:excludeFromRecents="true"

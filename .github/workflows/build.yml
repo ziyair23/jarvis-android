@@ -32,14 +32,14 @@ jobs:
           SDKM="$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)"
           if [ -n "$SDKM" ]; then
             yes | "$SDKM" --sdk_root="$SDK" --licenses > /dev/null || true
-            "$SDKM" --sdk_root="$SDK" "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null
+            "$SDKM" --sdk_root="$SDK" "platforms;android-35" "build-tools;35.0.0" "platform-tools" > /dev/null
           fi
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "sdk.dir=$SDK" > local.properties
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.7"
+          gradle-version: "8.11.1"
 
       - name: Get the free "Hey Jarvis" wake-word models (openWakeWord)
         run: |
@@ -65,8 +65,34 @@ jobs:
           readelf -d $D/libonnxruntime_sherpa.so | grep SONAME
           ls -la $A
 
+      - name: Google Home kit (stored encrypted; unlocked with the HOME_SDK_KEY secret)
+        env:
+          HOME_SDK_KEY: ${{ secrets.HOME_SDK_KEY }}
+        run: |
+          if [ -n "$HOME_SDK_KEY" ]; then
+            mkdir -p homesdk
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in sdk/home-sdk.tgz.enc -pass env:HOME_SDK_KEY | tar xzf - -C homesdk
+            echo "Building with Google Home"; ls homesdk/com/google/android/gms
+          else
+            echo "No HOME_SDK_KEY secret: building without Google Home"
+          fi
+
       - name: Build the app
-        run: gradle :app:assembleRelease -PversionCode=${{ github.run_number }} --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease -PversionCode=${{ github.run_number }} --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Save the error log where Claude can read it
+        if: failure()
+        run: |
+          { grep -E "^e: |error:|FAILURE|What went wrong|Could not|> " build.log | head -150; echo ----; tail -80 build.log; } > /tmp/err.txt || true
+          git config user.name jarvis-ci; git config user.email jarvis-ci@users.noreply.github.com
+          git checkout --orphan ci-log
+          git rm -rf --cached . -q
+          cp /tmp/err.txt build-error.txt
+          git add -f build-error.txt
+          git commit -qm "build ${{ github.run_number }} error log"
+          git push -f origin ci-log
 
       - name: Name the app file
         run: cp app/build/outputs/apk/release/app-release.apk jarvis-${{ github.run_number }}.apk

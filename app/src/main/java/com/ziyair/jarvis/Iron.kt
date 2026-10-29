@@ -48,9 +48,22 @@ object Lights {
         "purple" to 0x8A2BE2, "pink" to 0xFF4FA0, "white" to 0xFFFFFF, "warm" to 0xFFB46B, "warm white" to 0xFFB46B, "cool" to 0xD8E8FF)
 
     /** which: a light's name or "all". on: true/false/null. brightness 1-100 or null. color name or null. */
+    /** Any lights connected at all (Google Home or Govee). */
+    fun available(context: Context) = Prefs(context).goveeKey.isNotBlank() || GoogleHome.connectedCached() || (GoogleHome.AVAILABLE && GoogleHome.connected(context))
+
     fun set(context: Context, which: String?, on: Boolean?, brightness: Int?, color: String?): String {
         val key = Prefs(context).goveeKey
-        if (key.isBlank()) return "No lights connected yet: he needs to add his Govee API key in Jarvis setup."
+        if (GoogleHome.AVAILABLE && GoogleHome.connected(context)) {
+            val r = GoogleHome.control(context, which, on, brightness)
+            // colors only exist on the Govee side
+            if (color != null && on != false && key.isNotBlank()) try { setGovee(context, key, which, null, null, color) } catch (_: Exception) {}
+            return r
+        }
+        if (key.isBlank()) return "No lights connected yet: he needs to connect Google Home or add his Govee key in Jarvis setup."
+        return setGovee(context, key, which, on, brightness, color)
+    }
+
+    private fun setGovee(context: Context, key: String, which: String?, on: Boolean?, brightness: Int?, color: String?): String {
         val all = devices(key)
         if (all.isEmpty()) return "Couldn't reach his Govee lights. The key may be wrong."
         val w = which?.trim()?.lowercase().orEmpty()
@@ -159,14 +172,14 @@ object Protocols {
             }
             name.contains("baby") || name.contains("night") || name.contains("feed") -> {
                 step("quiet") { PhoneControl.run(context, "quiet_on", null) }
-                if (Prefs(context).goveeKey.isNotBlank()) step("lights") { Lights.set(context, "all", true, 5, "warm") }
+                if (Lights.available(context)) step("lights") { Lights.set(context, "all", true, 5, "warm") }
                 step("volume") { PhoneControl.run(context, "volume", 3) }
                 out.add(Baby.status(context))
             }
             name.contains("home") -> {
                 HomeNet.learnIfUnknown(context)
                 DriveMode.on = false; out.add("Driving mode off.")
-                if (Prefs(context).goveeKey.isNotBlank()) step("lights") { Lights.set(context, "all", true, if (Lights.late()) 15 else 80, "warm") }
+                if (Lights.available(context)) step("lights") { Lights.set(context, "all", true, if (Lights.late()) 15 else 80, "warm") }
                 out.add("Earned today ${Earnings.money(Earnings.today(context))}. Ask him how the shift went if nothing's logged.")
                 out.add(Baby.status(context))
             }
@@ -179,7 +192,7 @@ object Protocols {
     fun goodnight(context: Context): String {
         HomeNet.learnIfUnknown(context)
         val out = mutableListOf<String>()
-        if (Prefs(context).goveeKey.isNotBlank()) out.add(Lights.set(context, "all", false, null, null))
+        if (Lights.available(context)) out.add(Lights.set(context, "all", false, null, null))
         val nm = context.getSystemService(NotificationManager::class.java)
         if (nm.isNotificationPolicyAccessGranted) {
             try {

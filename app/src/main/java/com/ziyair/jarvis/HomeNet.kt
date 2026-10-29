@@ -62,7 +62,7 @@ object HomeNet {
         DriveMode.on = false
         val late = Lights.late()
         val parts = mutableListOf("Welcome home, sir.")
-        if (p.goveeKey.isNotBlank()) {
+        if (Lights.available(context)) {
             val r = try { Lights.set(context, "all", true, if (late) 15 else 80, "warm") } catch (_: Exception) { "" }
             if (r.startsWith("Done")) parts.add(if (late) "Lights are on, kept low for the little man." else "Lights are on.")
         }
