@@ -73,7 +73,7 @@ class Actions(private val context: Context) {
             props("mode" to str("announcements, everything or off"), "speaker" to str("Speaker or group name")), listOf()))
         put(tool("quiet_mode", "Quiet mode: on = Jarvis goes completely silent (no voice, no updates) and saves everything; off = end it and get the list of what he missed to recap.",
             props("on" to bool("true to go quiet, false to end it"), "minutes" to num("Optional: end automatically after this many minutes")), listOf("on")))
-        put(tool("set_voice", "Change Jarvis's voice: alan, george or lewis (all British men; George and Lewis are smoother).", props("name" to str("alan, george or lewis")), listOf("name")))
+        put(tool("set_voice", "Change Jarvis's voice: alan, george, lewis, daniel or fable (all British men; George, Lewis, Daniel and Fable are the smoother, full-quality ones).", props("name" to str("alan, george, lewis, daniel or fable")), listOf("name")))
         put(tool("set_home_wifi", "Save the Wi-Fi he's on right now as his home network (for 'welcome home'). Use when he says 'this is home', 'this is my home Wi-Fi'.", props(), listOf()))
         put(tool("list_add", "Add things to one of his lists. Main list (shopping/groceries/baby stuff) is 'list'; others like 'to-do' are fine.", props("items" to str("Comma-separated items, e.g. 'diapers, wipes, milk'"), "list" to str("Which list; leave out for the main list")), listOf("items")))
         put(tool("list_check", "Tick things off a list (he got them / did them). items='everything' ticks all.", props("items" to str("Comma-separated items"), "list" to str("Which list; leave out for the main list")), listOf("items")))
@@ -213,11 +213,11 @@ class Actions(private val context: Context) {
             "quiet_mode" -> if (input.optBoolean("on")) Stealth.start(context, if (input.has("minutes")) input.optInt("minutes") else null) else Stealth.end(context)
             "set_voice" -> {
                 val v = input.getString("name").lowercase().trim()
-                if (v !in Piper.NAMES) "Voices available: Alan, George, Lewis." else {
+                if (v !in Piper.NAMES) "Voices available: Alan, George, Lewis, Daniel, Fable." else {
                     Piper.setPick(context, v)
                     if (Piper.pickReady(context)) "Switched to ${v.replaceFirstChar { it.uppercase() }}." else {
                         Thread { Piper.download(context) }.start()
-                        "Downloading the ${v.replaceFirstChar { it.uppercase() }} voice now (about 100 MB, once); I'll switch over as soon as it's ready."
+                        "Downloading the full-quality voices now (about 350 MB, once, best on Wi-Fi); I'll switch to ${v.replaceFirstChar { it.uppercase() }} as soon as it's ready."
                     }
                 }
             }

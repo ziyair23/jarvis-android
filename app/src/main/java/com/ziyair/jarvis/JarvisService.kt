@@ -80,6 +80,8 @@ class JarvisService : Service() {
         thread {
             val metered = try { getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered } catch (_: Exception) { true }
             if (!Piper.installed(this) && !metered) Piper.download(this)
+            // his chosen voice (e.g. full-quality George) downloads on Wi-Fi; Alan covers until it's ready
+            if (Piper.installed(this) && !Piper.pickReady(this) && !metered) Piper.download(this)
             Piper.warm(this)
         }
         // whenever he unlocks the phone, see if there's a new build to slip in (checks GitHub at most hourly)

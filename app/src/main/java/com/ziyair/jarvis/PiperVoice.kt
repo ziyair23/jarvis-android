@@ -22,10 +22,12 @@ import java.net.URL
 object Piper {
     private class Model(val dir: String, val url: String, val mb: Int, val kokoro: Boolean)
     private val ALAN = Model("vits-piper-en_GB-alan-medium", "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_GB-alan-medium.tar.bz2", 67, false)
-    private val KOKORO = Model("kokoro-int8-en-v0_19", "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-en-v0_19.tar.bz2", 103, true)
+    /** Full-quality Kokoro v1.0 (not the compressed copy, which sounded warbly), with British pronunciation. */
+    private val KOKORO = Model("kokoro-multi-lang-v1_0", "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2", 350, true)
+    private const val OLD_KOKORO = "kokoro-int8-en-v0_19"
 
-    /** Voice name -> (model, speaker id). Kokoro v0.19 speakers: 9 = bm_george, 10 = bm_lewis. */
-    private val VOICES = linkedMapOf("alan" to (ALAN to 0), "george" to (KOKORO to 9), "lewis" to (KOKORO to 10))
+    /** Voice name -> (model, speaker id). Kokoro v1.0 British men: 24 daniel, 25 fable, 26 george, 27 lewis. */
+    private val VOICES = linkedMapOf("alan" to (ALAN to 0), "george" to (KOKORO to 26), "lewis" to (KOKORO to 27), "daniel" to (KOKORO to 24), "fable" to (KOKORO to 25))
     val NAMES = VOICES.keys.toList()
 
     @Volatile var state = ""
@@ -94,6 +96,7 @@ object Piper {
             dir(c, m).deleteRecursively()
             if (!got.renameTo(dir(c, m))) throw Exception("couldn't save voice")
             File(dir(c, m), ".ok").writeText("ok")
+            if (m.kokoro) File(root(c), OLD_KOKORO).deleteRecursively()   // the old compressed voices aren't needed any more
             state = "done"
             return true
         } catch (e: Exception) {
@@ -112,8 +115,9 @@ object Piper {
         return try {
             val d = dir(c, m)
             val cfg = if (m.kokoro) OfflineTtsConfig(model = OfflineTtsModelConfig(
-                kokoro = OfflineTtsKokoroModelConfig(model = File(d, "model.int8.onnx").path, voices = File(d, "voices.bin").path,
-                    tokens = File(d, "tokens.txt").path, dataDir = File(d, "espeak-ng-data").path),
+                kokoro = OfflineTtsKokoroModelConfig(model = File(d, "model.onnx").path, voices = File(d, "voices.bin").path,
+                    tokens = File(d, "tokens.txt").path, dataDir = File(d, "espeak-ng-data").path,
+                    lexicon = File(d, "lexicon-gb-en.txt").path),
                 numThreads = 4))
             else OfflineTtsConfig(model = OfflineTtsModelConfig(
                 vits = OfflineTtsVitsModelConfig(model = File(d, "en_GB-alan-medium.onnx").path, tokens = File(d, "tokens.txt").path, dataDir = File(d, "espeak-ng-data").path),
