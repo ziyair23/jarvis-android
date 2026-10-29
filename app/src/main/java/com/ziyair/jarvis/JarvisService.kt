@@ -195,13 +195,13 @@ class JarvisService : Service() {
         else startForeground(NOTIF_ID, n)
     }
 
-    private fun startWakeWord() {
+    private fun startWakeWord(whileSpeaking: Boolean = false) {
         main.post {
-            if (busy) return@post
+            if (busy && !whileSpeaking) return@post
             try {
                 if (wakeWord == null) {
                     val th = brain.config().optDouble("wake_threshold", 0.5).toFloat()
-                    wakeWord = WakeWord(applicationContext, th) { main.post { onWake() } }
+                    wakeWord = WakeWord(applicationContext, th) { main.post { if (speaking) interrupt() else onWake() } }
                 }
                 wakeWord?.start()
             } catch (e: Exception) {
@@ -364,6 +364,7 @@ class JarvisService : Service() {
                 val p = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                 if (p.isBlank() || p == lastPartial) return
                 lastPartial = p
+                if (isStop(p) && live()) { done = true; stopListening(p); return }
                 val mine = recognizer
                 val wait = brain.config().optLong("done_talking_ms", 1300L)
                 main.postDelayed({
@@ -375,6 +376,39 @@ class JarvisService : Service() {
         })
         try { recognizer?.startListening(intent) } catch (e: Exception) { noSpeech(firstTurn) }
     }
+
+    /**
+     * The stop word. A short phrase with "stop" (or "that's all", "I'm done", "go to sleep", "stop listening",
+     * "bye", "later") ends the conversation on the spot: Jarvis goes quiet and back to waiting for "Hey Jarvis".
+     */
+    private fun isStop(t: String): Boolean {
+        val s = t.lowercase(Locale.US).replace(Regex("[^a-z' ]"), " ").replace(Regex("\\b(hey|ok|okay|alright|jarvis|please|sir|yo)\\b"), " ").replace(Regex("\\s+"), " ").trim()
+        if (s.isEmpty() || s.split(" ").size > 4) return false
+        return Regex("^(stop( it| listening| talking| now)?|that'?s (all|it|enough)|i'?m done|we'?re done|done|go to sleep|sleep|bye|later|shut up|be quiet|quiet|enough|cancel)$").matches(s)
+    }
+
+    private fun stopListening(text: String) {
+        inConvo = false
+        try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
+        recognizer = null
+        hush()
+        try { tone?.startTone(ToneGenerator.TONE_PROP_NACK, 120) } catch (_: Exception) {}   // a short "off" blip, no talking
+        finishTurn()
+    }
+
+    /** He said "Jarvis" while Jarvis was talking: stop talking and listen to him. */
+    private fun interrupt() {
+        if (!speaking) return
+        speaking = false
+        stopWakeWord()
+        hush()
+        thinking = false
+        inConvo = true
+        try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 100) } catch (_: Exception) {}
+        openWindow(convoSeconds())
+        main.postDelayed({ listen(firstTurn = false) }, 250)
+    }
+    @Volatile private var speaking = false
 
     /** Heard nothing this round. Keep the conversation open until the window runs out. */
     private fun noSpeech(firstTurn: Boolean) {
@@ -389,8 +423,9 @@ class JarvisService : Service() {
     private fun afterSpeaking(fn: () -> Unit) { main.postDelayed(fn, 350) }
 
     private fun handle(text: String, followUp: Boolean = false) {
+        if (isStop(text)) { stopListening(text); return }
         val lower = text.lowercase(Locale.US)
-        if (Regex("^(stop|never ?mind|that'?s (all|it)|thanks?( you)?,? (jarvis|that'?s (it|all))|thank you,? jarvis|go to sleep|nothing|no thanks?|i'?m good|i'?m done|we'?re done|that'?ll be all|bye|goodbye|later|see you)\\b").containsMatchIn(lower)
+        if (Regex("^(never ?mind|thanks?( you)?,? (jarvis|that'?s (it|all))|thank you,? jarvis|nothing|no thanks?|i'?m good|that'?ll be all|goodbye|see you)\\b").containsMatchIn(lower)
             || Regex("^(thanks|thank you|cheers)[.!]?$").matches(lower)) {
             inConvo = false
             if (Stealth.on(prefs)) finishTurn() else speak(pick("goodbyes", "Very good, sir.")) { finishTurn() }
@@ -421,8 +456,9 @@ class JarvisService : Service() {
                 // keep the conversation going (he can talk over Jarvis to cut in); a question from Jarvis always waits for an answer
                 val keep = inConvo || reply.trimEnd().endsWith("?")
                 val tok = ++speechTok
-                val next = { if (tok == speechTok) nextTurn(keep) }
-                listenForInterruptions()
+                val next = { if (tok == speechTok) { speaking = false; stopWakeWord(); nextTurn(keep) } }
+                speaking = true
+                startWakeWord(whileSpeaking = true)
                 if (live != null && live.started) { LockView.showIfLocked(this, reply); live.finish { stream = null; next() } }
                 else { live?.cancel(); speak(reply) { next() } }
             }
@@ -499,6 +535,7 @@ class JarvisService : Service() {
     private val pending = ArrayList<Pair<String, Boolean>>()
 
     private fun finishTurn() {
+        speaking = false
         thinking = false
         inConvo = false
         barge?.stop(); barge = null
