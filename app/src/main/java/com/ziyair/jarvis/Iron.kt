@@ -17,6 +17,8 @@ import java.util.UUID
 
 /** Govee lights through Govee's free developer key (Govee Home app > Profile > Settings > Apply for API Key). */
 object Lights {
+    /** Google Home control is parked until Marcus is ready to finish setting it up. */
+    private const val HOME_ENABLED = false
     private const val BASE = "https://openapi.api.govee.com/router/api/v1"
 
     private fun call(key: String, method: String, path: String, body: JSONObject? = null): JSONObject? = try {
@@ -49,17 +51,17 @@ object Lights {
 
     /** which: a light's name or "all". on: true/false/null. brightness 1-100 or null. color name or null. */
     /** Any lights connected at all (Google Home or Govee). */
-    fun available(context: Context) = Prefs(context).goveeKey.isNotBlank() || GoogleHome.connectedCached() || (GoogleHome.AVAILABLE && GoogleHome.connected(context))
+    fun available(context: Context) = Prefs(context).goveeKey.isNotBlank()
 
     fun set(context: Context, which: String?, on: Boolean?, brightness: Int?, color: String?): String {
         val key = Prefs(context).goveeKey
-        if (GoogleHome.AVAILABLE && GoogleHome.connected(context)) {
+        if (HOME_ENABLED && GoogleHome.AVAILABLE && GoogleHome.connected(context)) {
             val r = GoogleHome.control(context, which, on, brightness)
             // colors only exist on the Govee side
             if (color != null && on != false && key.isNotBlank()) try { setGovee(context, key, which, null, null, color) } catch (_: Exception) {}
             return r
         }
-        if (key.isBlank()) return "No lights connected yet: he needs to connect Google Home or add his Govee key in Jarvis setup."
+        if (key.isBlank()) return "No lights connected yet: he needs to add his Govee API key in Jarvis setup."
         return setGovee(context, key, which, on, brightness, color)
     }
 

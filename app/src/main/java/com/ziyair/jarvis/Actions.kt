@@ -86,8 +86,7 @@ class Actions(private val context: Context) {
         put(tool("status_report", "Status report: battery, weather and roads, earnings today, the baby, next shift, next reminder. Use for 'status report', 'how are we looking', 'catch me up'.", props(), listOf()))
         put(tool("run_protocol", "Run one of his named protocols: 'dash' (heading out to DoorDash: driving mode, opens Dasher, starts music, weather), 'baby' (night feed: quiet phone, dim warm lights, low volume, baby status), 'home' (done for the night: driving off, lights on, earnings and baby recap), 'goodnight' (lights off, phone quiet until before his next shift with starred contacts still ringing, next shift time).",
             props("name" to str("dash, baby, home or goodnight")), listOf("name")))
-        put(tool("home_devices", "List the lights and plugs in his Google Home (names and rooms).", props(), listOf()))
-        put(tool("lights", "Control his lights and smart plugs (Google Home, any brand; Govee too): on/off, brightness 1-100, color (Govee lights only: red, orange, yellow, green, blue, purple, pink, white, warm, cool). which = a light or plug name, a room name, or 'all'.",
+        put(tool("lights", "Control his Govee lights: on/off, brightness 1-100, color (red, orange, yellow, green, blue, purple, pink, white, warm, cool). which = a light's name or 'all'.",
             props("which" to str("Light name or 'all'"), "on" to bool("true on, false off"), "brightness" to num("1-100"), "color" to str("Color name")), listOf()))
         put(tool("find_phone", "He can't find his phone and asked where you are: ring loudly (even on silent) and flash the light.", props(), listOf()))
         put(tool("look", "Take a photo with the back camera and look at it (he points the phone at something). Use for 'what's this', 'read this', 'what does this say', 'what's wrong with this'.", props(), listOf()))
@@ -236,7 +235,6 @@ class Actions(private val context: Context) {
             "lights" -> Lights.set(context, input.optString("which", "all"), if (input.has("on")) input.optBoolean("on") else null,
                 if (input.has("brightness")) input.optInt("brightness") else null, input.optString("color").ifBlank { null })
             "find_phone" -> FindPhone.ring(context)
-            "home_devices" -> GoogleHome.list(context)
             "driving_mode" -> { DriveMode.on = input.optBoolean("on"); if (DriveMode.on) "Driving mode on." else "Driving mode off." }
             else -> "Unknown action."
         }

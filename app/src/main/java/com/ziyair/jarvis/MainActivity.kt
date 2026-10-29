@@ -230,9 +230,8 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.voiceDl).text = Piper.label(this)
         findViewById<Button>(R.id.allowScreen).text = if (JarvisAccess.on(this)) "Screen control: on" else "Allow screen control"
         findViewById<Button>(R.id.homeWifi).text = if (HomeNet.saved(prefs).isBlank()) "This is my home Wi-Fi (tap while at home)" else "Home Wi-Fi saved" + HomeNet.name(prefs).takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty() + " · tap to reset"
-        val gh = findViewById<Button>(R.id.googleHome)
-        if (GoogleHome.AVAILABLE) thread { val ok = GoogleHome.connected(this); runOnUiThread { gh.text = if (ok) "Google Home: connected (tap to redo)" else "Connect Google Home" } }
-        else gh.text = "Connect Google Home (coming in the next update)"
+        // Google Home is parked until it's finished
+        findViewById<Button>(R.id.googleHome).visibility = View.GONE
         findViewById<Button>(R.id.allowQuiet).text = if (PhoneControl.quietAllowed(this)) "Quiet mode: allowed" else "Allow quiet mode"
         findViewById<Button>(R.id.allowApps).text = if (Settings.canDrawOverlays(this)) "Opening apps: allowed" else "Allow opening apps"
         toggle.text = if (prefs.running) "Stop listening" else "Start Jarvis"
