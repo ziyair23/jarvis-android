@@ -57,6 +57,7 @@ class DashActivity : Activity() {
                 .put("memory", JSONArray(Memory.all(ctx)))
                 .put("journal", Journal.all(p))
                 .put("stealth", Stealth.on(p))
+                .put("lists", Lists.all(p)).put("expenses", Expenses.all(p))
                 .put("problems", Problems.all(p))
                 .put("spend", Spend.thisMonth(p)).put("budget", Spend.budget(p))
                 .put("reminders", p.reminders())
@@ -86,6 +87,11 @@ class DashActivity : Activity() {
         }
         @JavascriptInterface fun quietEnd() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_QUIET_END)) }
         @JavascriptInterface fun quietStart() { Stealth.start(ctx, null); LogBus.changed() }
+        @JavascriptInterface fun listAdd(items: String) { if (items.isNotBlank()) Lists.add(ctx, items, "list"); LogBus.changed() }
+        @JavascriptInterface fun listToggle(list: String, at: String) { Lists.toggle(ctx, list, at.toLong()); LogBus.changed() }
+        @JavascriptInterface fun listClearDone() { Lists.clear(ctx, "list", false); LogBus.changed() }
+        @JavascriptInterface fun expenseAdd(amount: String, what: String) { amount.toDoubleOrNull()?.let { Expenses.log(ctx, it, what, "today") }; LogBus.changed() }
+        @JavascriptInterface fun expenseDelete(at: String) { Expenses.delete(ctx, at.toLong()); LogBus.changed() }
         @JavascriptInterface fun clearProblems() { Problems.clear(ctx); LogBus.changed() }
         @JavascriptInterface fun openSetup() = runOnUiThread { startActivity(Intent(ctx, MainActivity::class.java)) }
     }

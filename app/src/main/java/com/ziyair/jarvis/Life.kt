@@ -80,10 +80,13 @@ object Earnings {
         }
         val sb = StringBuilder("Today ${money(t)}, this week ${money(w)}, this month ${money(m)}.")
         if (last7Days > 0) sb.append(" Averaging ${money(last7 / last7Days)} a working day lately.")
+        val spentAll = Expenses.total(p)
+        if (spentAll > 0) sb.append(" " + Expenses.week(context))
+        val kept = all - spentAll
         val g = goal(p)
         if (g > 0) {
-            val left = (g - all).coerceAtLeast(0.0)
-            sb.append(" Saved toward ${goalName(p)}: ${money(all)} of ${money(g)}, ${money(left)} to go")
+            val left = (g - kept).coerceAtLeast(0.0)
+            sb.append(" Saved toward ${goalName(p)} (after expenses): ${money(kept)} of ${money(g)}, ${money(left)} to go")
             if (left > 0 && last7Days > 0 && last7 > 0) sb.append(", about ${Math.ceil(left / (last7 / last7Days)).toInt()} working days at this pace")
             sb.append(".")
         } else sb.append(" No savings goal set yet; he can say how much the Macan costs.")

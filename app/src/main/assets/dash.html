@@ -94,6 +94,11 @@ section.on{display:block}
     <div id="t-goal"></div>
   </div>
   <div class="card">
+    <div class="label">List</div>
+    <div class="grid2"><input id="l-in" placeholder="Diapers, wipes…"><button class="primary" onclick="addL()">Add</button></div>
+    <ul class="list" id="l-list" style="margin-top:8px"></ul>
+  </div>
+  <div class="card">
     <div class="label">Coming up</div>
     <div class="faint" id="t-spend" style="margin:-4px 0 6px"></div>
     <ul class="list" id="t-rem"></ul>
@@ -140,6 +145,13 @@ section.on{display:block}
     </div>
     <div class="row" style="margin-top:8px"><button style="flex:1" onclick="earn('yesterday')">Add to yesterday</button><button style="flex:1" onclick="setGoal()">Set as goal</button></div>
   </div>
+  <div class="card">
+    <div class="label">Expenses</div>
+    <div class="faint" id="x-week" style="margin-bottom:10px"></div>
+    <div class="grid2"><input id="x-amt" type="number" inputmode="decimal" placeholder="Amount $"><input id="x-what" placeholder="Gas, food…"></div>
+    <button style="width:100%;margin-top:8px" onclick="addX()">Log expense</button>
+    <ul class="list" id="x-list" style="margin-top:8px"></ul>
+  </div>
   <div class="card"><div class="label">Days</div><ul class="list" id="m-days"></ul></div>
 </section>
 
@@ -178,6 +190,8 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 });
 
 function baby(k) { J.logBaby(k, ''); }
+function addL() { const v = $('l-in').value.trim(); if (!v) return; J.listAdd(v); $('l-in').value = ''; }
+function addX() { const a = $('x-amt').value, w = $('x-what').value.trim(); if (!a) return; J.expenseAdd(a, w || 'other'); $('x-amt').value = ''; $('x-what').value = ''; }
 function addJ() { const v = $('j-in').value.trim(); if (!v) return; J.addJournal(v); $('j-in').value = ''; }
 function earn(day) { const v = $('m-amt').value; if (!v) return; J.logEarn(v, day, false); $('m-amt').value = ''; }
 function setGoal() { const v = $('m-amt').value; if (!v) return; J.setGoal(v, D.goalName || 'the Macan'); $('m-amt').value = ''; }
@@ -220,9 +234,19 @@ function load() {
   jr.sort((a, b) => b.at - a.at);
   $('j-list').innerHTML = jr.length ? jr.slice(0, 60).map(e => `<li><span class="t">${new Date(e.at).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span><span>${esc(e.t)}</span><button class="x" aria-label="Delete" onclick="if(confirm('Delete this moment?'))J.deleteJournal('${e.at}')">×</button></li>`).join('') : '<li class="empty">Little moments go here. Say "Hey Jarvis, Ziyair smiled today."</li>';
 
-  // money
+  // list
+  const L = (D.lists && D.lists.list) ? Array.from({length: D.lists.list.length}, (_, i) => D.lists.list[i]) : [];
+  const open = L.filter(x => !x.done), got = L.filter(x => x.done);
+  $('l-list').innerHTML = (open.concat(got)).map(x => `<li onclick="J.listToggle('list','${x.at}')" style="cursor:pointer"><span class="chip" style="${x.done ? 'opacity:.5' : 'color:var(--accent);border-color:#5c513c'}">${x.done ? '✓' : '○'}</span><span style="${x.done ? 'text-decoration:line-through;color:var(--ink-faint)' : ''}">${esc(x.t)}</span></li>`).join('')
+    + (got.length ? `<li><button class="x" style="margin:0" onclick="J.listClearDone()">Clear ticked items</button></li>` : '')
+    || '<li class="empty">Empty. Say "Hey Jarvis, add wipes to the list."</li>';
+
+  // money (the goal counts what he kept: earnings minus expenses)
   const byDay = {}; let total = 0;
   for (let i = 0; i < D.earnings.length; i++) { const e = D.earnings[i]; byDay[e.d] = (byDay[e.d] || 0) + e.a; total += e.a; }
+  const X = Array.from({length: (D.expenses || []).length}, (_, i) => D.expenses[i]);
+  const spentAll = X.reduce((s, x) => s + x.a, 0);
+  total = total - spentAll;
   const now = new Date(), todayK = ymd(now);
   const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
   let week = 0; Object.keys(byDay).forEach(k => { if (k >= ymd(mon)) week += byDay[k]; });
@@ -239,6 +263,11 @@ function load() {
   days.forEach(d => { const v = byDay[ymd(d)] || 0; bars += `<div class="${ymd(d) === todayK ? 'today' : ''}" style="height:${Math.max(3, v / max * 100)}%" title="${money(v)}"></div>`; labels += `<span>${'SMTWTFS'[d.getDay()]}</span>`; });
   $('m-bars').innerHTML = bars; $('m-barsl').innerHTML = labels;
   const keys = Object.keys(byDay).sort().reverse().slice(0, 30);
+  const wk = (() => { const n = new Date(); const m = new Date(n); m.setDate(n.getDate() - ((n.getDay() + 6) % 7)); return ymd(m); })();
+  const madeWk = Object.keys(byDay).filter(k => k >= wk).reduce((s, k) => s + byDay[k], 0);
+  const spentWk = X.filter(x => x.d >= wk).reduce((s, x) => s + x.a, 0);
+  $('x-week').textContent = `This week: made ${money(madeWk)}, spent ${money(spentWk)}, kept ${money(madeWk - spentWk)}`;
+  $('x-list').innerHTML = X.slice().reverse().slice(0, 20).map(x => `<li><span class="t">${new Date(x.d + 'T12:00').toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span><span>${esc(x.w)}</span><span class="mid" style="margin-left:auto">${money(x.a)}</span><button class="x" style="margin-left:4px" aria-label="Delete" onclick="if(confirm('Delete this expense?'))J.expenseDelete('${x.at}')">×</button></li>`).join('') || '<li class="empty">Say "Hey Jarvis, spent 40 on gas."</li>';
   $('m-days').innerHTML = keys.length ? keys.map(k => `<li><span class="t">${new Date(k + 'T12:00').toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}</span><span class="mid">${money(byDay[k])}</span><button class="x" aria-label="Delete" onclick="if(confirm('Delete ${k}?'))J.deleteEarn('${k}')">×</button></li>`).join('') : '<li class="empty">Nothing logged yet. Say "Hey Jarvis, made 60 this morning."</li>';
 
   $('t-spend').textContent = D.budget ? 'Jarvis this month: ' + money(D.spend || 0) + ' of ' + money(D.budget) + ' Claude budget' : '';
