@@ -42,6 +42,6 @@
       25
     ]
   },
-  "done_talking_ms": 900,
+  "done_talking_ms": 1300,
   "barge_in": false
 }

@@ -363,7 +363,7 @@ class JarvisService : Service() {
                 if (p.isBlank() || p == lastPartial) return
                 lastPartial = p
                 val mine = recognizer
-                val wait = brain.config().optLong("done_talking_ms", 900L)
+                val wait = brain.config().optLong("done_talking_ms", 1300L)
                 main.postDelayed({
                     // same words as a moment ago and he's said something real: he's finished, answer now
                     if (live() && recognizer === mine && lastPartial == p && p.split(" ").size >= 2) try { mine?.stopListening() } catch (_: Exception) {}
@@ -616,7 +616,7 @@ class JarvisService : Service() {
             override fun onDone(utteranceId: String?) { if (utteranceId == id) main.post(then) }
             @Deprecated("old api") override fun onError(utteranceId: String?) { if (utteranceId == id) main.post(then) }
         })
-        t.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
+        t.speak(Piper.speakable(text), TextToSpeech.QUEUE_FLUSH, null, id)
     }
 
     /** A British male voice when the phone has one; otherwise the phone's UK English voice. */

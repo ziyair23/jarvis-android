@@ -127,8 +127,22 @@ object Piper {
     }
 
     /** Float samples and sample rate, or null (then Jarvis uses the phone's voice). Blocking. */
-    @Synchronized fun synth(c: Context, text: String, speed: Float): Pair<FloatArray, Int>? {
+    /** Clean text up so it's read naturally: no symbols, markdown, links or run-together sentences. */
+    fun speakable(t0: String): String {
+        var t = t0
+        t = t.replace(Regex("https?://\\S+"), "")
+        t = t.replace(Regex("[*_#`>~|]+"), " ")
+        t = t.replace(Regex("(?m)^\\s*[-\u2022]\\s+"), "")
+        t = t.replace(Regex("\u00b0\\s?F\\b"), " degrees").replace("\u00b0", " degrees")
+        t = t.replace("%", " percent").replace("&", " and ").replace(Regex("\\bvs\\.?\\b"), "versus")
+        t = t.replace(Regex("([.!?])([A-Z])"), "$1 $2")
+        t = t.replace(Regex("[\\p{So}\\p{Cn}\\x{1F000}-\\x{1FAFF}]"), "")
+        return t.replace(Regex("\\s+"), " ").trim()
+    }
+
+    @Synchronized fun synth(c: Context, text0: String, speed: Float): Pair<FloatArray, Int>? {
         val (m, sid) = current(c) ?: return null
+        val text = speakable(text0).ifBlank { return null }
         return try {
             engine(c, m)?.generate(text, sid, speed)?.let { it.samples to it.sampleRate }?.takeIf { it.first.isNotEmpty() }
         } catch (e: Throwable) { Problems.log(c, "voice: ${e.message}"); null }

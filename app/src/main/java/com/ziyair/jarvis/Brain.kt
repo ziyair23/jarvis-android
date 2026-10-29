@@ -116,7 +116,7 @@ class Brain(private val context: Context) {
             val body = JSONObject()
                 .put("model", model)
                 .put("max_tokens", maxTokens)
-                .put("system", systemPrompt(cfg) + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can misfire on TV or nearby conversation. If what you heard is clearly not a request or question for you (background talk, half a sentence, TV), reply with exactly [ignore]." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. But if it clearly isn't meant for you (he's talking to someone else, background chatter, TV, a phone call, song lyrics), reply with exactly [ignore] and nothing else." else "")
+                .put("system", systemPrompt(cfg) + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can misfire on TV or nearby conversation. If what you heard is clearly not a request or question for you (background talk, half a sentence, TV), reply with exactly [ignore]." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. Only if it is obviously not meant for you (clearly him talking to someone else, the TV, song lyrics), reply with exactly [ignore]. When in doubt, it's for you: answer it." else "")
                 .put("tools", tools)
                 .put("messages", clean)
             val (code, resp) = try {
@@ -206,12 +206,20 @@ class Brain(private val context: Context) {
             if (buf.contains("[ignore]", true)) { ignored = true; buf.setLength(0); return }
             if (buf.startsWith("[") && buf.length < 10) return
             while (true) {
-                val m = Regex("[.!?](\\s|$)").find(buf) ?: break
+                // the first sentence goes out straight away; after that, speak in fuller chunks so it flows
+                val min = if (spoke) 90 else 2
+                val m = Regex("[.!?](\\s)").findAll(buf).firstOrNull { it.range.first + 1 >= min && !abbrev(buf, it.range.first) } ?: break
                 val end = m.range.first + 1
-                if (end < 2 || m.range.last + 1 > buf.length || (m.groupValues[1].isEmpty())) break
                 emit(buf.substring(0, end)); buf.delete(0, end)
             }
         }
+        /** "Mr." "St." "vs." "e.g." aren't the end of a sentence. */
+        private fun abbrev(b: StringBuilder, dot: Int): Boolean {
+            val start = maxOf(0, dot - 4)
+            val w = b.substring(start, dot + 1).lowercase()
+            return Regex("(mr|mrs|ms|dr|st|vs|jr|sr|no|e\\.g|i\\.e)\\.$").containsMatchIn(w)
+        }
+
         fun flush() { if (out != null && !ignored && buf.isNotBlank()) emit(buf.toString()); buf.setLength(0) }
         fun drop() { buf.setLength(0) }
         fun all() = said.toString().trim()
