@@ -64,6 +64,8 @@ class JarvisService : Service() {
         }
         thread { brain.refreshConfig(); Updater.check(this, busy = busy) }
         Cast.discover(this)
+        // undo any call mode left over from older builds
+        try { val am = getSystemService(AudioManager::class.java); if (am.mode == AudioManager.MODE_IN_COMMUNICATION) am.mode = AudioManager.MODE_NORMAL } catch (_: Exception) {}
         // watchdog: if his ears ever stop (mic grabbed by another app, an error), quietly start them again
         main.postDelayed(object : Runnable {
             override fun run() {
@@ -214,7 +216,8 @@ class JarvisService : Service() {
     /** Heard "Jarvis" (or the Talk button): chime, then listen for the request. */
     private fun inCall(): Boolean {
         val mode = getSystemService(AudioManager::class.java).mode
-        return mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_RINGTONE
+        // a real phone call or ringing only; "communication" mode can be left behind by other apps and made him deaf
+        return mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_RINGTONE
     }
 
     private fun onWake(manual: Boolean = false) {
@@ -258,7 +261,7 @@ class JarvisService : Service() {
     private fun listenForInterruptions() {
         if (!inConvo || !brain.config().optBoolean("barge_in", true) || Stealth.on(prefs)) return
         barge?.stop()
-        barge = BargeIn(main) {
+        barge = BargeIn(this, main) {
             if (!busy) return@BargeIn
             hush()
             thinking = false

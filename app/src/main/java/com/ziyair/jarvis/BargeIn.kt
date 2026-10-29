@@ -15,7 +15,7 @@ import kotlin.math.sqrt
  * phone's call-style mic (which cancels out Jarvis's own voice), learns how loud the leftover echo is, and if it
  * hears someone clearly louder than that for about a quarter of a second, it stops Jarvis so he can listen.
  */
-class BargeIn(private val main: Handler, private val onBarge: () -> Unit) {
+class BargeIn(private val context: android.content.Context, private val main: Handler, private val onBarge: () -> Unit) {
     @Volatile private var running = false
 
     @SuppressLint("MissingPermission")
@@ -26,7 +26,7 @@ class BargeIn(private val main: Handler, private val onBarge: () -> Unit) {
             val rate = 16000
             val frame = 320 // 20 ms
             val rec = try {
-                AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
                     maxOf(AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), frame * 8))
             } catch (_: Exception) { running = false; return@thread }
             val fx = ArrayList<android.media.audiofx.AudioEffect>()
@@ -56,6 +56,11 @@ class BargeIn(private val main: Handler, private val onBarge: () -> Unit) {
                 try { rec.stop() } catch (_: Exception) {}
                 fx.forEach { try { it.release() } catch (_: Exception) {} }
                 rec.release()
+                // never leave the phone stuck in call mode
+                try {
+                    val am = context.getSystemService(android.media.AudioManager::class.java)
+                    if (am.mode == android.media.AudioManager.MODE_IN_COMMUNICATION) am.mode = android.media.AudioManager.MODE_NORMAL
+                } catch (_: Exception) {}
             }
         }
     }
