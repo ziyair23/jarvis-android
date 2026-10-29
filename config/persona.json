@@ -43,5 +43,5 @@
     ]
   },
   "done_talking_ms": 900,
-  "barge_in": true
+  "barge_in": false
 }
