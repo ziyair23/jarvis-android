@@ -28,12 +28,18 @@ object Music {
     private fun playing(c: MediaController?) = c?.playbackState?.state == PlaybackState.STATE_PLAYING
     private fun title(c: MediaController?) = c?.metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE).orEmpty()
 
-    /** Waits up to ms for the app to be playing something new. */
-    private fun started(context: Context, pkg: String, before: String, ms: Long): Boolean {
+    @Volatile private var wasPlaying = false
+    @Volatile private var seen = false
+
+    /** Waits up to ms for the app to be playing what he asked for. */
+    private fun started(context: Context, pkg: String, before: String, ms: Long, query: String = ""): Boolean {
         val until = System.currentTimeMillis() + ms
+        val words = query.lowercase().split(Regex("\\W+")).filter { it.length > 2 }
         while (System.currentTimeMillis() < until) {
             val c = Apps.player(context, pkg)
-            if (playing(c) && (before.isBlank() || title(c) != before)) return true
+            if (c != null) seen = true
+            val t = title(c).lowercase()
+            if (playing(c) && (!wasPlaying || title(c) != before || words.any { t.contains(it) })) return true
             Thread.sleep(300)
         }
         return false
@@ -41,13 +47,17 @@ object Music {
 
     fun play(context: Context, pkg: String, name: String, query: String, song: String?): String {
         val before = title(Apps.player(context, pkg))
+        wasPlaying = playing(Apps.player(context, pkg)); seen = Apps.player(context, pkg) != null
         // 1a. the app is already open in the background: ask its player directly
         Apps.player(context, pkg)?.let { c ->
             try { c.transportControls.playFromSearch(query, Bundle()) } catch (_: Exception) {}
-            if (started(context, pkg, before, 4000)) return "Playing ${titleNow(context, pkg, query)} on $name."
+            if (started(context, pkg, before, 4000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
         }
         // 1b. connect to the app's player service (what Android Auto uses) and ask it
-        if (viaBrowser(context, pkg, query) && started(context, pkg, before, 5000)) return "Playing ${titleNow(context, pkg, query)} on $name."
+        val asked = viaBrowser(context, pkg, query)
+        if (asked && started(context, pkg, before, 5000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+        // the app took the request but Android won't show us its player: trust it
+        if (asked && !seen) return "Playing $query on $name."
 
         // 2. open the song itself; needs the phone unlocked
         if (context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) return "$name wouldn't start it from the lock screen. Ask him to unlock the phone and say it again."
@@ -61,15 +71,16 @@ object Music {
         try { context.startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {
             return "Couldn't open $name."
         }
-        if (started(context, pkg, before, 4000)) return "Playing ${titleNow(context, pkg, query)} on $name."
+        if (started(context, pkg, before, 4000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
         Apps.player(context, pkg)?.transportControls?.play()
-        if (started(context, pkg, before, 1500)) return "Playing ${titleNow(context, pkg, query)} on $name."
+        if (started(context, pkg, before, 1500, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
         // still sitting there: tap it on screen (the song in the results, or the play button)
         if (JarvisAccess.on(context)) {
             if (id == null) JarvisAccess.tap((song ?: query).trim())
             JarvisAccess.tap("play")
-            if (started(context, pkg, before, 3000)) return "Playing ${titleNow(context, pkg, query)} on $name."
+            if (started(context, pkg, before, 3000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
         }
+        if (!seen) return "Opened $query in $name."
         return "Opened it in $name but it didn't start playing on its own; he may need to tap play."
     }
 

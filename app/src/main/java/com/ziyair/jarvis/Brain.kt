@@ -110,6 +110,7 @@ class Brain(private val context: Context) {
                 .put("region", "Washington").put("country", "US").put("timezone", java.util.TimeZone.getDefault().id)))
         var rounds = 0
         var retried = 0
+        var didSomething = false
         var earlierText = ""
         while (true) {
             val body = JSONObject()
@@ -123,6 +124,7 @@ class Brain(private val context: Context) {
             } catch (e: Exception) {
                 if (voice.spoke) return voice.all()
                 Problems.log(context, "network: ${e.message}")
+                if (didSomething && retried >= 1) return "Done, sir."
                 if (retried < 1) { retried++; Thread.sleep(800); continue }
                 return "I can't reach the network right now, sir."
             }
@@ -131,6 +133,7 @@ class Brain(private val context: Context) {
                 tools.getJSONObject(tools.length() - 1).optString("name") == "web_search") { tools.remove(tools.length() - 1); continue }
             if (code !in 200..299) Problems.log(context, "Claude $code: ${resp.take(160)}")
             if ((code == 429 || code == 529 || code >= 500) && retried < 1) { retried++; Thread.sleep(1200); continue }
+            if (code !in 200..299 && didSomething) return "Done, sir."
             when {
                 code == 401 || code == 403 -> return "My Claude key isn't working, sir. Check it in the Jarvis app."
                 code == 402 || resp.contains("credit balance", true) -> return "I'm out of API credit, sir. Top it up in the Claude Console."
@@ -154,6 +157,7 @@ class Brain(private val context: Context) {
                     "text" -> sb.append(part.getString("text"))
                     "tool_use" -> {
                         lastTools.add(part.getString("name"))
+                        didSomething = true
                         val out: Any = if (part.getString("name") == "look") look() else actions.run(part.getString("name"), part.optJSONObject("input") ?: JSONObject())
                         results.put(JSONObject().put("type", "tool_result").put("tool_use_id", part.getString("id")).put("content", out))
                     }

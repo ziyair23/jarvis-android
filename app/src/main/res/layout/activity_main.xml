@@ -150,6 +150,7 @@
             <Button android:id="@+id/allowComms" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:text="Allow calls &amp; texts" />
             <Button android:id="@+id/allowApps" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Allow opening apps" />
             <Button android:id="@+id/allowQuiet" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:layout_marginBottom="8dp" android:text="Allow quiet mode" />
+            <Button android:id="@+id/homeWifi" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="This is my home Wi-Fi" />
             <Button android:id="@+id/allowScreen" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Allow screen control" />
             <Button android:id="@+id/memoryBtn" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="What Jarvis remembers" />
             <Button android:id="@+id/testVoice" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginBottom="8dp" android:text="Test voice" />

@@ -79,6 +79,7 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.allowApps).setOnClickListener {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         }
+        findViewById<Button>(R.id.homeWifi).setOnClickListener { status.text = HomeNet.setHere(this).replace("He's", "You're").replace("him home", "you home"); render() }
         findViewById<Button>(R.id.allowQuiet).setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
         }
@@ -224,6 +225,7 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.allowComms).text = if (comms && Cal.allowed(this) && cam) "Calls, texts, calendar & camera: allowed" else "Allow calls, texts, calendar & camera"
         findViewById<Button>(R.id.voiceDl).text = Piper.label(this)
         findViewById<Button>(R.id.allowScreen).text = if (JarvisAccess.on(this)) "Screen control: on" else "Allow screen control"
+        findViewById<Button>(R.id.homeWifi).text = if (HomeNet.saved(prefs).isBlank()) "This is my home Wi-Fi (tap while at home)" else "Home Wi-Fi saved" + HomeNet.name(prefs).takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty() + " · tap to reset"
         findViewById<Button>(R.id.allowQuiet).text = if (PhoneControl.quietAllowed(this)) "Quiet mode: allowed" else "Allow quiet mode"
         findViewById<Button>(R.id.allowApps).text = if (Settings.canDrawOverlays(this)) "Opening apps: allowed" else "Allow opening apps"
         toggle.text = if (prefs.running) "Stop listening" else "Start Jarvis"

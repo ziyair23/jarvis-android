@@ -58,11 +58,10 @@ object Lights {
             else all.filter { it.first.lowercase().contains(w) || w.contains(it.first.lowercase()) }.ifEmpty { return "No light called $which. He has: ${all.joinToString { it.first }}." }
         var done = 0
         for ((_, sku, dev) in targets) {
-            var ok = true
-            if (on != null) ok = control(key, sku, dev, "devices.capabilities.on_off", "powerSwitch", if (on) 1 else 0) && ok
-            if (on != false && brightness != null) ok = control(key, sku, dev, "devices.capabilities.range", "brightness", brightness.coerceIn(1, 100)) && ok
-            if (on != false && color != null) COLORS[color.lowercase()]?.let { ok = control(key, sku, dev, "devices.capabilities.color_setting", "colorRgb", it) && ok }
-            if (ok) done++
+            var ok = if (on != null) control(key, sku, dev, "devices.capabilities.on_off", "powerSwitch", if (on) 1 else 0) else null
+            if (on != false && brightness != null) control(key, sku, dev, "devices.capabilities.range", "brightness", brightness.coerceIn(1, 100)).let { if (ok == null) ok = it }
+            if (on != false && color != null) COLORS[color.lowercase()]?.let { c -> control(key, sku, dev, "devices.capabilities.color_setting", "colorRgb", c).let { if (ok == null) ok = it } }
+            if (ok != false) done++
         }
         val names = targets.joinToString { it.first }
         return if (done == targets.size) "Done: $names." else "Only $done of ${targets.size} lights responded ($names)."
@@ -148,7 +147,7 @@ object Protocols {
     fun run(context: Context, nameIn: String): String {
         val name = nameIn.lowercase()
         val out = mutableListOf<String>()
-        fun step(label: String, f: () -> String) { out.add(try { f() } catch (e: Exception) { "$label failed" }) }
+        fun step(label: String, f: () -> String) { try { out.add(f()) } catch (e: Exception) { Problems.log(context, "protocol $label: ${e.message}") } }
         when {
             Regex("good ?night|sleep|bed").containsMatchIn(name) -> return goodnight(context)
             name.contains("dash") || name.contains("work") -> {
@@ -165,6 +164,7 @@ object Protocols {
                 out.add(Baby.status(context))
             }
             name.contains("home") -> {
+                HomeNet.learnIfUnknown(context)
                 DriveMode.on = false; out.add("Driving mode off.")
                 if (Prefs(context).goveeKey.isNotBlank()) step("lights") { Lights.set(context, "all", true, if (Lights.late()) 15 else 80, "warm") }
                 out.add("Earned today ${Earnings.money(Earnings.today(context))}. Ask him how the shift went if nothing's logged.")
@@ -177,6 +177,7 @@ object Protocols {
 
     /** Lights off, next shift, phone quiet until the shift starts (starred contacts like his girlfriend still ring). */
     fun goodnight(context: Context): String {
+        HomeNet.learnIfUnknown(context)
         val out = mutableListOf<String>()
         if (Prefs(context).goveeKey.isNotBlank()) out.add(Lights.set(context, "all", false, null, null))
         val nm = context.getSystemService(NotificationManager::class.java)

@@ -103,19 +103,29 @@ class JarvisService : Service() {
 
     /** Home Wi-Fi after being out for a while: "Welcome home, sir," and the lights come on. */
     private val wifiWatch = object : android.net.ConnectivityManager.NetworkCallback() {
-        override fun onLost(network: android.net.Network) { prefs.sp.edit().putLong("wifi_lost_at", System.currentTimeMillis()).apply() }
-        override fun onAvailable(network: android.net.Network) {
-            val lost = prefs.sp.getLong("wifi_lost_at", 0L)
-            if (lost == 0L || System.currentTimeMillis() - lost < 15 * 60_000L || !prefs.running) return
-            prefs.sp.edit().putLong("wifi_lost_at", 0L).apply()
-            thread {
-                val lights = if (prefs.goveeKey.isNotBlank()) Lights.set(this@JarvisService, "all", true, if (Lights.late()) 15 else 80, "warm") else ""
-                val dim = lights.startsWith("Done") && Lights.late()
-                val todo = HomeReminders.take(this@JarvisService)
-                val rem = if (todo.isEmpty()) "" else " You asked me to remind you: " + todo.joinToString(", and ") + "."
-                main.post { sayFirst("Welcome home, sir." + (if (lights.startsWith("Done")) (if (dim) " Lights are on, kept them low." else " Lights are on.") else "") + rem) }
-            }
+        override fun onLost(network: android.net.Network) {
+            // only leaving HOME counts (other Wi-Fi along the way doesn't)
+            if (prefs.sp.getBoolean("at_home", false) && prefs.sp.getString("home_net_seen", "") == network.toString())
+                prefs.sp.edit().putBoolean("at_home", false).putLong("left_home_at", System.currentTimeMillis()).apply()
         }
+        override fun onAvailable(network: android.net.Network) {
+            // give the network a moment to get its address before checking it
+            main.postDelayed({ thread { arrived(network) } }, 2500)
+        }
+    }
+
+    private fun arrived(network: android.net.Network) {
+        val home = HomeNet.saved(prefs).isNotBlank()
+        val isHome = if (home) HomeNet.isHome(this, network) else true   // not set up yet: any Wi-Fi after a while away
+        if (!isHome) return
+        prefs.sp.edit().putString("home_net_seen", network.toString()).apply()
+        val wasHome = prefs.sp.getBoolean("at_home", false)
+        val left = prefs.sp.getLong("left_home_at", 0L)
+        prefs.sp.edit().putBoolean("at_home", true).apply()
+        if (wasHome || left == 0L || System.currentTimeMillis() - left < 10 * 60_000L || !prefs.running) return
+        prefs.sp.edit().putLong("left_home_at", 0L).apply()
+        val (line, ask) = HomeNet.welcome(this)
+        main.post { sayFirst(line, thenListen = ask) }
     }
 
     private val unlocked = object : android.content.BroadcastReceiver() {
