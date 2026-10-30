@@ -27,6 +27,7 @@ object Music {
 
     private fun playing(c: MediaController?) = c?.playbackState?.state == PlaybackState.STATE_PLAYING
     private fun title(c: MediaController?) = c?.metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+    private fun nowSong(c: MediaController?) = title(c) + " " + c?.metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
 
     @Volatile private var wasPlaying = false
     @Volatile private var seen = false
@@ -34,12 +35,12 @@ object Music {
     /** Waits up to ms for the app to be playing what he asked for. */
     private fun started(context: Context, pkg: String, before: String, ms: Long, query: String = ""): Boolean {
         val until = System.currentTimeMillis() + ms
-        val words = query.lowercase().split(Regex("\\W+")).filter { it.length > 2 }
         while (System.currentTimeMillis() < until) {
             val c = Apps.player(context, pkg)
             if (c != null) seen = true
             val t = title(c).lowercase()
-            if (playing(c) && (!wasPlaying || title(c) != before || words.any { t.contains(it) })) return true
+            // a new song started (playlists, artists), or the song he named: the old song resuming doesn't count
+            if (playing(c) && t.isNotBlank() && (looksLike(nowSong(c), query) || (before.isNotBlank() && t != before.lowercase()))) return true
             Thread.sleep(300)
         }
         return false
@@ -71,17 +72,26 @@ object Music {
         try { context.startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {
             return "Couldn't open $name."
         }
-        if (started(context, pkg, before, 4000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
-        Apps.player(context, pkg)?.transportControls?.play()
-        if (started(context, pkg, before, 1500, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+        if (started(context, pkg, before, 5000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+        // loaded but paused: press play only if the loaded song IS his (plain "play" on the old session resumed his previous song)
+        Apps.player(context, pkg)?.let { c -> if (looksLike(nowSong(c), query)) { try { c.transportControls.play() } catch (_: Exception) {}; if (started(context, pkg, before, 2000, query)) return "Playing ${titleNow(context, pkg, query)} on $name." } }
         // still sitting there: tap it on screen (the song in the results, or the play button)
         if (JarvisAccess.on(context)) {
             if (id == null) JarvisAccess.tap((song ?: query).trim())
             JarvisAccess.tap("play")
             if (started(context, pkg, before, 3000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
         }
+        // what's playing isn't his song (the old queue): pause it instead of claiming success
+        Apps.player(context, pkg)?.let { c -> if (playing(c) && title(c) == before && !looksLike(nowSong(c), query)) try { c.transportControls.pause() } catch (_: Exception) {} }
         if (!seen) return "Opened $query in $name."
         return "Opened it in $name but it didn't start playing on its own; he may need to tap play."
+    }
+
+    /** Does this song title look like what he asked for? */
+    private fun looksLike(title: String, query: String): Boolean {
+        val t = title.lowercase()
+        val w = query.lowercase().split(Regex("\\W+")).filter { it.length > 1 && it !in setOf("the", "and", "song", "by", "play", "music") }
+        return t.isNotBlank() && w.isNotEmpty() && w.any { t.contains(it) }
     }
 
     private fun titleNow(context: Context, pkg: String, fallback: String) = title(Apps.player(context, pkg)).ifBlank { fallback }

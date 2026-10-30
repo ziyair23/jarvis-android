@@ -70,7 +70,7 @@ class MessageListener : NotificationListenerService() {
         if (sbn.packageName == packageName) return
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
-        if (n.category == Notification.CATEGORY_CALL) { announceCall(n); return }
+        if (n.category == Notification.CATEGORY_CALL || (sbn.packageName in DIALERS && n.fullScreenIntent != null)) { announceCall(n); return }
         val isMsg = n.category == Notification.CATEGORY_MESSAGE || sbn.packageName in MESSAGING_APPS
         if (!isMsg) return
         val ex = n.extras ?: return
@@ -110,7 +110,7 @@ class MessageListener : NotificationListenerService() {
     /** "Abbey is calling, sir." Only for a ringing call (it has an Answer button), once per call. */
     private fun announceCall(n: Notification) {
         val prefs = Prefs(this)
-        if (!prefs.running || !prefs.announceCalls) return
+        if (!prefs.running || !prefs.announceCalls) { Problems.log(this, "call ringing but not announced: " + if (!prefs.running) "Jarvis wasn't running" else "call announcements are switched off"); return }
         val labels = n.actions?.map { it.title?.toString()?.lowercase().orEmpty() }.orEmpty()
         val canAnswer = labels.any { it.contains("answer") || it.contains("accept") }
         if (!canAnswer && n.fullScreenIntent == null) return
@@ -120,7 +120,8 @@ class MessageListener : NotificationListenerService() {
         val text = ex.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
         var who = if (Regex("incoming|call", RegexOption.IGNORE_CASE).containsMatchIn(title) && text.isNotBlank()) text else title
         who = who.replace(Regex("(?i)incoming (voice |video )?call( from)?"), "").trim()
-        if (who.isBlank()) return
+        if (who.isBlank()) { Problems.log(this, "call ringing but couldn't read who's calling"); return }
+        if (Stealth.on(prefs)) Problems.log(this, "call from $who not said out loud: quiet mode was on")
         val now = System.currentTimeMillis()
         if (who == lastCaller && now - lastCallAt < 60_000) return
         lastCaller = who; lastCallAt = now
@@ -147,6 +148,8 @@ class MessageListener : NotificationListenerService() {
     }
 
     companion object {
+        val DIALERS = setOf("com.google.android.dialer", "com.samsung.android.incallui", "com.samsung.android.dialer",
+            "com.android.server.telecom", "com.android.dialer", "com.android.incallui")
         val MESSAGING_APPS = setOf("com.google.android.apps.messaging", "com.samsung.android.messaging", "com.whatsapp",
             "com.instagram.android", "com.snapchat.android", "com.facebook.orca", "org.telegram.messenger", "com.discord")
     }

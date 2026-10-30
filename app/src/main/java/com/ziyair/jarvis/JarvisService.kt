@@ -477,9 +477,21 @@ class JarvisService : Service() {
     private fun sayFirst(line: String, thenListen: Boolean = false, ringing: Boolean = false) {
         if (Stealth.on(prefs)) { Stealth.miss(this, line.replace(" Answer it?", "").replace(" Decline it?", "").replace(" Want to reply, sir?", "")); if (!prefs.running && !busy) stopEverything(); return }
         if (ringing) {
-            if (busy || PhoneControl.nightQuiet(this)) return
+            if (PhoneControl.nightQuiet(this)) { Problems.log(this, "call not announced (goodnight quiet hours): $line"); return }
+            // a call beats whatever he was doing: drop it and announce the caller
+            if (busy) {
+                try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
+                recognizer = null; hush(); thinking = false; speaking = false; pending.clear()
+            }
             busy = true; acquire(); stopWakeWord(); followUps = 1
-            speak(line) { if (thenListen && CallControl.ringingNow()) { openWindow(5); afterSpeaking { listen(firstTurn = false) } } else finishTurn() }
+            // his voice goes out on the alarm channel (Android silences assistant audio while it rings), ringtone hushed for a moment
+            overRing = true
+            val hushed = ringHush(true)
+            speak(line) {
+                overRing = false
+                if (hushed) ringHush(false)
+                if (thenListen && CallControl.ringingNow()) { openWindow(5); afterSpeaking { listen(firstTurn = false) } } else finishTurn()
+            }
             return
         }
         // say it out loud; only a live phone call or goodnight quiet hours turn it into a notification
@@ -611,12 +623,20 @@ class JarvisService : Service() {
     }
 
     private var track: android.media.AudioTrack? = null
+    /** True while announcing a ringing call. */
+    @Volatile private var overRing = false
+    private fun usage() = if (overRing) android.media.AudioAttributes.USAGE_ALARM else android.media.AudioAttributes.USAGE_ASSISTANT
+    private fun ringHush(on: Boolean): Boolean = try {
+        val am = getSystemService(AudioManager::class.java)
+        if (on && am.isStreamMute(AudioManager.STREAM_RING)) false
+        else { am.adjustStreamVolume(AudioManager.STREAM_RING, if (on) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE, 0); true }
+    } catch (_: Exception) { false }
 
     /** Plays Piper's audio; calls then() once when it finishes. */
     private fun playPcm(samples: FloatArray, rate: Int, then: () -> Unit): Boolean = try {
         track?.let { try { it.stop() } catch (_: Exception) {}; it.release() }
         val t = android.media.AudioTrack.Builder()
-            .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+            .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(usage())
                 .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
             .setAudioFormat(android.media.AudioFormat.Builder().setEncoding(android.media.AudioFormat.ENCODING_PCM_FLOAT)
                 .setSampleRate(rate).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
@@ -640,7 +660,7 @@ class JarvisService : Service() {
         player?.release()
         val mp = android.media.MediaPlayer()
         mp.setAudioAttributes(android.media.AudioAttributes.Builder()
-            .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+            .setUsage(usage())
             .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
         mp.setDataSource(f.absolutePath)
         mp.setOnCompletionListener { it.release(); if (player === it) player = null; main.post(then) }
@@ -655,6 +675,7 @@ class JarvisService : Service() {
         val t = tts
         if (t == null || !ttsReady) { main.postDelayed(then, 300); return }
         val cfg = brain.config()
+        try { t.setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(usage()).setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build()) } catch (_: Exception) {}
         t.setSpeechRate(cfg.optDouble("voice_rate", 0.95).toFloat())
         t.setPitch(cfg.optDouble("voice_pitch", 0.88).toFloat())
         val id = "j" + System.nanoTime()
