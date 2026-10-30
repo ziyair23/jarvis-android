@@ -198,11 +198,13 @@ class JarvisService : Service() {
     private fun startWakeWord(whileSpeaking: Boolean = false) {
         main.post {
             if (busy && !whileSpeaking) return@post
+            if (whileSpeaking && (!speaking || !brain.config().optBoolean("interrupt_by_name", true))) return@post
             try {
                 if (wakeWord == null) {
                     val th = brain.config().optDouble("wake_threshold", 0.5).toFloat()
                     wakeWord = WakeWord(applicationContext, th) { main.post { if (speaking) interrupt() else onWake() } }
                 }
+                wakeWord?.sensitive(!whileSpeaking)
                 wakeWord?.start()
             } catch (e: Exception) {
                 wakeWord = null
@@ -317,6 +319,7 @@ class JarvisService : Service() {
     private fun listen(firstTurn: Boolean) {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { speak("Speech recognition isn't available on this phone, sir.") { finishTurn() }; return }
         try { recognizer?.destroy() } catch (_: Exception) {}
+        stopWakeWord()
         quiet(true)
         recognizer = googleRecognizer()?.let { SpeechRecognizer.createSpeechRecognizer(this, it) } ?: SpeechRecognizer.createSpeechRecognizer(this)
         lastPartial = ""
@@ -364,8 +367,12 @@ class JarvisService : Service() {
                 val p = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                 if (p.isBlank() || p == lastPartial) return
                 lastPartial = p
-                if (isStop(p) && live()) { done = true; stopListening(p); return }
                 val mine = recognizer
+                if (isStop(p)) {
+                    main.postDelayed({ if (live() && recognizer === mine && lastPartial == p) { done = true; stopListening(p) } },
+                        brain.config().optLong("stop_word_ms", 700L))
+                    return
+                }
                 val wait = brain.config().optLong("done_talking_ms", 1300L)
                 main.postDelayed({
                     // same words as a moment ago and he's said something real: he's finished, answer now
@@ -392,8 +399,9 @@ class JarvisService : Service() {
         try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
         recognizer = null
         hush()
+        quiet(false)
         try { tone?.startTone(ToneGenerator.TONE_PROP_NACK, 120) } catch (_: Exception) {}   // a short "off" blip, no talking
-        finishTurn()
+        main.postDelayed({ finishTurn() }, 150)
     }
 
     /** He said "Jarvis" while Jarvis was talking: stop talking and listen to him. */
@@ -405,7 +413,7 @@ class JarvisService : Service() {
         thinking = false
         inConvo = true
         try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 100) } catch (_: Exception) {}
-        openWindow(convoSeconds())
+        openWindow(5)
         main.postDelayed({ listen(firstTurn = false) }, 250)
     }
     @Volatile private var speaking = false

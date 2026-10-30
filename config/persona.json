@@ -43,5 +43,7 @@
     ]
   },
   "done_talking_ms": 1300,
-  "barge_in": false
+  "barge_in": false,
+  "interrupt_by_name": true,
+  "stop_word_ms": 700
 }

@@ -25,6 +25,9 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
     private val wake: OrtSession
 
     @Volatile private var running = false
+    /** A bit harder to trigger while Jarvis is talking, so his own voice coming out of the speaker can't set it off. */
+    @Volatile private var boost = 1f
+    fun sensitive(normal: Boolean) { boost = if (normal) 1f else 1.15f }
     private var worker: Thread? = null
 
     init {
@@ -37,7 +40,9 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
 
     @SuppressLint("MissingPermission")
     fun start() {
-        if (running) return
+        if (running && worker?.isAlive == true) return
+        // the last run might still be letting go of the mic: wait for it, two mics at once makes both deaf
+        try { worker?.join(800) } catch (_: Exception) {}
         running = true
         worker = Thread {
             val min = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
@@ -73,7 +78,7 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
                     if (embeddings.size < 16) continue
 
                     val score = score(embeddings)
-                    val th = if (audio.isMusicActive) threshold * 0.85f else threshold
+                    val th = (if (audio.isMusicActive) threshold * 0.85f else threshold) * boost
                     hits = if (score >= th) hits + 1 else 0
                     if (hits >= 2) {
                         hits = 0
@@ -96,8 +101,9 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
 
     fun stop() {
         running = false
-        try { worker?.join(400) } catch (_: Exception) {}
-        worker = null
+        val w = worker
+        if (w != null && w != Thread.currentThread()) try { w.join(1000) } catch (_: Exception) {}
+        if (w?.isAlive != true) worker = null
     }
 
     fun close() {
