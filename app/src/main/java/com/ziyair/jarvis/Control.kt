@@ -161,7 +161,7 @@ class JarvisAccess : AccessibilityService() {
         }
 
         /** Tap the thing whose text or description best matches. */
-        fun tap(what: String, long: Boolean = false): String {
+        fun tap(what: String, long: Boolean = false, exactOnly: Boolean = false): String {
             val s = me ?: return NEED
             val root = s.rootInActiveWindow ?: return "Can't see the screen right now."
             val w = what.trim().lowercase()
@@ -172,7 +172,7 @@ class JarvisAccess : AccessibilityService() {
                 if (l.isBlank()) return@walk
                 when { l == w -> if (exact == null) exact = n; l.startsWith(w) -> if (starts == null) starts = n; l.contains(w) -> if (contains == null) contains = n }
             }
-            val node = exact ?: starts ?: contains ?: return "Nothing on screen matches \"$what\". " + read()
+            val node = (if (exactOnly) exact else exact ?: starts ?: contains) ?: return "Nothing on screen matches \"$what\". " + read()
             val target = clickable(node)
             val ok = if (target != null) target.performAction(if (long) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK)
                 else { val r = Rect(); node.getBoundsInScreen(r); gestureTap(s, r.centerX().toFloat(), r.centerY().toFloat()) }

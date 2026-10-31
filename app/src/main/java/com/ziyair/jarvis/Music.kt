@@ -100,19 +100,46 @@ object Music {
         try { context.startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {
             return "Couldn't open $name."
         }
-        if (started(context, pkg, before, 5000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
-        // loaded but paused: press play only if the loaded song IS his (plain "play" on the old session resumed his previous song)
-        Apps.player(context, pkg)?.let { c -> if (looksLike(nowSong(c), query)) { try { c.transportControls.play() } catch (_: Exception) {}; if (started(context, pkg, before, 2000, query)) return "Playing ${titleNow(context, pkg, query)} on $name." } }
-        // still sitting there: tap it on screen (the song in the results, or the play button)
-        if (JarvisAccess.on(context)) {
-            if (id == null) JarvisAccess.tap((song ?: query).trim())
-            JarvisAccess.tap("play")
-            if (started(context, pkg, before, 3000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+        if (started(context, pkg, before, 3000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+        // the page is open but sitting paused: press play himself, again and again for up to ~10 seconds, until it's going.
+        // Only ever on HIS song (once the app has loaded it), never on the old one.
+        val access = JarvisAccess.on(context)
+        if (!access) Trace.log(context, "music", "screen control is off, can only press play through the player")
+        var tappedSong = false
+        val until = System.currentTimeMillis() + 10_000
+        var round = 0
+        while (System.currentTimeMillis() < until) {
+            round++
+            val c = Apps.player(context, pkg)
+            val t = title(c)
+            val his = c != null && t.isNotBlank() && (looksLike(nowSong(c), query) || (before.isNotBlank() && t != before) || before.isBlank())
+            if (playing(c) && his) {
+                Trace.log(context, "music", "playing \"$t\" after $round tries")
+                return "Playing ${titleNow(context, pkg, query)} on $name."
+            }
+            if (his) {
+                // his song is loaded: the player's own play button, then the headphone play key
+                try { c!!.transportControls.play() } catch (_: Exception) {}
+                if (started(context, pkg, before, 900, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+                Apps.media(context, "play")
+                if (started(context, pkg, before, 900, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+            }
+            if (access) {
+                // on a search page: tap the song first; on the song page: the play button (whatever the app calls it)
+                if (id == null && !tappedSong) { tappedSong = !JarvisAccess.tap((song ?: query).trim()).startsWith("Nothing"); Trace.log(context, "music", "tapped the song in the results: $tappedSong") }
+                for (label in listOf("Play", "Play video", "Resume", "Play all", "Shuffle")) {
+                    val r = JarvisAccess.tap(label, exactOnly = true)   // exact names only, so it never taps "Playlist" by mistake
+                    if (r.startsWith("Tapped")) { Trace.log(context, "music", "tapped \"$label\""); break }
+                }
+                if (started(context, pkg, before, 1200, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+            } else Thread.sleep(700)
         }
+        Trace.log(context, "music", "gave up: player says \"${title(Apps.player(context, pkg))}\", playing=${playing(Apps.player(context, pkg))}")
         // what's playing isn't his song (the old queue): pause it instead of claiming success
         Apps.player(context, pkg)?.let { c -> if (playing(c) && title(c) == before && !looksLike(nowSong(c), query)) try { c.transportControls.pause() } catch (_: Exception) {} }
+        if (!access) return "Opened $query in $name, but I can't press play without screen control. Tell him: open the Jarvis app, tap Allow screen control, and it'll press play for him from then on."
         if (!seen) return "Opened $query in $name."
-        return "Opened it in $name but it didn't start playing on its own; he may need to tap play."
+        return "Opened $query in $name but it wouldn't start, even after I pressed play. Tell him plainly he'll need to tap it this once."
     }
 
     /** Does this song title look like what he asked for? */
