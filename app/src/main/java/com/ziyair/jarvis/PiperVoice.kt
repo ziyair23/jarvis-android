@@ -144,12 +144,23 @@ object Piper {
         return t.replace(Regex("\\s+"), " ").trim()
     }
 
+    /** Short lines come straight from his phrasebook when they've been said before (instant); new ones get saved. */
     @Synchronized fun synth(c: Context, text0: String, speed: Float): Pair<FloatArray, Int>? {
         val (m, sid) = current(c) ?: return null
         val text = speakable(text0).ifBlank { return null }
+        val vid = m.dir + "_" + sid
+        Voicebank.get(c, vid, text, speed)?.let { return it }
         return try {
             engine(c, m)?.generate(text, sid, speed)?.let { it.samples to it.sampleRate }?.takeIf { it.first.isNotEmpty() }
+                ?.also { Voicebank.put(c, vid, text, speed, it.first, it.second) }
         } catch (e: Throwable) { Problems.log(c, "voice: ${e.message}"); null }
+    }
+
+    /** Only if it's already in the phrasebook (never makes him wait). */
+    fun cached(c: Context, text0: String, speed: Float): Pair<FloatArray, Int>? {
+        val (m, sid) = current(c) ?: return null
+        val text = speakable(text0).ifBlank { return null }
+        return Voicebank.get(c, m.dir + "_" + sid, text, speed)
     }
 
     /** Load the voice ahead of time so the first reply isn't slow. */

@@ -83,6 +83,7 @@ class JarvisService : Service() {
             // his chosen voice (e.g. full-quality George) downloads on Wi-Fi; Alan covers until it's ready
             if (Piper.installed(this) && !Piper.pickReady(this) && !metered) Piper.download(this)
             Piper.warm(this)
+            prepareLines()
         }
         // whenever he unlocks the phone, see if there's a new build to slip in (checks GitHub at most hourly)
         registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT))
@@ -154,6 +155,19 @@ class JarvisService : Service() {
         }
         when (intent?.action) {
             ACTION_LISTEN -> { if (!busy) onWake(manual = true); return START_STICKY }
+            ACTION_HUSH -> {
+                main.post {
+                    if (!busy) { Orb.set(this, Orb.HIDDEN); return@post }
+                    turnId++
+                    try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
+                    recognizer = null
+                    inConvo = false; pending.clear()
+                    hush(); quiet(false)
+                    Sfx.play("off")
+                    finishTurn()
+                }
+                return START_STICKY
+            }
             ACTION_SAY -> {
                 val moment = intent.getStringExtra("moment")
                 val text = intent.getStringExtra("text")
@@ -235,10 +249,35 @@ class JarvisService : Service() {
         acquire()
         stopWakeWord()
         holdFocus(true)
-        if (!Stealth.on(prefs)) try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 120) } catch (_: Exception) {}
-        openWindow(brain.config().optInt("wake_seconds", 5))
-        main.postDelayed({ listen(firstTurn = true) }, 200)
+        val cfg = brain.config()
+        val wakeSecs = cfg.optInt("wake_seconds", 5)
+        openWindow(wakeSecs)
+        val stealth = Stealth.on(prefs)
+        val speed = cfg.optDouble("piper_speed", 1.0).toFloat()
+        // "Yes, sir?" in his own voice, straight from the phrasebook so there's no wait; the chirp if it isn't ready yet
+        val line = if (!stealth && cfg.optString("wake_reply", "voice") == "voice" && Piper.installed(this) && prefs.ttsKey.isBlank()) Persona.wakeLine(this, cfg) else null
+        val clip = line?.let { Piper.cached(this, it, speed) }
+        val go = { openWindow(wakeSecs); listen(firstTurn = true) }
+        if (clip != null && playPcm(clip.first, clip.second) { main.postDelayed({ go() }, 120) }) return
+        if (line != null) prepareLines()
+        Orb.set(this, Orb.LISTEN)
+        if (!stealth) Sfx.play("wake")
+        main.postDelayed({ go() }, Sfx.lengthMs("wake") + 120)
     }
+
+    /** Records his everyday lines in the current voice, once, in the background. */
+    @Volatile private var preparing = false
+    private fun prepareLines() {
+        if (preparing || !Piper.installed(this) || prefs.ttsKey.isNotBlank()) return
+        preparing = true
+        thread {
+            try { val cfg = brain.config(); Voicebank.prepare(this, Persona.stockLines(cfg), cfg.optDouble("piper_speed", 1.0).toFloat()) }
+            finally { preparing = false }
+        }
+    }
+
+    /** Each request gets a number; if he cancels (tap the orb, "stop", a call), a late answer is thrown away. */
+    private var turnId = 0
 
     /** How long he keeps listening without hearing anything before going back to waiting for "Hey Jarvis". */
     private fun openWindow(seconds: Int) { listenUntil = System.currentTimeMillis() + seconds * 1000L }
@@ -321,6 +360,7 @@ class JarvisService : Service() {
         try { recognizer?.destroy() } catch (_: Exception) {}
         stopWakeWord()
         quiet(true)
+        Orb.set(this, Orb.LISTEN)
         recognizer = googleRecognizer()?.let { SpeechRecognizer.createSpeechRecognizer(this, it) } ?: SpeechRecognizer.createSpeechRecognizer(this)
         lastPartial = ""
         val session = ++listenSession
@@ -359,7 +399,7 @@ class JarvisService : Service() {
             }
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBeginningOfSpeech() { openWindow(convoSeconds()) }
-            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onRmsChanged(rmsdB: Float) { Orb.level((rmsdB + 2f) / 12f) }
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
             override fun onPartialResults(partialResults: Bundle?) {
@@ -400,7 +440,8 @@ class JarvisService : Service() {
         recognizer = null
         hush()
         quiet(false)
-        try { tone?.startTone(ToneGenerator.TONE_PROP_NACK, 120) } catch (_: Exception) {}   // a short "off" blip, no talking
+        turnId++
+        Sfx.play("off")   // a short "off" sound, no talking
         main.postDelayed({ finishTurn() }, 150)
     }
 
@@ -412,7 +453,8 @@ class JarvisService : Service() {
         hush()
         thinking = false
         inConvo = true
-        try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 100) } catch (_: Exception) {}
+        turnId++
+        Sfx.play("listen")
         openWindow(5)
         main.postDelayed({ listen(firstTurn = false) }, 250)
     }
@@ -436,13 +478,15 @@ class JarvisService : Service() {
         if (Regex("^(never ?mind|thanks?( you)?,? (jarvis|that'?s (it|all))|thank you,? jarvis|nothing|no thanks?|i'?m good|that'?ll be all|goodbye|see you)\\b").containsMatchIn(lower)
             || Regex("^(thanks|thank you|cheers)[.!]?$").matches(lower)) {
             inConvo = false
-            if (Stealth.on(prefs)) finishTurn() else speak(pick("goodbyes", "Very good, sir.")) { finishTurn() }
+            if (Stealth.on(prefs)) finishTurn() else speak(Persona.goodbye(brain.config())) { finishTurn() }
             return
         }
         if (thinking) return
         thinking = true
+        val turn = ++turnId
         quiet(false)
         acquire()
+        Orb.set(this, Orb.THINK)
 
         chatted = true
         // with Jarvis's own voice he starts talking as soon as the first sentence is ready
@@ -450,12 +494,17 @@ class JarvisService : Service() {
         val live = if (!wasQuiet && Piper.installed(this) && prefs.ttsKey.isBlank() && Cast.mode(prefs) != "everything")
             SpeechStream(this, brain.config().optDouble("piper_speed", 1.0).toFloat(), main) { acking }.also { stream = it } else null
         thread {
-            val reply = brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false) }; s.add(line) } }) { main.post { ack() } }
+            // quick everyday commands are done right here on the phone: instant, and free
+            val quick = Reflex.handle(this, text)
+            if (quick != null) brain.lastTools.clear()
+            val reply = quick?.reply ?: brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false); Orb.set(this@JarvisService, Orb.SPEAK) }; s.add(line) } }) { main.post { ack() } }
             main.post {
+                if (turn != turnId) { live?.cancel(); return@post }   // he cancelled while it was thinking
                 if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { live?.cancel(); inConvo = false; finishTurn(); return@post }
                 // heard chatter that wasn't for him: drop it silently; twice in a row and the conversation's over
                 if (reply.isBlank()) { live?.cancel(); ignoredInRow++; nextTurn(ignoredInRow < 2); return@post }
                 ignoredInRow = 0
+                if (quick?.endConvo == true) inConvo = false
                 // he asked for music: let it play instead of listening over it
                 if (brain.lastTools.any { it == "play_music" } || (brain.lastTools.contains("media_control") && !reply.contains("paus", true))) inConvo = false
                 // in quiet mode his answers arrive as a silent notification instead of out loud
@@ -481,7 +530,7 @@ class JarvisService : Service() {
             // a call beats whatever he was doing: drop it and announce the caller
             if (busy) {
                 try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
-                recognizer = null; hush(); thinking = false; speaking = false; pending.clear()
+                recognizer = null; hush(); thinking = false; speaking = false; pending.clear(); turnId++
             }
             busy = true; acquire(); stopWakeWord(); followUps = 1
             // his voice goes out on the alarm channel (Android silences assistant audio while it rings), ringtone hushed for a moment
@@ -505,7 +554,7 @@ class JarvisService : Service() {
         acquire()
         stopWakeWord()
         holdFocus(true)
-        try { tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 90) } catch (_: Exception) {}
+        Sfx.play("alert")
         val say: (String, () -> Unit) -> Unit = if (Cast.mode(prefs) != "off") { t, f -> speakHouse(t, f) } else { t, f -> speak(t, f) }
         main.postDelayed({ say(line) { if (thenListen) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() } }, 300)
     }
@@ -555,6 +604,7 @@ class JarvisService : Service() {
     private val pending = ArrayList<Pair<String, Boolean>>()
 
     private fun finishTurn() {
+        Orb.set(this, Orb.HIDDEN)
         speaking = false
         thinking = false
         inConvo = false
@@ -583,7 +633,7 @@ class JarvisService : Service() {
     private val ACKS = listOf("On it, sir.", "Right away, sir.", "One moment, sir.", "On it.")
     private fun ack() {
         if (stream?.started == true || Stealth.on(prefs)) return
-        speak(ACKS.random()) { acking = false }
+        speak(Persona.ack(brain.config())) { acking = false }
         acking = true
         main.postDelayed({ acking = false }, 6000)
     }
@@ -652,6 +702,7 @@ class JarvisService : Service() {
         }, main)
         main.postDelayed({ finish() }, samples.size * 1000L / rate + 700)
         t.play()
+        Orb.set(this, Orb.SPEAK)
         track = t
         true
     } catch (_: Exception) { false }
@@ -684,6 +735,7 @@ class JarvisService : Service() {
             override fun onDone(utteranceId: String?) { if (utteranceId == id) main.post(then) }
             @Deprecated("old api") override fun onError(utteranceId: String?) { if (utteranceId == id) main.post(then) }
         })
+        Orb.set(this, Orb.SPEAK)
         t.speak(Piper.speakable(text), TextToSpeech.QUEUE_FLUSH, null, id)
     }
 
@@ -719,6 +771,7 @@ class JarvisService : Service() {
     private fun release() { try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Exception) {} }
 
     private fun stopEverything() {
+        Orb.set(this, Orb.HIDDEN)
         thinking = false
         prefs.running = false
         busy = false
@@ -762,6 +815,7 @@ class JarvisService : Service() {
         const val ACTION_LISTEN = "com.ziyair.jarvis.LISTEN"
         const val ACTION_SAY = "com.ziyair.jarvis.SAY"
         const val ACTION_QUIET_END = "com.ziyair.jarvis.QUIET_END"
+        const val ACTION_HUSH = "com.ziyair.jarvis.HUSH"
     }
 }
 
