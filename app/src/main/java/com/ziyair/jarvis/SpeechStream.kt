@@ -109,7 +109,7 @@ class SpeechStream(
         val th = 0.012f
         var a = 0; while (a < s.size && kotlin.math.abs(s[a]) < th) a++
         var b = s.size - 1; while (b > a && kotlin.math.abs(s[b]) < th) b--
-        a = maxOf(0, a - rate / 100)                  // keep 10 ms before the first sound
+        a = maxOf(0, a - rate * 3 / 100)              // keep 30 ms before the first sound (soft "s" and "f" starts)
         b = minOf(s.size - 1, b + rate / 25)           // and 40 ms after the last
         if (b <= a) return s
         val out = s.copyOfRange(a, b + 1)

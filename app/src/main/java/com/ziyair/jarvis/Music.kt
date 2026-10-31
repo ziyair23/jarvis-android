@@ -67,20 +67,25 @@ object Music {
                 Trace.log(context, "music", "still playing \"${title(Apps.player(context, pkg))}\", trying the next way")
             }
         } catch (e: Exception) { Trace.log(context, "music", "assistant request failed: ${e.message}") }
+        // locked: only the background ways work
+        val locked = context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
+        if (locked || !Settings.canDrawOverlays(context)) {
         // 1a. the app is already open in the background: ask its player directly
-        Apps.player(context, pkg)?.let { c ->
-            try { c.transportControls.playFromSearch(query, Bundle()) } catch (_: Exception) {}
-            if (started(context, pkg, before, 4000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
-        }
-        // 1b. connect to the app's player service (what Android Auto uses) and ask it
-        val asked = viaBrowser(context, pkg, query)
-        if (asked && started(context, pkg, before, 5000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
-        // the app took the request but Android won't show us its player: trust it
-        if (asked && !seen) return "Playing $query on $name."
+            Apps.player(context, pkg)?.let { c ->
+                try { c.transportControls.playFromSearch(query, Bundle()) } catch (_: Exception) {}
+                if (started(context, pkg, before, 4000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+            }
+            // 1b. connect to the app's player service (what Android Auto uses) and ask it
+            val asked = viaBrowser(context, pkg, query)
+            if (asked && started(context, pkg, before, 5000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+            // the app took the request but Android won't show us its player: trust it
+            if (asked && !seen) return "Playing $query on $name."
 
-        // 2. open the song itself; needs the phone unlocked
-        if (context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) return "$name wouldn't start it from the lock screen. Ask him to unlock the phone and say it again."
+            if (locked) return "$name wouldn't start it from the lock screen. Ask him to unlock the phone and say it again."
+        }
+        // 2. open the exact song; needs the phone unlocked
         if (!Settings.canDrawOverlays(context)) return Actions.NEED_OPEN_APPS
+        Trace.log(context, "music", "opening the song directly")
         val id = if (pkg == Actions.YT_MUSIC) Apps.youtubeId(query) else null
         val uri = when {
             id != null -> Uri.parse("https://music.youtube.com/watch?v=$id")

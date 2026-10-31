@@ -240,7 +240,7 @@ class Brain(private val context: Context) {
         body.put("stream", true)
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
         c.requestMethod = "POST"
-        c.connectTimeout = 10000; c.readTimeout = 60000
+        c.connectTimeout = 10000; c.readTimeout = 30000
         c.doOutput = true
         c.setRequestProperty("content-type", "application/json")
         c.setRequestProperty("x-api-key", key)
@@ -342,7 +342,7 @@ class Brain(private val context: Context) {
     private fun post(key: String, body: JSONObject): Pair<Int, String> {
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
         c.requestMethod = "POST"
-        c.connectTimeout = 10000; c.readTimeout = 60000
+        c.connectTimeout = 10000; c.readTimeout = 30000
         c.doOutput = true
         c.setRequestProperty("content-type", "application/json")
         c.setRequestProperty("x-api-key", key)

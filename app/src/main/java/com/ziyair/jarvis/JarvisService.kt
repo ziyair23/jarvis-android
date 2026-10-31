@@ -74,6 +74,8 @@ class JarvisService : Service() {
                     if (prefs.running && !busy && !earOn() && wakeWord?.alive() != true && !inCall()) { Problems.log(this@JarvisService, "ears restarted"); startWakeWord() }
                     // phone ears ready but not in use (after a failure or the download just finishing): switch over when idle
                     if (prefs.running && !busy && !earOn() && Ear.ready(this@JarvisService) && !inCall()) startWakeWord()
+                    // idle but the ear isn't listening for his name (left muted or holding after a cancelled turn): fix it
+                    ear?.let { if (prefs.running && !busy && it.alive() && it.mode != Ear.Mode.SLEEP) { Trace.log(this@JarvisService, "ears", "was stuck in ${it.mode}, listening for his name again"); it.set(Ear.Mode.SLEEP) } }
                     if (Stealth.expired(prefs)) startService(Intent(this@JarvisService, JarvisService::class.java).setAction(ACTION_QUIET_END))
                 } catch (_: Exception) {}
                 main.postDelayed(this, 30_000)
@@ -245,6 +247,7 @@ class JarvisService : Service() {
     private var earBrokenAt = 0L
     private var earListening = false
     private var earFirst = false
+    private var ringHushedForEar = false
     private fun earOn() = ear?.alive() == true
 
     /** Starts the one-ear stream if it's set up (model downloaded, not switched off remotely, not broken recently). */
@@ -307,6 +310,7 @@ class JarvisService : Service() {
         earListening = true
         val session = ++listenSession
         Orb.set(this, Orb.LISTEN)
+        if (CallControl.ringingNow() && !ringHushedForEar) ringHushedForEar = ringHush(true)
         e.set(Ear.Mode.LISTEN)
         val tick = object : Runnable {
             override fun run() {
@@ -351,7 +355,8 @@ class JarvisService : Service() {
         // "Yes, sir?" in his own voice, straight from the phrasebook so there's no wait; the chirp if it isn't ready yet
         val line = if (!stealth && cfg.optString("wake_reply", "voice") == "voice" && Piper.installed(this) && prefs.ttsKey.isBlank()) Persona.wakeLine(this, cfg) else null
         val clip = line?.let { Piper.cached(this, it, speed) }
-        val go = { openWindow(wakeSecs); listen(firstTurn = true) }
+        val wakeTurn = turnId
+        val go = { if (busy && wakeTurn == turnId && !thinking) { openWindow(wakeSecs); listen(firstTurn = true) } }
         // one ear: he may have said it all in one breath ("Jarvis, what time is it"); if he's already talking, skip the greeting
         if (fromEar && earOn()) {
             val e = ear!!
@@ -361,14 +366,14 @@ class JarvisService : Service() {
             listenSession++
             main.postDelayed({
                 if (!busy || thinking || !earListening) return@postDelayed
-                if (e.speechStarted) { Trace.log(this, "wake", "already talking, no greeting"); openWindow(wakeSecs); earListen(true); return@postDelayed }
+                if (e.speechStarted || e.voiceRecently(400)) { Trace.log(this, "wake", "already talking, no greeting"); openWindow(wakeSecs); earListen(true); return@postDelayed }
                 earListening = false
                 e.set(Ear.Mode.MUTE)
                 if (clip != null && playPcm(clip.first, clip.second) { main.postDelayed({ go() }, 120) }) return@postDelayed
                 if (line != null) prepareLines()
                 if (!stealth) Sfx.play("wake")
                 main.postDelayed({ go() }, Sfx.lengthMs("wake") + 120)
-            }, brain.config().optLong("same_breath_ms", 350L))
+            }, brain.config().optLong("same_breath_ms", 450L))
             Orb.set(this, Orb.LISTEN)
             return
         }
@@ -606,6 +611,11 @@ class JarvisService : Service() {
         acquire()
         Orb.set(this, Orb.THINK)
         thinkingSound(turn)
+        // a slow answer (a web search, a weak signal): one calm line so he knows it's coming, never silence
+        main.postDelayed({
+            if (turn == turnId && thinking && !speaking && !acking && stream?.started != true && !Stealth.on(prefs))
+                ack(Persona.pick(brain.config(), "still_working", listOf("Still on it, sir.", "Bear with me, sir.", "Almost there, sir.")))
+        }, brain.config().optLong("still_working_ms", 7000L))
 
         chatted = true
         // with Jarvis's own voice he starts talking as soon as the first sentence is ready
@@ -728,6 +738,7 @@ class JarvisService : Service() {
     private fun finishTurn() {
         Orb.set(this, Orb.HIDDEN)
         earListening = false
+        if (ringHushedForEar) { ringHushedForEar = false; ringHush(false) }
         Trace.log(this, "done", "back to waiting for his name")
         speaking = false
         thinking = false
@@ -768,9 +779,9 @@ class JarvisService : Service() {
         main.postDelayed(r, brain.config().optLong("thinking_after_ms", 1100L))
     }
 
-    private fun ack() {
+    private fun ack(line: String? = null) {
         if (stream?.started == true || Stealth.on(prefs)) return
-        speak(Persona.ack(brain.config())) { acking = false }
+        speak(line ?: Persona.ack(brain.config())) { acking = false }
         acking = true
         main.postDelayed({ acking = false }, 6000)
     }

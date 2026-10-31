@@ -47,6 +47,9 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
     @Volatile private var running = false
     @Volatile private var modeChanged = true
     @Volatile var speechStarted = false; private set
+    @Volatile private var loudAt = 0L
+    /** Any voice-level sound in the last ms (quicker than full speech detection). */
+    fun voiceRecently(ms: Long) = System.currentTimeMillis() - loudAt < ms
     private var worker: Thread? = null
     private val asr = Executors.newSingleThreadExecutor()
 
@@ -117,7 +120,9 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                         Mode.LISTEN -> {
                             var sum = 0.0
                             for (i in 0 until CHUNK) { val v = chunk[i] / 32768f; f[i] = v; sum += v * v }
-                            Orb.level((sqrt(sum / CHUNK).toFloat() * 14f))
+                            val rms = sqrt(sum / CHUNK).toFloat()
+                            Orb.level(rms * 14f)
+                            if (rms > 0.02f) loudAt = System.currentTimeMillis()
                             vad.acceptWaveform(f)
                             if (!speechStarted && vad.isSpeechDetected()) {
                                 speechStarted = true; speechAt = System.currentTimeMillis()
