@@ -40,7 +40,7 @@ class Brain(private val context: Context) {
         return cfg.optString("system") +
             (if (prefs.notes.isNotBlank()) "\n\nAbout him and his day: " + prefs.notes else "") +
             (if (her.isNotBlank()) "\nHis partner's name: " + her + "." else "") +
-            (if (prefs.babyName.isNotBlank()) "\nHis baby son is ${prefs.babyName}. Speech-to-text often mishears that name (as Zaire, Zyair, Ziair, Isaiah, Xavier, Sahir, Zayer, 'the air' and similar): treat any of those as ${prefs.babyName}." else "") +
+            (if (prefs.babyName.isNotBlank()) "\nHis baby son is ${prefs.babyName}. Speech-to-text often mishears that name (as Zaire, Zyair, Ziair, Isaiah, Xavier, Sahir, Zayer, 'C a', 'see ya', 'the air' and similar): treat any of those as ${prefs.babyName}." else "") +
             "\nHe talks naturally, not in commands, and speech-to-text garbles words. Work out what he means from loose wording and act on it: 'note that we just fed him', 'he ate', 'bottle's done', 'we fed the baby' all mean log_baby feed; 'changed him', 'he pooped' mean a diaper; 'he's down', 'he's out' mean asleep. If the meaning is reasonably clear, do it and confirm in a few words; only ask a short question when it's genuinely ambiguous. Never ask him to rephrase or use specific words." +
             Memory.promptBlock(context) +
             "\nRight now it is " + now + "." +
@@ -207,7 +207,7 @@ class Brain(private val context: Context) {
             if (buf.startsWith("[") && buf.length < 10) return
             while (true) {
                 // the first sentence goes out straight away; after that, speak in fuller chunks so it flows
-                val min = if (spoke) 90 else 2
+                val min = if (spoke) 170 else 2
                 val m = Regex("[.!?](\\s)").findAll(buf).firstOrNull { it.range.first + 1 >= min && !abbrev(buf, it.range.first) } ?: break
                 val end = m.range.first + 1
                 emit(buf.substring(0, end)); buf.delete(0, end)

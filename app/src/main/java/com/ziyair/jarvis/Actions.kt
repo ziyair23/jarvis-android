@@ -83,6 +83,7 @@ class Actions(private val context: Context) {
         put(tool("expenses_summary", "What he made, spent (by category) and actually kept this week.", props(), listOf()))
         put(tool("spending", "How much Jarvis has cost on his Claude account this month, against his budget.", props(), listOf()))
         put(tool("set_budget", "Set his monthly Claude budget in dollars (he gets a warning near it).", props("dollars" to num("Monthly budget")), listOf("dollars")))
+        put(tool("briefing", "His morning briefing: weather and roads, next shift, calendar, the baby overnight, money and the Macan goal, lists, reminders. Use for 'brief me', 'morning briefing', 'what's my day look like', 'what's the plan today'. Only when he asks.", props(), listOf()))
         put(tool("status_report", "Status report: battery, weather and roads, earnings today, the baby, next shift, next reminder. Use for 'status report', 'how are we looking', 'catch me up'.", props(), listOf()))
         put(tool("run_protocol", "Run one of his named protocols: 'dash' (heading out to DoorDash: driving mode, opens Dasher, starts music, weather), 'baby' (night feed: quiet phone, dim warm lights, low volume, baby status), 'home' (done for the night: driving off, lights on, earnings and baby recap), 'goodnight' (lights off, phone quiet until before his next shift with starred contacts still ringing, next shift time).",
             props("name" to str("dash, baby, home or goodnight")), listOf("name")))
@@ -231,6 +232,7 @@ class Actions(private val context: Context) {
             "spending" -> Spend.report(context)
             "set_budget" -> Spend.setBudget(context, input.getDouble("dollars"))
             "status_report" -> Status.report(context)
+            "briefing" -> Briefing.build(context)
             "run_protocol" -> Protocols.run(context, input.getString("name"))
             "lights" -> Lights.set(context, input.optString("which", "all"), if (input.has("on")) input.optBoolean("on") else null,
                 if (input.has("brightness")) input.optInt("brightness") else null, input.optString("color").ifBlank { null })

@@ -139,6 +139,28 @@ object Status {
     }
 }
 
+/** "Brief me": the morning rundown, only when he asks. Raw facts; Claude turns them into a spoken briefing. */
+object Briefing {
+    fun build(context: Context): String {
+        val parts = mutableListOf<String>()
+        fun add(label: String, f: () -> String?) { try { f()?.takeIf { it.isNotBlank() }?.let { parts.add("$label: $it") } } catch (e: Exception) { Problems.log(context, "briefing $label: ${e.message}") } }
+        add("Time") { java.text.SimpleDateFormat("EEEE h:mm a", java.util.Locale.US).format(java.util.Date()) }
+        add("Weather") { Weather.now(context)?.let { it + Weather.roadsNote(context) } }
+        add("Next shift") { Shifts.nextLine(context) }
+        add("Calendar today") { if (Cal.allowed(context)) Cal.events(context, "today", 1) else null }
+        add("Baby") { Baby.status(context) }
+        add("Money") { "earned today ${Earnings.money(Earnings.today(context))}. " + Earnings.summary(context) }
+        add("Lists") { Lists.read(context, null) }
+        add("Reminders") {
+            val r = Prefs(context).reminders()
+            if (r.length() == 0) null else (0 until r.length()).map { r.getJSONObject(it) }.sortedBy { it.getLong("at") }.take(3)
+                .joinToString("; ") { "${it.optString("label")} at ${Scheduler.clock(it.getLong("at"))}" }
+        }
+        add("Phone") { Status.battery(context).let { (l, c) -> "battery $l%" + if (c) " charging" else "" } }
+        return parts.joinToString("\n") + "\n(Speak this as a short morning briefing, like JARVIS: lead with what matters for his day, skip anything empty or routine, about four or five sentences.)"
+    }
+}
+
 /** "Where are you?" — loud even on silent, through the alarm channel. */
 object FindPhone {
     fun ring(context: Context): String {

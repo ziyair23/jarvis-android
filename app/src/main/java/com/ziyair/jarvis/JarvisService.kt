@@ -70,7 +70,9 @@ class JarvisService : Service() {
         main.postDelayed(object : Runnable {
             override fun run() {
                 try {
-                    if (prefs.running && !busy && wakeWord?.alive() != true && !inCall()) { Problems.log(this@JarvisService, "wake word restarted"); startWakeWord() }
+                    if (prefs.running && !busy && !earOn() && wakeWord?.alive() != true && !inCall()) { Problems.log(this@JarvisService, "ears restarted"); startWakeWord() }
+                    // phone ears ready but not in use (after a failure or the download just finishing): switch over when idle
+                    if (prefs.running && !busy && !earOn() && Ear.ready(this@JarvisService) && !inCall()) startWakeWord()
                     if (Stealth.expired(prefs)) startService(Intent(this@JarvisService, JarvisService::class.java).setAction(ACTION_QUIET_END))
                 } catch (_: Exception) {}
                 main.postDelayed(this, 30_000)
@@ -84,6 +86,8 @@ class JarvisService : Service() {
             if (Piper.installed(this) && !Piper.pickReady(this) && !metered) Piper.download(this)
             Piper.warm(this)
             prepareLines()
+            if (!Ear.ready(this) && !metered) Ear.download(this)
+            if (Ear.ready(this)) Ear.recognizer(this)   // load it now so the first request isn't slow
         }
         // whenever he unlocks the phone, see if there's a new build to slip in (checks GitHub at most hourly)
         registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT))
@@ -218,6 +222,8 @@ class JarvisService : Service() {
                     val th = brain.config().optDouble("wake_threshold", 0.5).toFloat()
                     wakeWord = WakeWord(applicationContext, th) { main.post { if (speaking) interrupt() else onWake() } }
                 }
+                // the one-ear stream: the wake word just listens to it, no separate mic
+                if (ensureEar()) { ear?.set(if (whileSpeaking) Ear.Mode.SPEAKING else Ear.Mode.SLEEP); return@post }
                 wakeWord?.sensitive(!whileSpeaking)
                 wakeWord?.start()
             } catch (e: Exception) {
@@ -228,7 +234,91 @@ class JarvisService : Service() {
     }
 
     private fun stopWakeWord() {
+        ear?.let { if (it.alive()) { it.set(Ear.Mode.MUTE); return } }
         try { wakeWord?.stop() } catch (_: Exception) {}
+    }
+
+    // ---------------- the one ear ----------------
+    private var ear: Ear? = null
+    private var earBrokenAt = 0L
+    private var earListening = false
+    private var earFirst = false
+    private fun earOn() = ear?.alive() == true
+
+    /** Starts the one-ear stream if it's set up (model downloaded, not switched off remotely, not broken recently). */
+    private fun ensureEar(): Boolean {
+        if (earOn()) return true
+        if (!prefs.running || inCall()) return false
+        if (System.currentTimeMillis() - earBrokenAt < 10 * 60_000L) return false
+        if (brain.config().optString("ears", "phone") != "phone" || !Ear.ready(this)) return false
+        val w = wakeWord ?: return false
+        try { w.stop() } catch (_: Exception) {}
+        try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
+        recognizer = null
+        val e = Ear(applicationContext, w, main, earEvents)
+        ear = e
+        if (!e.start()) { ear = null; return false }
+        Trace.log(this, "ears", "one-ear stream on")
+        return true
+    }
+
+    private val earEvents = object : Ear.Events {
+        override fun onWake() {
+            if (speaking) { interrupt(); return }
+            if (busy) return
+            this@JarvisService.onWake(fromEar = true)
+        }
+        override fun onSpeechStart() {
+            if (!earListening) return
+            openWindow(30)   // he's talking: wait for him to finish, however long
+            Trace.log(this@JarvisService, "speech", "he started talking")
+        }
+        override fun onHeard(text: String, speechMs: Long, decodeMs: Long) {
+            Trace.log(this@JarvisService, "heard", "\"$text\" (${speechMs / 1000.0}s of speech, ${decodeMs}ms to read)")
+            if (!earListening) return
+            earListening = false
+            listenSession++
+            handle(text, followUp = !earFirst)
+        }
+        override fun onNoise() {
+            if (!earListening) return
+            Trace.log(this@JarvisService, "noise", "sound but no words")
+            openWindow(convoSeconds().coerceAtMost(5))
+            ear?.set(Ear.Mode.LISTEN)
+        }
+        override fun onEarFailed(why: String) {
+            Problems.log(this@JarvisService, "ears failed, using Google listening for now: $why")
+            earBrokenAt = System.currentTimeMillis()
+            try { ear?.stop() } catch (_: Exception) {}
+            ear = null
+            val wasListening = earListening
+            earListening = false
+            if (wasListening && busy) listen(earFirst) else if (!busy) startWakeWord()
+        }
+    }
+
+    /** Listening for his request on the one-ear stream: no beeps, no mic handoff; it ends when he stops talking. */
+    private fun earListen(firstTurn: Boolean) {
+        val e = ear ?: return listen(firstTurn)
+        earFirst = firstTurn
+        earListening = true
+        val session = ++listenSession
+        Orb.set(this, Orb.LISTEN)
+        e.set(Ear.Mode.LISTEN)
+        val tick = object : Runnable {
+            override fun run() {
+                if (!earListening || session != listenSession) return
+                if (!earOn()) return
+                if (System.currentTimeMillis() > listenUntil && !e.speechStarted) {
+                    earListening = false
+                    Trace.log(this@JarvisService, "silence", "nothing said, going back to sleep")
+                    finishTurn()
+                    return
+                }
+                main.postDelayed(this, 200)
+            }
+        }
+        main.postDelayed(tick, 200)
     }
 
     /** Heard "Jarvis" (or the Talk button): chime, then listen for the request. */
@@ -238,16 +328,17 @@ class JarvisService : Service() {
         return mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_RINGTONE
     }
 
-    private fun onWake(manual: Boolean = false) {
+    private fun onWake(manual: Boolean = false, fromEar: Boolean = false) {
         if (busy) return
         if (!manual && inCall()) { startWakeWord(); return }
+        Trace.turn(this, if (manual) "talk button" else if (fromEar) "heard his name (one ear)" else "heard his name")
         busy = true
         followUps = 0
         chatted = false
         inConvo = true
         ignoredInRow = 0
         acquire()
-        stopWakeWord()
+        if (!(fromEar && earOn())) stopWakeWord()   // the one ear is already listening for his request: leave it be
         holdFocus(true)
         val cfg = brain.config()
         val wakeSecs = cfg.optInt("wake_seconds", 5)
@@ -258,6 +349,26 @@ class JarvisService : Service() {
         val line = if (!stealth && cfg.optString("wake_reply", "voice") == "voice" && Piper.installed(this) && prefs.ttsKey.isBlank()) Persona.wakeLine(this, cfg) else null
         val clip = line?.let { Piper.cached(this, it, speed) }
         val go = { openWindow(wakeSecs); listen(firstTurn = true) }
+        // one ear: he may have said it all in one breath ("Jarvis, what time is it"); if he's already talking, skip the greeting
+        if (fromEar && earOn()) {
+            val e = ear!!
+            // the ear is already catching what he says next
+            earFirst = true
+            earListening = true
+            listenSession++
+            main.postDelayed({
+                if (!busy || thinking || !earListening) return@postDelayed
+                if (e.speechStarted) { Trace.log(this, "wake", "already talking, no greeting"); openWindow(wakeSecs); earListen(true); return@postDelayed }
+                earListening = false
+                e.set(Ear.Mode.MUTE)
+                if (clip != null && playPcm(clip.first, clip.second) { main.postDelayed({ go() }, 120) }) return@postDelayed
+                if (line != null) prepareLines()
+                if (!stealth) Sfx.play("wake")
+                main.postDelayed({ go() }, Sfx.lengthMs("wake") + 120)
+            }, brain.config().optLong("same_breath_ms", 350L))
+            Orb.set(this, Orb.LISTEN)
+            return
+        }
         if (clip != null && playPcm(clip.first, clip.second) { main.postDelayed({ go() }, 120) }) return
         if (line != null) prepareLines()
         Orb.set(this, Orb.LISTEN)
@@ -356,6 +467,7 @@ class JarvisService : Service() {
     }
 
     private fun listen(firstTurn: Boolean) {
+        if (earOn() || (prefs.running && ensureEar())) { earListen(firstTurn); return }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { speak("Speech recognition isn't available on this phone, sir.") { finishTurn() }; return }
         try { recognizer?.destroy() } catch (_: Exception) {}
         stopWakeWord()
@@ -381,10 +493,12 @@ class JarvisService : Service() {
                 if (!live()) return
                 retries = 0
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty().ifBlank { lastPartial }
+                Trace.log(this@JarvisService, "heard", "\"$text\" (google)")
                 if (text.isBlank()) { done = true; noSpeech(firstTurn) } else take(text)
             }
             override fun onError(error: Int) {
                 if (!live()) return
+                Trace.log(this@JarvisService, "google", "recognizer error $error")
                 done = true
                 if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) Problems.log(this@JarvisService, "speech recognizer error $error")
                 // the recognizer wasn't ready yet: try again shortly instead of giving up
@@ -448,6 +562,7 @@ class JarvisService : Service() {
     /** He said "Jarvis" while Jarvis was talking: stop talking and listen to him. */
     private fun interrupt() {
         if (!speaking) return
+        Trace.log(this, "interrupt", "he said Jarvis while I was talking")
         speaking = false
         stopWakeWord()
         hush()
@@ -473,7 +588,7 @@ class JarvisService : Service() {
     private fun afterSpeaking(fn: () -> Unit) { main.postDelayed(fn, 350) }
 
     private fun handle(text: String, followUp: Boolean = false) {
-        if (isStop(text)) { stopListening(text); return }
+        if (isStop(text)) { Trace.log(this, "stop", "\"$text\""); stopListening(text); return }
         val lower = text.lowercase(Locale.US)
         if (Regex("^(never ?mind|thanks?( you)?,? (jarvis|that'?s (it|all))|thank you,? jarvis|nothing|no thanks?|i'?m good|that'?ll be all|goodbye|see you)\\b").containsMatchIn(lower)
             || Regex("^(thanks|thank you|cheers)[.!]?$").matches(lower)) {
@@ -487,19 +602,23 @@ class JarvisService : Service() {
         quiet(false)
         acquire()
         Orb.set(this, Orb.THINK)
+        thinkingSound(turn)
 
         chatted = true
         // with Jarvis's own voice he starts talking as soon as the first sentence is ready
         val wasQuiet = Stealth.on(prefs)
         val live = if (!wasQuiet && Piper.installed(this) && prefs.ttsKey.isBlank() && Cast.mode(prefs) != "everything")
-            SpeechStream(this, brain.config().optDouble("piper_speed", 1.0).toFloat(), main) { acking }.also { stream = it } else null
+            SpeechStream(this, brain.config().optDouble("piper_speed", 1.0).toFloat(), main, brain.config().optInt("sentence_gap_ms", 160)) { acking }.also { stream = it } else null
         thread {
             // quick everyday commands are done right here on the phone: instant, and free
+            val t0 = System.currentTimeMillis()
             val quick = Reflex.handle(this, text)
-            if (quick != null) brain.lastTools.clear()
+            if (quick != null) { brain.lastTools.clear(); Trace.log(this, "reflex", "handled on the phone: ${quick.reply}") }
+            else Trace.log(this, "ask", if (followUp) "follow-up to Claude" else "to Claude")
             val reply = quick?.reply ?: brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false); Orb.set(this@JarvisService, Orb.SPEAK) }; s.add(line) } }) { main.post { ack() } }
+            Trace.log(this, "reply", "${System.currentTimeMillis() - t0}ms, tools ${brain.lastTools.joinToString(",").ifBlank { "none" }}: \"${reply.take(160)}\"")
             main.post {
-                if (turn != turnId) { live?.cancel(); return@post }   // he cancelled while it was thinking
+                if (turn != turnId) { live?.cancel(); Trace.log(this, "dropped", "cancelled while thinking"); return@post }   // he cancelled while it was thinking
                 if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { live?.cancel(); inConvo = false; finishTurn(); return@post }
                 // heard chatter that wasn't for him: drop it silently; twice in a row and the conversation's over
                 if (reply.isBlank()) { live?.cancel(); ignoredInRow++; nextTurn(ignoredInRow < 2); return@post }
@@ -605,6 +724,8 @@ class JarvisService : Service() {
 
     private fun finishTurn() {
         Orb.set(this, Orb.HIDDEN)
+        earListening = false
+        Trace.log(this, "done", "back to waiting for his name")
         speaking = false
         thinking = false
         inConvo = false
@@ -631,6 +752,19 @@ class JarvisService : Service() {
     private var stream: SpeechStream? = null
     private var casting = false
     private val ACKS = listOf("On it, sir.", "Right away, sir.", "One moment, sir.", "On it.")
+    /** A soft pulse while he's working on a longer answer, instead of dead air. Stops the moment he speaks. */
+    private fun thinkingSound(turn: Int) {
+        if (!brain.config().optBoolean("thinking_sound", true) || Stealth.on(prefs)) return
+        val r = object : Runnable {
+            override fun run() {
+                if (turn != turnId || !thinking || speaking || acking || stream?.started == true) return
+                Sfx.play("think")
+                main.postDelayed(this, 1400)
+            }
+        }
+        main.postDelayed(r, brain.config().optLong("thinking_after_ms", 1100L))
+    }
+
     private fun ack() {
         if (stream?.started == true || Stealth.on(prefs)) return
         speak(Persona.ack(brain.config())) { acking = false }
@@ -783,6 +917,9 @@ class JarvisService : Service() {
         track = null
         restoreSound()
         holdFocus(false)
+        earListening = false
+        try { ear?.stop() } catch (_: Exception) {}
+        ear = null
         try { wakeWord?.close() } catch (_: Exception) {}
         wakeWord = null
         recognizer?.destroy(); recognizer = null
@@ -799,6 +936,7 @@ class JarvisService : Service() {
         try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(carWatch) } catch (_: Exception) {}
         DriveMode.on = false
         quiet(false)
+        try { ear?.stop() } catch (_: Exception) {}
         try { wakeWord?.close() } catch (_: Exception) {}
         recognizer?.destroy()
         tts?.shutdown()

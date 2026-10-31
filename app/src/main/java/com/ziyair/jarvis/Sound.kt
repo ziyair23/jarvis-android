@@ -55,6 +55,8 @@ object Sfx {
         "off" -> tone(950.0, 440.0, 0.20, 0.28)
         "alert" -> join(tone(1175.0, 1175.0, 0.09, 0.30), gap(0.05), tone(1568.0, 1568.0, 0.14, 0.30))
         "error" -> tone(330.0, 196.0, 0.30, 0.32)
+        // a soft "working on it" pulse, quiet enough to sit under the room
+        "think" -> join(tone(523.0, 560.0, 0.08, 0.10), gap(0.06), tone(659.0, 700.0, 0.10, 0.08))
         else -> tone(1000.0, 1000.0, 0.08, 0.25)
     }
 

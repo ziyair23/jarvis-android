@@ -7,6 +7,7 @@ import org.json.JSONObject
 /** A small log of anything that went wrong (shown on the dashboard's Chat tab), so problems can be found and fixed. */
 object Problems {
     @Synchronized fun log(context: Context, what: String) {
+        Trace.log(context, "problem", what)
         try {
             val p = Prefs(context)
             val a = all(p)

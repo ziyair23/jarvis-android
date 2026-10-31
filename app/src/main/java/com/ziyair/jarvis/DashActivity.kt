@@ -59,6 +59,7 @@ class DashActivity : Activity() {
                 .put("stealth", Stealth.on(p))
                 .put("lists", Lists.all(p)).put("expenses", Expenses.all(p))
                 .put("problems", Problems.all(p))
+                .put("ears", Ear.status(ctx))
                 .put("spend", Spend.thisMonth(p)).put("budget", Spend.budget(p))
                 .put("reminders", p.reminders())
                 .put("history", p.history())
@@ -86,6 +87,7 @@ class DashActivity : Activity() {
             startForegroundService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_LISTEN))
         }
         @JavascriptInterface fun quietEnd() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_QUIET_END)) }
+        @JavascriptInterface fun shareLog() = runOnUiThread { Trace.share(ctx) }
         @JavascriptInterface fun quietStart() { Stealth.start(ctx, null); LogBus.changed() }
         @JavascriptInterface fun listAdd(items: String) { if (items.isNotBlank()) Lists.add(ctx, items, "list"); LogBus.changed() }
         @JavascriptInterface fun listToggle(list: String, at: String) { Lists.toggle(ctx, list, at.toLong()); LogBus.changed() }

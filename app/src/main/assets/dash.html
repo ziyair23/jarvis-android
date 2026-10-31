@@ -163,7 +163,7 @@ section.on{display:block}
   <div class="card"><div class="label">What Jarvis remembers</div><ul class="list" id="mem-list"></ul></div>
 </section>
 
-<section id="s-chat"><div class="card" id="probs" style="display:none"><div class="label">Recent problems <button class="x" style="float:right;margin-top:-10px" onclick="J.clearProblems()">clear</button></div><ul class="list" id="prob-list"></ul></div><div class="card chat" id="chat"></div></section>
+<section id="s-chat"><div class="card"><div class="label">Flight recorder</div><p class="dim" id="ears-line" style="margin:4px 0 12px">Every turn Jarvis takes, with timings, so glitches can be fixed.</p><button style="width:100%" onclick="J.shareLog()">Send log to Claude</button></div><div class="card" id="probs" style="display:none"><div class="label">Recent problems <button class="x" style="float:right;margin-top:-10px" onclick="J.clearProblems()">clear</button></div><ul class="list" id="prob-list"></ul></div><div class="card chat" id="chat"></div></section>
 
 <nav>
   <button class="on" data-s="today">Today</button>
@@ -281,6 +281,7 @@ function load() {
   const mem = []; for (let i = 0; i < D.memory.length; i++) mem.push(D.memory[i]);
   $('mem-list').innerHTML = mem.length ? mem.slice().reverse().map(f => `<li><span>${esc(f)}</span><button class="x" aria-label="Forget" data-f="${esc(f)}" onclick="if(confirm('Forget this?'))J.forget(this.dataset.f)">×</button></li>`).join('') : '<li class="empty">Nothing yet. He learns as you talk.</li>';
 
+  if (D.ears) $('ears-line').textContent = 'Ears: ' + D.ears + '. Every turn is logged with timings, so glitches can be fixed.';
   // problems (helps track down anything that misbehaves)
   const pr = []; for (let i = 0; i < (D.problems || []).length; i++) pr.push(D.problems[i]);
   $('probs').style.display = pr.length ? 'block' : 'none';

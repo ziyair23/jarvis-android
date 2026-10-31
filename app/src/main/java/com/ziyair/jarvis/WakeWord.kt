@@ -38,6 +38,41 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
         wake = load("hey_jarvis.onnx")
     }
 
+    // streaming state (one 80 ms chunk at a time)
+    private val raw = ShortArray(CHUNK + 480)          // this chunk plus 3 hops of context, like the Python code
+    private val melFrames = ArrayList<FloatArray>()     // rows of 32
+    private val embeddings = ArrayList<FloatArray>()    // rows of 96
+    private var hits = 0
+
+    @Synchronized fun reset() {
+        java.util.Arrays.fill(raw, 0.toShort())
+        melFrames.clear(); embeddings.clear(); hits = 0
+        repeat(76) { melFrames.add(FloatArray(32) { 1f }) }
+    }
+
+    init { reset() }
+
+    /** Feed one 80 ms chunk (1280 samples, 16 kHz). True when "Hey Jarvis" was just heard. Used by the Ear too. */
+    @Synchronized fun feed(chunk: ShortArray): Boolean {
+        System.arraycopy(raw, CHUNK, raw, 0, 480)
+        System.arraycopy(chunk, 0, raw, 480, CHUNK)
+        melFrames.addAll(melspec(raw))
+        while (melFrames.size > 97) melFrames.removeAt(0)
+        if (melFrames.size < 76) return false
+        embeddings.add(embed(melFrames.subList(melFrames.size - 76, melFrames.size)))
+        while (embeddings.size > 16) embeddings.removeAt(0)
+        if (embeddings.size < 16) return false
+        val score = score(embeddings)
+        val th = (if (audio.isMusicActive) threshold * 0.85f else threshold) * boost
+        hits = if (score >= th) hits + 1 else 0
+        if (hits >= 2) {
+            hits = 0
+            embeddings.clear()           // don't fire twice on the same words
+            return true
+        }
+        return false
+    }
+
     @SuppressLint("MissingPermission")
     fun start() {
         if (running && worker?.isAlive == true) return
@@ -52,11 +87,7 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
             try { if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) android.media.audiofx.AcousticEchoCanceler.create(rec.audioSessionId)?.let { it.enabled = true; fx.add(it) } } catch (_: Exception) {}
             try { if (android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(rec.audioSessionId)?.let { it.enabled = true; fx.add(it) } } catch (_: Exception) {}
             val chunk = ShortArray(CHUNK)
-            val raw = ShortArray(CHUNK + 480)          // this chunk plus 3 hops of context, like the Python code
-            val melFrames = ArrayList<FloatArray>()     // rows of 32
-            val embeddings = ArrayList<FloatArray>()    // rows of 96
-            repeat(76) { melFrames.add(FloatArray(32) { 1f }) }
-            var hits = 0
+            reset()
             try {
                 rec.startRecording()
                 while (running) {
@@ -67,25 +98,7 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
                         got += n
                     }
                     if (!running || got < CHUNK) continue
-                    System.arraycopy(raw, CHUNK, raw, 0, 480)
-                    System.arraycopy(chunk, 0, raw, 480, CHUNK)
-
-                    melFrames.addAll(melspec(raw))
-                    while (melFrames.size > 97) melFrames.removeAt(0)
-                    if (melFrames.size < 76) continue
-                    embeddings.add(embed(melFrames.subList(melFrames.size - 76, melFrames.size)))
-                    while (embeddings.size > 16) embeddings.removeAt(0)
-                    if (embeddings.size < 16) continue
-
-                    val score = score(embeddings)
-                    val th = (if (audio.isMusicActive) threshold * 0.85f else threshold) * boost
-                    hits = if (score >= th) hits + 1 else 0
-                    if (hits >= 2) {
-                        hits = 0
-                        embeddings.clear()           // don't fire twice on the same words
-                        running = false
-                        onWake()
-                    }
+                    if (feed(chunk)) { running = false; onWake() }
                 }
             } catch (_: Exception) {
             } finally {
