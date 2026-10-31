@@ -195,6 +195,15 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
             else -> "Google for now (phone ears download on Wi-Fi, $MB MB)"
         }
 
+        fun loaded() = rec != null
+        @Volatile private var loading = false
+        /** Load the speech model off the main thread (it's ~130 MB; loading it on the main thread would freeze the screen). */
+        fun loadAsync(c: Context) {
+            if (rec != null || loading || !ready(c)) return
+            loading = true
+            Thread { try { recognizer(c) } finally { loading = false } }.start()
+        }
+
         @Synchronized fun recognizer(c: Context): OfflineRecognizer? {
             rec?.let { return it }
             if (!ready(c)) return null

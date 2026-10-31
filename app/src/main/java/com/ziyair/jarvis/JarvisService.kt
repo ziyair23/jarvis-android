@@ -251,6 +251,7 @@ class JarvisService : Service() {
         if (!prefs.running || inCall()) return false
         if (System.currentTimeMillis() - earBrokenAt < 10 * 60_000L) return false
         if (brain.config().optString("ears", "phone") != "phone" || !Ear.ready(this)) return false
+        if (!Ear.loaded()) { Ear.loadAsync(this); return false }   // switches over once it's loaded
         val w = wakeWord ?: return false
         try { w.stop() } catch (_: Exception) {}
         try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
