@@ -49,6 +49,24 @@ object Music {
     fun play(context: Context, pkg: String, name: String, query: String, song: String?): String {
         val before = title(Apps.player(context, pkg))
         wasPlaying = playing(Apps.player(context, pkg)); seen = Apps.player(context, pkg) != null
+        // Jarvis lets go of the speaker first: while he holds it the music app is paused, and when he let go
+        // it resumed whatever was loaded before (the old song) instead of the one he asked for
+        JarvisService.focus?.invoke(false)
+        Thread.sleep(250)
+        // 0. the same "play this" request Google Assistant sends: the app searches and plays the top result itself
+        if (Settings.canDrawOverlays(context)) try {
+            val i = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).setPackage(pkg)
+                .putExtra(android.app.SearchManager.QUERY, query)
+                .putExtra(android.provider.MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (!song.isNullOrBlank()) i.putExtra(android.provider.MediaStore.EXTRA_MEDIA_TITLE, song)
+            if (i.resolveActivity(context.packageManager) != null) {
+                context.startActivity(i)
+                Trace.log(context, "music", "asked $name to play \"$query\" (assistant request)")
+                if (started(context, pkg, before, 7000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+                Trace.log(context, "music", "still playing \"${title(Apps.player(context, pkg))}\", trying the next way")
+            }
+        } catch (e: Exception) { Trace.log(context, "music", "assistant request failed: ${e.message}") }
         // 1a. the app is already open in the background: ask its player directly
         Apps.player(context, pkg)?.let { c ->
             try { c.transportControls.playFromSearch(query, Bundle()) } catch (_: Exception) {}

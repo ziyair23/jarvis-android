@@ -74,7 +74,8 @@
   "ear_vad_threshold": 0.5,
   "ear_max_speech_s": 25,
   "same_breath_ms": 350,
-  "thinking_sound": true,
+  "thinking_sound": false,
   "thinking_after_ms": 1100,
-  "sentence_gap_ms": 160
+  "sentence_gap_ms": 160,
+  "music_wake_factor": 0.7
 }

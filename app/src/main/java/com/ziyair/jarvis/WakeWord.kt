@@ -27,6 +27,8 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
     @Volatile private var running = false
     /** A bit harder to trigger while Jarvis is talking, so his own voice coming out of the speaker can't set it off. */
     @Volatile private var boost = 1f
+    /** How much easier "Hey Jarvis" is to trigger while music is playing (set from config). */
+    @Volatile var musicFactor = 0.7f
     fun sensitive(normal: Boolean) { boost = if (normal) 1f else 1.15f }
     private var worker: Thread? = null
 
@@ -63,9 +65,11 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
         while (embeddings.size > 16) embeddings.removeAt(0)
         if (embeddings.size < 16) return false
         val score = score(embeddings)
-        val th = (if (audio.isMusicActive) threshold * 0.85f else threshold) * boost
+        val music = audio.isMusicActive
+        val th = (if (music) threshold * musicFactor else threshold) * boost
         hits = if (score >= th) hits + 1 else 0
-        if (hits >= 2) {
+        // over music his voice is partly drowned out: one clear hit is enough
+        if (hits >= 2 || (music && hits >= 1 && score >= threshold * 0.95f * boost)) {
             hits = 0
             embeddings.clear()           // don't fire twice on the same words
             return true

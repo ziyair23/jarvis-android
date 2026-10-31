@@ -54,6 +54,7 @@ class JarvisService : Service() {
         super.onCreate()
         prefs = Prefs(this)
         brain = Brain(this)
+        focus = { on -> val l = java.util.concurrent.CountDownLatch(1); main.post { holdFocus(on); l.countDown() }; l.await(500, java.util.concurrent.TimeUnit.MILLISECONDS) }
         restoreSound()
         tone = try { ToneGenerator(AudioManager.STREAM_MUSIC, 60) } catch (_: Exception) { null }
         tts = TextToSpeech(this) { status ->
@@ -222,6 +223,7 @@ class JarvisService : Service() {
                     val th = brain.config().optDouble("wake_threshold", 0.5).toFloat()
                     wakeWord = WakeWord(applicationContext, th) { main.post { if (speaking) interrupt() else onWake() } }
                 }
+                wakeWord?.musicFactor = brain.config().optDouble("music_wake_factor", 0.7).toFloat()
                 // the one-ear stream: the wake word just listens to it, no separate mic
                 if (ensureEar()) { ear?.set(if (whileSpeaking) Ear.Mode.SPEAKING else Ear.Mode.SLEEP); return@post }
                 wakeWord?.sensitive(!whileSpeaking)
@@ -755,7 +757,7 @@ class JarvisService : Service() {
     private val ACKS = listOf("On it, sir.", "Right away, sir.", "One moment, sir.", "On it.")
     /** A soft pulse while he's working on a longer answer, instead of dead air. Stops the moment he speaks. */
     private fun thinkingSound(turn: Int) {
-        if (!brain.config().optBoolean("thinking_sound", true) || Stealth.on(prefs)) return
+        if (!brain.config().optBoolean("thinking_sound", false) || Stealth.on(prefs)) return
         val r = object : Runnable {
             override fun run() {
                 if (turn != turnId || !thinking || speaking || acking || stream?.started == true) return
@@ -957,6 +959,8 @@ class JarvisService : Service() {
         const val ACTION_SAY = "com.ziyair.jarvis.SAY"
         const val ACTION_QUIET_END = "com.ziyair.jarvis.QUIET_END"
         const val ACTION_HUSH = "com.ziyair.jarvis.HUSH"
+        /** Lets the music player take the speaker back (true = Jarvis holds it, false = let go). */
+        @Volatile var focus: ((Boolean) -> Unit)? = null
     }
 }
 
