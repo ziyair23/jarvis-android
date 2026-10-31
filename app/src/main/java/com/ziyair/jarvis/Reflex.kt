@@ -38,6 +38,7 @@ object Reflex {
         if (t.isEmpty() || t.split(" ").size > 9) return null
         val hit = try { match(c, t) } catch (e: Exception) { Problems.log(c, "reflex: ${e.message}"); null } ?: return null
         // Claude still sees it in the conversation, so "and turn it up a bit" afterwards makes sense to him
+        if (hit.reply == "Dropped, sir.") return hit
         val p = Prefs(c)
         p.addTurn("user", text)
         p.addTurn("assistant", hit.reply)
@@ -47,6 +48,13 @@ object Reflex {
     private fun match(c: Context, t: String): Hit? {
         val now = Date()
         when {
+            // "drop it": wipe the running conversation so he stops circling back to something
+            m(t, "drop it|let it go|change the subject|new topic|stop (talking|bringing) (about |up )?(it|that|this)( up)?|stop talking about (it|that|this)|clear (the |our )?(chat|conversation)|start fresh|forget (about )?(it|that)") -> {
+                Prefs(c).clearHistory()
+                Inbox.lastAnnounced = null
+                Memory.purgeSensitive(c)
+                return Hit("Dropped, sir.", true)
+            }
             m(t, "what time is it|what's the time|what is the time|time|what time is it right now|got the time") ->
                 return Hit("It's ${SimpleDateFormat("h:mm", Locale.US).format(now)}, sir.")
             m(t, "what's the date|what is the date|what's today's date|what is today's date|what's the date today|what day is it|what day is today|what's today") -> {

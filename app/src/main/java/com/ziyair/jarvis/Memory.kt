@@ -15,9 +15,26 @@ object Memory {
         return (0 until a.length()).map { a.getJSONObject(it).optString("t") }.filter { it.isNotBlank() }
     }
 
+    /** Things that never go into long-term memory: dark jokes, self-harm, other people's private moments. */
+    private val SENSITIVE = Regex("kill (her|him|them|my)sel(f|ves)|kill myself|suicid|self[- ]?harm|end (her|his|my) life|want(s|ed)? to die|cutting (her|him|my)self|overdos", RegexOption.IGNORE_CASE)
+    fun sensitive(t: String) = SENSITIVE.containsMatchIn(t)
+
+    /** One-time clean up of anything like that already stored (memory and the recent conversation). */
+    @Synchronized fun purgeSensitive(context: Context): Int {
+        val p = Prefs(context)
+        var n = 0
+        val a = p.memory(); val keep = JSONArray()
+        for (i in 0 until a.length()) if (sensitive(a.getJSONObject(i).optString("t"))) n++ else keep.put(a.get(i))
+        p.saveMemory(keep)
+        val h = p.history(); val hk = JSONArray()
+        for (i in 0 until h.length()) if (sensitive(h.getJSONObject(i).optString("content"))) n++ else hk.put(h.get(i))
+        p.sp.edit().putString("history", hk.toString()).apply()
+        return n
+    }
+
     @Synchronized fun add(context: Context, fact: String): Boolean {
         val f = fact.trim().removeSuffix(".")
-        if (f.length < 3) return false
+        if (f.length < 3 || sensitive(f)) return false
         val prefs = Prefs(context)
         val a = prefs.memory()
         for (i in 0 until a.length()) if (a.getJSONObject(i).optString("t").equals(f, true)) return false
@@ -75,6 +92,7 @@ object Memory {
             "\"add\": new durable facts about him worth remembering for future days, each one short sentence in third person " +
             "(people in his life and their names, plans and dates, preferences, places, routines, ongoing projects, things he asked to remember). " +
             "Skip small talk, one-off questions, weather, and anything already remembered. " +
+            "Never save the content of messages read to him, jokes, arguments, or anything about self-harm, health scares or someone's private moments. " +
             "\"remove\": exact text of remembered facts that this conversation shows are wrong or out of date. Use empty lists if nothing changes."
         val body = JSONObject()
             .put("model", Brain(context).config().optString("memory_model", "claude-haiku-5-5"))

@@ -63,7 +63,11 @@ class JarvisService : Service() {
                 pickVoice()
             }
         }
-        thread { brain.refreshConfig(); Updater.check(this, busy = busy) }
+        thread {
+            brain.refreshConfig(); Updater.check(this, busy = busy)
+            val n = Memory.purgeSensitive(this)
+            if (n > 0) Trace.log(this, "memory", "cleared $n sensitive lines from memory and the conversation")
+        }
         Cast.discover(this)
         // undo any call mode left over from older builds
         try { val am = getSystemService(AudioManager::class.java); if (am.mode == AudioManager.MODE_IN_COMMUNICATION) am.mode = AudioManager.MODE_NORMAL } catch (_: Exception) {}

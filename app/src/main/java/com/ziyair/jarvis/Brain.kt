@@ -46,7 +46,8 @@ class Brain(private val context: Context) {
             "\nRight now it is " + now + "." +
             todaySoFar() +
             (if (DriveMode.on) "\nHE IS DRIVING: one short sentence per reply, never ask him to look at or touch the phone." else "") +
-            (Inbox.lastAnnounced?.let { if (System.currentTimeMillis() - it.at < 600_000) "\nYou just read him a message from ${it.sender} on ${it.app}: \"${it.text}\". If he dictates a reply, read it back and ask to send; reply with reply_message who='last'." else "" } ?: "") +
+            (Inbox.lastAnnounced?.let { if (System.currentTimeMillis() - it.at < 180_000) "\nYou just read him a message from ${it.sender} on ${it.app}. If he dictates a reply, read it back and ask to send; reply with reply_message who='last'. Don't comment on the message itself." else "" } ?: "") +
+            "\nMessages you read out are his private business: read them, then drop them. Never bring a message up again, never lecture or check in about it, unless he asks. If something in one genuinely worries you, say so once, in one short sentence, and then leave it completely; jokes between him and the people close to him are theirs." +
             "\nYou are speaking out loud through his phone, so never use lists, markdown, emojis or URLs." +
             "\nYou can act on his phone with your tools (timers, reminders, alarms, calls, texts, directions, music, weather). When he tells you something worth keeping for future days, or asks you to remember something, save it with remember. Use them when he asks, then confirm in one short line. Times you pass to tools are 24-hour local time." +
             "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. When he mentions something to buy or do later ('we need wipes', 'add milk'), put it on a list; when he mentions paying for gas, food or car stuff, log it with log_expense (his Jarvis spending on Claude is 'spending', not an expense). If he asked you something and a tool can do it, do it rather than telling him how." +
@@ -77,6 +78,7 @@ class Brain(private val context: Context) {
             val m = h.getJSONObject(i)
             val at = m.optLong("at", 0)
             var content = m.getString("content")
+            if (m.getString("role") == "assistant" && content.startsWith("Message from ") && System.currentTimeMillis() - at > 180_000) continue
             // older turns carry their time so he knows they're from before, not right now
             if (m.getString("role") == "user" && System.currentTimeMillis() - at > 2 * 3600_000L) content = "[earlier, ${stamp.format(Date(at))}] $content"
             msgs.put(JSONObject().put("role", m.getString("role")).put("content", content))
@@ -116,7 +118,7 @@ class Brain(private val context: Context) {
             val body = JSONObject()
                 .put("model", model)
                 .put("max_tokens", maxTokens)
-                .put("system", systemPrompt(cfg) + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can misfire on TV or nearby conversation. If what you heard is clearly not a request or question for you (background talk, half a sentence, TV), reply with exactly [ignore]." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. Only if it is obviously not meant for you (clearly him talking to someone else, the TV, song lyrics), reply with exactly [ignore]. When in doubt, it's for you: answer it." else "")
+                .put("system", systemPrompt(cfg) + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can occasionally misfire on the TV. Only if what you heard is obviously not meant for you (TV dialogue, song lyrics, or a meaningless one or two word fragment) reply with exactly [ignore]. Anything that could be a request or a question, even garbled, is for you: work out what he meant and answer it." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. Only if it is obviously not meant for you (clearly him talking to someone else, the TV, song lyrics), reply with exactly [ignore]. When in doubt, it's for you: answer it." else "")
                 .put("tools", tools)
                 .put("messages", clean)
             val (code, resp) = try {
