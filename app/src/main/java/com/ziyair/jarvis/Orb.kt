@@ -35,6 +35,7 @@ object Orb {
 
     private val main = Handler(Looper.getMainLooper())
     private var view: OrbView? = null
+    private var warned = false
 
     fun set(c: Context, s: Int) {
         state = s
@@ -45,6 +46,38 @@ object Orb {
 
     fun level(v: Float) { level = v.coerceIn(0f, 1f) }
 
+    // ---- his actual voice: loudness every 20 ms of what's being played, read against the speaker's position ----
+    private val env = ArrayList<Float>()
+    private var envRate = 24000
+    @Volatile private var head: (() -> Long)? = null
+    @Synchronized fun voiceStart(rate: Int, playhead: () -> Long) { env.clear(); envRate = rate; head = playhead }
+    @Synchronized fun voiceAdd(s: FloatArray) {
+        val w = maxOf(1, envRate / 50)
+        var i = 0
+        while (i < s.size) {
+            var m = 0f
+            val end = minOf(i + w, s.size)
+            for (j in i until end) { val a = abs(s[j]); if (a > m) m = a }
+            env.add(m); i = end
+        }
+    }
+    /** 0..1 how loud he is right now, or -1 if unknown (phone voice). */
+    @Synchronized fun voiceLevel(): Float {
+        val h = head ?: return -1f
+        val pos = try { h() } catch (_: Exception) { return -1f }
+        val idx = (pos / maxOf(1, envRate / 50)).toInt()
+        val v = env.getOrNull(idx) ?: return 0f
+        return (v * 2.6f).coerceIn(0f, 1f)
+    }
+    fun voiceEnd() { head = null }
+
+    /** For the in-app orb: state and live level. */
+    fun now(): Pair<Int, Float> = state to when (state) { LISTEN -> level; SPEAK -> voiceLevel(); else -> 0f }
+
+    /** True while the Jarvis app is open on screen (it has its own big orb, so the floating one steps aside). */
+    @Volatile var inApp = false
+        set(v) { field = v; main.post { if (v) view?.let { it.alpha = 0f } else if (state != HIDDEN) view?.let { it.alpha = 1f } } }
+
     fun enabled(c: Context): Boolean {
         val p = Prefs(c)
         return p.sp.getBoolean("show_orb", true) && Brain(c).config().optBoolean("orb", true) && !Stealth.on(p)
@@ -53,8 +86,8 @@ object Orb {
     private fun dp(c: Context, v: Int) = (v * c.resources.displayMetrics.density).toInt()
 
     private fun show(c: Context) {
-        view?.let { it.animate().cancel(); it.animate().alpha(1f).setDuration(150).start(); return }
-        if (!Settings.canDrawOverlays(c)) return
+        view?.let { it.animate().cancel(); it.animate().alpha(if (inApp) 0f else 1f).setDuration(150).start(); return }
+        if (!Settings.canDrawOverlays(c)) { if (!warned) { warned = true; Trace.log(c, "orb", "can't float the orb: 'Display over other apps' is off for Jarvis") }; return }
         try { if (!enabled(c)) return } catch (_: Exception) { return }
         val wm = c.getSystemService(WindowManager::class.java)
         val size = dp(c, 132)
@@ -73,8 +106,8 @@ object Orb {
         try {
             wm.addView(v, lp)
             view = v
-            v.animate().alpha(1f).setDuration(180).start()
-        } catch (_: Exception) {}
+            v.animate().alpha(if (inApp) 0f else 1f).setDuration(180).start()
+        } catch (e: Exception) { Trace.log(c, "orb", "couldn't show the orb: ${e.message}") }
     }
 
     private fun hide(c: Context) {
@@ -98,6 +131,9 @@ class OrbView(c: Context) : View(c) {
     private var shown = 0f
     private var spin = 0f
     private var lastT = 0f
+    private var prevTarget = 0f
+    private var lastRipple = 0f
+    private val ripples = ArrayList<Float>()
 
     private fun withAlpha(color: Int, a: Float) = Color.argb((a.coerceIn(0f, 1f) * 255).toInt(), Color.red(color), Color.green(color), Color.blue(color))
 
@@ -106,13 +142,19 @@ class OrbView(c: Context) : View(c) {
         val t = (System.nanoTime() - born) / 1e9f
         val dt = (t - lastT).coerceIn(0f, 0.1f); lastT = t
         val st = Orb.state
+        val voice = if (st == Orb.SPEAK) Orb.voiceLevel() else -1f
         val target = when (st) {
             Orb.LISTEN -> 0.15f + Orb.level * 0.85f
-            Orb.SPEAK -> 0.35f + 0.45f * abs(sin(t * 7.3f)) * (0.6f + 0.4f * abs(sin(t * 2.1f + 1f)))
+            // pulses with his real voice, syllable by syllable (a gentle made-up pulse for the phone's voice)
+            Orb.SPEAK -> if (voice >= 0f) 0.22f + voice * 0.78f else 0.35f + 0.45f * abs(sin(t * 7.3f)) * (0.6f + 0.4f * abs(sin(t * 2.1f + 1f)))
             Orb.THINK -> 0.3f + 0.1f * sin(t * 4f)
             else -> 0.12f + 0.05f * sin(t * 1.5f)
         }
-        shown += (target - shown) * 0.22f
+        shown += (target - shown) * (if (target > shown) 0.5f else 0.18f)   // quick attack, soft release
+        // a ring ripples out on each strong syllable, like the films
+        if ((st == Orb.SPEAK || st == Orb.LISTEN) && shown > 0.55f && t - lastRipple > 0.22f && target - prevTarget > 0.12f) { ripples.add(t); lastRipple = t }
+        prevTarget = target
+        ripples.removeAll { t - it > 0.9f }
         spin += dt * when (st) { Orb.THINK -> 260f; Orb.SPEAK -> 70f; else -> 40f }
 
         val cx = width / 2f; val cy = height / 2f
@@ -135,6 +177,13 @@ class OrbView(c: Context) : View(c) {
         cv.drawCircle(cx, cy, core, fill)
         fill.shader = null
 
+        // ripples
+        for (born in ripples) {
+            val k = (t - born) / 0.9f
+            ring.strokeWidth = r * 0.03f * (1 - k)
+            ring.color = withAlpha(main, 0.7f * (1 - k))
+            cv.drawCircle(cx, cy, r * (0.35f + 0.62f * k), ring)
+        }
         // rings
         for (i in 0..2) {
             val rr = r * (0.42f + 0.14f * i + if (st == Orb.LISTEN) 0.05f * shown else 0f)

@@ -67,9 +67,10 @@ class SpeechStream(
                 if (cancelled) break
                 try {
                     // ONE continuous audio stream for the whole reply: no restart (and no click) between sentences
-                    if (t == null) { t = open(a.second); track = t; t.play() }
+                    if (t == null) { val tr = open(a.second); t = tr; track = tr; Orb.voiceStart(a.second) { tr.playbackHeadPosition.toLong() }; tr.play() }
                     val pcm = trim(a.first, a.second)
                     if (!first) written += pause(t, a.second)          // a natural breath between sentences
+                    Orb.voiceAdd(pcm)
                     first = false
                     var off = 0
                     while (off < pcm.size && !cancelled) {
@@ -120,6 +121,7 @@ class SpeechStream(
     private fun pause(t: AudioTrack, rate: Int): Int {
         val n = rate * gapMs / 1000
         val z = FloatArray(n)
+        Orb.voiceAdd(z)
         t.write(z, 0, n, AudioTrack.WRITE_BLOCKING)
         return n
     }

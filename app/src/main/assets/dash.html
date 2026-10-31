@@ -63,6 +63,9 @@ section.on{display:block}
 @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .empty{color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
 @media (prefers-reduced-motion:reduce){section{animation:none}}
+#orbwrap{display:flex;flex-direction:column;align-items:center;margin:4px 0 14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#orb{width:240px;height:240px;max-width:72vw;max-height:72vw}
+#orbcap{font:600 12px var(--cond);letter-spacing:.18em;text-transform:uppercase;color:#7fe3ff;margin-top:2px;opacity:.85}
 </style>
 </head>
 <body>
@@ -75,7 +78,7 @@ section.on{display:block}
 </header>
 
 <section id="s-today" class="on">
-  <button class="primary talk" onclick="J.talk()">Talk to Jarvis</button>
+  <div id="orbwrap" onclick="orbTap()" role="button" aria-label="Talk to Jarvis"><canvas id="orb" width="520" height="520"></canvas><div id="orbcap">Tap to talk</div></div>
   <button id="quietBtn" class="talk" style="margin-top:-6px" onclick="D && D.stealth ? J.quietEnd() : J.quietStart()">Quiet mode</button>
   <div class="card">
     <div class="label">Baby</div>
@@ -294,6 +297,49 @@ function load() {
 }
 load();
 setInterval(load, 30000);
+
+// ---- the orb: idle it breathes; listening it swells with your voice; thinking gold rings spin; speaking it pulses with his voice ----
+let OS = 0, OL = 0, shown = 0, spin = 0, lastT = 0, prevTarget = 0, lastRip = 0, rips = [];
+function orbTap(){ if (OS === 0) J.talk(); else J.hush(); }
+setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; } catch(e) {} }, 40);
+const CAP = ['Tap to talk', 'Listening', 'Thinking', 'Speaking · tap to stop'];
+function orbFrame(ts){
+  const t = ts / 1000, dt = Math.min(0.1, Math.max(0, t - lastT)); lastT = t;
+  const cv = document.getElementById('orb'); if (!cv) return;
+  const g = cv.getContext('2d'), W = cv.width, cx = W/2, cy = W/2, r = W/2;
+  let target;
+  if (OS === 1) target = 0.15 + OL * 0.85;
+  else if (OS === 3) target = OL >= 0 ? 0.22 + OL * 0.78 : 0.35 + 0.45 * Math.abs(Math.sin(t*7.3));
+  else if (OS === 2) target = 0.3 + 0.1 * Math.sin(t*4);
+  else target = 0.14 + 0.06 * Math.sin(t*1.4);
+  shown += (target - shown) * (target > shown ? 0.5 : 0.18);
+  if ((OS === 3 || OS === 1) && shown > 0.55 && t - lastRip > 0.22 && target - prevTarget > 0.12) { rips.push(t); lastRip = t; }
+  prevTarget = target; rips = rips.filter(b => t - b < 0.9);
+  spin += dt * (OS === 2 ? 260 : OS === 3 ? 70 : 30);
+  const main = OS === 2 ? [255,196,107] : [79,216,255], acc = OS === 2 ? [79,216,255] : [184,241,255];
+  const c = (k, a) => `rgba(${k[0]},${k[1]},${k[2]},${Math.max(0, Math.min(1, a))})`;
+  g.clearRect(0, 0, W, W);
+  let gr = g.createRadialGradient(cx, cy, 0, cx, cy, r*0.95);
+  gr.addColorStop(0, c(main, 0.5 + 0.4*shown)); gr.addColorStop(0.5, c(main, 0.16)); gr.addColorStop(1, c(main, 0));
+  g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, r*0.95, 0, 7); g.fill();
+  const core = r * (0.2 + 0.11*shown);
+  gr = g.createRadialGradient(cx, cy, 0, cx, cy, core);
+  gr.addColorStop(0, '#fff'); gr.addColorStop(0.55, c(acc, 0.95)); gr.addColorStop(1, c(main, 0));
+  g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, core, 0, 7); g.fill();
+  g.lineCap = 'round';
+  for (const b of rips) { const k = (t - b) / 0.9; g.lineWidth = r*0.03*(1-k); g.strokeStyle = c(main, 0.7*(1-k)); g.beginPath(); g.arc(cx, cy, r*(0.35 + 0.62*k), 0, 7); g.stroke(); }
+  for (let i = 0; i < 3; i++) {
+    const rr = r * (0.42 + 0.14*i + (OS === 1 ? 0.05*shown : 0));
+    g.lineWidth = r * (0.045 - 0.01*i); g.strokeStyle = c(i === 1 ? acc : main, 0.85 - 0.22*i);
+    const dir = i % 2 ? -1 : 1, st = (spin*dir*(1 + 0.35*i) + i*40) * Math.PI/180;
+    const sw = (55 + 30*i + (OS === 2 ? 25*Math.sin(t*3 + i) : 0)) * Math.PI/180;
+    g.beginPath(); g.arc(cx, cy, rr, st, st + sw); g.stroke();
+    g.beginPath(); g.arc(cx, cy, rr, st + Math.PI, st + Math.PI + sw); g.stroke();
+  }
+  const cap = document.getElementById('orbcap'); if (cap && cap.textContent !== CAP[OS]) cap.textContent = CAP[OS] || CAP[0];
+  requestAnimationFrame(orbFrame);
+}
+requestAnimationFrame(orbFrame);
 </script>
 </body>
 </html>

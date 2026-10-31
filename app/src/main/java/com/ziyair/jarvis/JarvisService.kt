@@ -828,6 +828,8 @@ class JarvisService : Service() {
             .setTransferMode(android.media.AudioTrack.MODE_STATIC)
             .setBufferSizeInBytes(samples.size * 4).build()
         t.write(samples, 0, samples.size, android.media.AudioTrack.WRITE_BLOCKING)
+        Orb.voiceStart(rate) { t.playbackHeadPosition.toLong() }
+        Orb.voiceAdd(samples)
         var fired = false
         val finish = { if (!fired) { fired = true; main.post(then) } }
         t.notificationMarkerPosition = maxOf(1, samples.size - 1)

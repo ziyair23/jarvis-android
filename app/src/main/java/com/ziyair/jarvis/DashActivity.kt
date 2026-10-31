@@ -33,8 +33,8 @@ class DashActivity : Activity() {
         web.loadUrl("file:///android_asset/dash.html")
     }
 
-    override fun onResume() { super.onResume(); if (::web.isInitialized) { LogBus.listen(refresh); refresh() } }
-    override fun onPause() { LogBus.unlisten(refresh); super.onPause() }
+    override fun onResume() { super.onResume(); Orb.inApp = true; if (::web.isInitialized) { LogBus.listen(refresh); refresh() } }
+    override fun onPause() { Orb.inApp = false; LogBus.unlisten(refresh); super.onPause() }
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() { if (::web.isInitialized && web.canGoBack()) web.goBack() else super.onBackPressed() }
@@ -87,6 +87,9 @@ class DashActivity : Activity() {
             startForegroundService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_LISTEN))
         }
         @JavascriptInterface fun quietEnd() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_QUIET_END)) }
+        /** "state,level" for the big orb on the dashboard (0 idle, 1 listening, 2 thinking, 3 speaking). */
+        @JavascriptInterface fun orb(): String = Orb.now().let { "${it.first},${it.second}" }
+        @JavascriptInterface fun hush() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_HUSH)) }
         @JavascriptInterface fun shareLog() = runOnUiThread { Trace.share(ctx) }
         @JavascriptInterface fun quietStart() { Stealth.start(ctx, null); LogBus.changed() }
         @JavascriptInterface fun listAdd(items: String) { if (items.isNotBlank()) Lists.add(ctx, items, "list"); LogBus.changed() }
