@@ -51,7 +51,7 @@ object Music {
         wasPlaying = playing(Apps.player(context, pkg)); seen = Apps.player(context, pkg) != null
         // Jarvis lets go of the speaker first: while he holds it the music app is paused, and when he let go
         // it resumed whatever was loaded before (the old song) instead of the one he asked for
-        JarvisService.focus?.invoke(false)
+        JarvisService.musicFocus?.invoke(false)
         Thread.sleep(250)
         // 0. the same "play this" request Google Assistant sends: the app searches and plays the top result itself
         if (Settings.canDrawOverlays(context)) try {

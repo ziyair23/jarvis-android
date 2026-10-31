@@ -54,7 +54,7 @@ class JarvisService : Service() {
         super.onCreate()
         prefs = Prefs(this)
         brain = Brain(this)
-        focus = { on -> val l = java.util.concurrent.CountDownLatch(1); main.post { holdFocus(on); l.countDown() }; l.await(500, java.util.concurrent.TimeUnit.MILLISECONDS) }
+        musicFocus = { on: Boolean -> val l = java.util.concurrent.CountDownLatch(1); main.post { holdFocus(on); l.countDown() }; l.await(500, java.util.concurrent.TimeUnit.MILLISECONDS) }
         restoreSound()
         tone = try { ToneGenerator(AudioManager.STREAM_MUSIC, 60) } catch (_: Exception) { null }
         tts = TextToSpeech(this) { status ->
@@ -960,7 +960,7 @@ class JarvisService : Service() {
         const val ACTION_QUIET_END = "com.ziyair.jarvis.QUIET_END"
         const val ACTION_HUSH = "com.ziyair.jarvis.HUSH"
         /** Lets the music player take the speaker back (true = Jarvis holds it, false = let go). */
-        @Volatile var focus: ((Boolean) -> Unit)? = null
+        @Volatile var musicFocus: ((Boolean) -> Unit)? = null
     }
 }
 
