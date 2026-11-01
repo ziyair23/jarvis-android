@@ -87,8 +87,7 @@ class Brain(private val context: Context) {
         caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     } catch (_: Exception) { true }
 
-    /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. [held] = his words for a request held with no signal (lab L8); failures then return "". */
-    private fun validated(): Boolean = try {
+    fun isValidated(): Boolean = try {
         val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
         cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
     } catch (_: Exception) { true }
@@ -96,6 +95,14 @@ class Brain(private val context: Context) {
     /** Tell Android this network isn't really working, so it re-checks (and we hear when it truly comes back). */
     private fun reportBad() { try { val cm = context.getSystemService(android.net.ConnectivityManager::class.java); cm.reportNetworkConnectivity(cm.activeNetwork, false) } catch (_: Exception) {} }
 
+    /** A quick, free check that Claude's servers can actually be reached right now (any HTTP answer counts). */
+    fun reachable(): Boolean = try {
+        val c = java.net.URL("https://api.anthropic.com/").openConnection() as java.net.HttpURLConnection
+        c.requestMethod = "HEAD"; c.connectTimeout = 3000; c.readTimeout = 3000
+        c.responseCode; c.disconnect(); true
+    } catch (_: Exception) { false }
+
+    /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. [held] = his words for a request held with no signal (lab L8); failures then return "". */
     fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, held: String? = null, onAck: (() -> Unit)? = null): String {
         val voice = Sentences(onSentence)
         val key = prefs.claudeKey
@@ -164,9 +171,13 @@ class Brain(private val context: Context) {
                 if (didSomething && retried >= 1) return "Done, sir."
                 // a dead connection (no route, no DNS, timed out) on an unvalidated network: hold it now instead of waiting through a retry
                 val dead = e is java.net.UnknownHostException || e is java.net.ConnectException || e is java.net.SocketTimeoutException
-                if (dead && !didSomething && !validated()) {
+                if (dead && !didSomething && !isValidated()) {
                     reportBad()
                     Trace.log(context, "held", "network dead: \"$text\""); return Held.add(text, System.currentTimeMillis())
+                }
+                // a read timeout on a "working" network: don't sit through a second 30 seconds, hold it now
+                if (e is java.net.SocketTimeoutException && retried == 0 && !didSomething) {
+                    reportBad(); Trace.log(context, "held", "timed out: \"$text\""); return Held.add(text, System.currentTimeMillis())
                 }
                 if (retried < 1) { retried++; Thread.sleep(800); continue }
                 reportBad()
@@ -391,7 +402,7 @@ class Brain(private val context: Context) {
     private fun post(key: String, body: JSONObject): Pair<Int, String> {
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
         c.requestMethod = "POST"
-        c.connectTimeout = 6000; c.readTimeout = 30000
+        c.connectTimeout = 6000; c.readTimeout = 20000
         c.doOutput = true
         c.setRequestProperty("content-type", "application/json")
         c.setRequestProperty("x-api-key", key)

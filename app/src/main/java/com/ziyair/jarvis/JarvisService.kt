@@ -99,7 +99,8 @@ class JarvisService : Service() {
         registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT))
         registerReceiver(batteryWatch, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         netDown = !brain.isOnline()
-        Held.onHold = { netDown = true }
+        // held something: wait for a real comeback, and check again in 30 seconds in case Android never says so
+        Held.onHold = { netDown = true; main.removeCallbacks(signalBack); main.postDelayed(signalBack, 30_000) }
         try { getSystemService(android.net.ConnectivityManager::class.java).registerDefaultNetworkCallback(signalWatch) } catch (_: Exception) {}
         try { getSystemService(android.net.ConnectivityManager::class.java).registerNetworkCallback(
             android.net.NetworkRequest.Builder().addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI).build(), wifiWatch) } catch (_: Exception) {}
@@ -121,13 +122,13 @@ class JarvisService : Service() {
 
     /** No-signal mode (lab L8): when the phone is back online, come back to what he asked while it wasn't. */
     private val signalWatch = object : android.net.ConnectivityManager.NetworkCallback() {
-        override fun onLost(network: android.net.Network) { netDown = true }
+        override fun onLost(network: android.net.Network) { netDown = true; main.removeCallbacks(signalBack) }
         override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) {
-            if (!caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)) { netDown = true; return }
+            if (!caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)) { netDown = true; main.removeCallbacks(signalBack); return }
             // only a real comeback counts: the network was down (or something was held), and now it's validated again
             if (!netDown || Held.count() == 0) return
             netDown = false
-            main.removeCallbacks(signalBack); Held.onHold = null; main.postDelayed(signalBack, 2500)
+            main.removeCallbacks(signalBack); main.postDelayed(signalBack, 2500)
         }
     }
     @Volatile private var netDown = false
@@ -136,6 +137,12 @@ class JarvisService : Service() {
         // he's mid-conversation right now: come back to it a little later instead of talking over him
         if (thinking || busy) { main.postDelayed(signalBack, 4000); return@Runnable }
         thread {
+            // make sure the signal is really back before saying so; if not, try again in 30 seconds
+            if (!brain.isValidated() || !brain.reachable()) {
+                netDown = true
+                if (Held.count() > 0) main.postDelayed(signalBack, 30_000)
+                return@thread
+            }
             val due = Held.takeDue(System.currentTimeMillis())
             if (due.isEmpty()) return@thread
             Trace.log(this, "held", "signal back, ${due.size} to come back to")
@@ -143,7 +150,7 @@ class JarvisService : Service() {
             val answered = mutableListOf<String>(); val missed = mutableListOf<Held.Item>()
             for (it in due) {
                 val r = brain.ask(Held.prompt(it, System.currentTimeMillis()), followUp = true, held = it.text)
-                if (r.isBlank() || r == Held.HELD_LINE) missed.add(it) else answered.add(r)
+                if (r.isBlank()) missed.add(it) else answered.add(r)
             }
             val line = Held.combine(answered, missed)
             if (line.isBlank()) return@thread
@@ -1038,7 +1045,7 @@ class JarvisService : Service() {
         try { unregisterReceiver(batteryWatch) } catch (_: Exception) {}
         try { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(wifiWatch) } catch (_: Exception) {}
         try { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(signalWatch) } catch (_: Exception) {}
-        main.removeCallbacks(signalBack)
+        main.removeCallbacks(signalBack); Held.onHold = null
         try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(carWatch) } catch (_: Exception) {}
         DriveMode.on = false
         quiet(false)
