@@ -86,4 +86,21 @@ class CarRemindersTest {
         val words = (1..20).joinToString(" ") { "w$it" }
         assertEquals(" Reminder: ${(1..15).joinToString(" ") { "w$it" }}.", CarReminders.line(listOf(words)))
     }
+
+    @Test fun cutOffPhraseSavesNothing() {
+        assertNull(CarReminders.parse("remind me when I get in the car to"))
+        assertNull(CarReminders.parse("remind me in the car about"))
+    }
+
+    @Test fun carPlusATimeGoesToClaude() {
+        listOf("remind me in the car in an hour to call mom", "remind me in the car tomorrow to get gas",
+            "remind me in the car in 20 minutes to call mom", "remind me in the car at 5 to get gas", "remind me in the car tonight to get gas",
+            "remind me when I park this evening to grab the bag")
+            .forEach { assertNull(it, CarReminders.parse(it)) }
+    }
+
+    @Test fun parkAtHomeKeepsJustTheTask() {
+        val c = add("remind me when I park at home to grab the bag")
+        assertEquals("grab the bag", c.text); assertEquals(true, c.out)
+    }
 }

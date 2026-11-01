@@ -52,6 +52,8 @@ object CarReminders {
     private val READ = Regex("^(?:what are|what're|read|read me|any|do i have any|have i got any|got any|what's on) (?:my |the )?car reminders$")
     private val CLEAR = Regex("^(?:clear|cancel|delete|forget|remove|wipe) (?:my |all my |all the |the )?car reminders$")
 
+    private val TIMED = Regex("^(in (an?|\\d+|a few) |tomorrow|tonight|at \\d|this (morning|afternoon|evening))")
+
     private fun isOut(clause: String) = !clause.startsWith("in ") && Regex(OUT).matches(clause)
 
     fun norm(said: String): String {
@@ -72,7 +74,9 @@ object CarReminders {
     }
 
     private fun add(task: String, out: Boolean): Cmd? {
-        val t = task.trim().replace(Regex("^(to|that|about) "), "").trim()
+        val t = task.trim().replace(Regex("^at (home|work)( |$)"), "").replace(Regex("^(to|that|about)( |$)"), "").trim()
+        // a time as well ("in an hour", "tomorrow"): that's a timed reminder, so Claude handles it
+        if (TIMED.containsMatchIn(t)) return null
         return if (t.isEmpty()) null else Cmd.Add(t, out)
     }
 

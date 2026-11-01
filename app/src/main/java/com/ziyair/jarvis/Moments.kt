@@ -69,6 +69,9 @@ object CarRemindersStore {
         return edit(c) { CarReminders.handle(it, cmd, Prefs(c).carName.isNotBlank(), DriveMode.on, System.currentTimeMillis()) }
     }
 
+    /** Anything waiting for when he gets in ([out] false) or out ([out] true). */
+    fun has(c: Context, out: Boolean): Boolean = edit(c) { l -> l.any { it.out == out } }
+
     /** For Claude's remind_in_car tool. */
     fun add(c: Context, text: String, out: Boolean): String =
         edit(c) { CarReminders.handle(it, CarReminders.Cmd.Add(text.trim(), out), Prefs(c).carName.isNotBlank(), DriveMode.on, System.currentTimeMillis()) }

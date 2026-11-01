@@ -809,7 +809,13 @@ class JarvisService : Service() {
         }
         if (inCar != DriveMode.on) {
             DriveMode.on = inCar
-            if (!inCar) { sayFirst("Driving mode off, sir." + carDue(true)); return }
+            if (!inCar) {
+                // park reminders wait 15 s, so a Bluetooth blip at a red light doesn't use them up (lab L26)
+                val parkDue = try { CarRemindersStore.has(this, true) } catch (_: Exception) { false }
+                if (parkDue) main.postDelayed({ if (!DriveMode.on) sayFirst("Driving mode off, sir." + carDue(true)) }, 15_000)
+                else sayFirst("Driving mode off, sir.")
+                return
+            }
             thread {
                 val w = Weather.now(this)
                 val roads = if (w == null) "" else Weather.roadsNote(this).ifBlank { " Roads look clear." }
