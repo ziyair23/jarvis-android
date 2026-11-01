@@ -100,4 +100,17 @@ class HeldSpecTest {
         try { Held.add("a", t0); Held.add("b", t0); Held.add(" ", t0) } finally { Held.onHold = null }
         assertEquals(2, n)
     }
+
+    // round 3, AT 8: a slow but working Claude answer (Sonnet + web search on the non-streaming path) must never be
+    // turned into "No signal, sir." A first read timeout may only be held when the network really is unreachable.
+    @Test fun slowAnswerOnWorkingNetworkIsNotHeld() {
+        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "app/src/main/java/com/ziyair/jarvis/Brain.kt").exists() }
+        val brain = File(root, "app/src/main/java/com/ziyair/jarvis/Brain.kt").readText()
+        val holdOnTimeout = Regex("if \\(e is java\\.net\\.SocketTimeoutException[^{]*\\{[^}]*Held\\.add").find(brain)
+        if (holdOnTimeout != null) assertTrue("a read timeout is held as 'No signal' without checking the network: ${holdOnTimeout.value}",
+            holdOnTimeout.value.contains("reachable()") || holdOnTimeout.value.contains("isValidated()"))
+        val post = brain.substringAfter("private fun post(").substringBefore("}")
+        val read = Regex("readTimeout = (\\d+)").find(post)!!.groupValues[1].toInt()
+        assertTrue("post() readTimeout $read ms is shorter than before L8 (30000)", read >= 30000)
+    }
 }
