@@ -78,4 +78,26 @@ class HeldSpecTest {
         if (trailing) assertTrue("Brain.ask is called with a trailing lambda but its last parameter is not onAck: $sig",
             sig.trim().substringAfterLast(",").trim().startsWith("onAck"))
     }
+
+    // round 2: per-request catch-up line (AT 4 + 6 together)
+    @Test fun combineAnswersThenReminder() {
+        val missed = listOf(Held.Item("Text Jess I'm late", t0))
+        assertEquals("Signal's back, sir. It's 54 and cloudy. You'd asked \"text jess i'm late\". Say it again if you still want it.",
+            Held.combine(listOf("Signal's back, sir. It's 54 and cloudy."), missed))
+        assertEquals("Signal's back, sir. You'd asked \"text jess i'm late\". Say it again if you still want it.", Held.combine(emptyList(), missed))
+        assertEquals("Signal's back, sir. It's 54 and cloudy.", Held.combine(listOf("It's 54 and cloudy."), emptyList()))
+        assertEquals("", Held.combine(emptyList(), emptyList()))
+        // an answer that was only the lead-in counts as nothing; the reminder still gets said, "Signal's back" once
+        val l = Held.combine(listOf("Signal's back, sir."), missed)
+        assertEquals(1, Regex("signal'?s back", RegexOption.IGNORE_CASE).findAll(l).count())
+        assertTrue(l.contains("text jess i'm late"))
+    }
+
+    // round 2: holding tells the service, every time (not just the first dead spot)
+    @Test fun onHoldFiresOnEveryHold() {
+        var n = 0
+        Held.onHold = { n++ }
+        try { Held.add("a", t0); Held.add("b", t0); Held.add(" ", t0) } finally { Held.onHold = null }
+        assertEquals(2, n)
+    }
 }
