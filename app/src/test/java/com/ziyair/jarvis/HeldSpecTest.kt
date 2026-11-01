@@ -113,4 +113,12 @@ class HeldSpecTest {
         val read = Regex("readTimeout = (\\d+)").find(post)!!.groupValues[1].toInt()
         assertTrue("post() readTimeout $read ms is shorter than before L8 (30000)", read >= 30000)
     }
+
+    // round 4: expired items no longer count as pending, so the 30 s re-check stops
+    @Test fun pendingIgnoresExpired() {
+        Held.add("what time is the game", t0)
+        assertEquals(1, Held.pending(t0 + Held.EXPIRE_MS))
+        assertEquals(0, Held.pending(t0 + Held.EXPIRE_MS + 1))
+        assertEquals(1, Held.count())
+    }
 }
