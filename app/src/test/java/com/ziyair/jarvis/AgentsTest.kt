@@ -18,13 +18,13 @@ class AgentsTest {
     @Test fun readsTheRealToolList() { assertTrue("found ${toolNames.size} tools", toolNames.size > 30) }
 
     @Test fun everySkillHasAHome() {
-        val owned = Agents.CORE + Agents.PHONE.tools + Agents.MONEY.tools + Agents.FAMILY.tools
+        val owned = Agents.CORE + Agents.ALL.filter { it.id != "builder" }.flatMap { it.tools }
         val orphans = toolNames - owned
         assertTrue("skills nobody owns: $orphans", orphans.isEmpty())
     }
 
     @Test fun agentsOnlyClaimRealSkills() {
-        for (d in listOf(Agents.PHONE, Agents.MONEY, Agents.FAMILY)) {
+        for (d in Agents.ALL.filter { it.id != "builder" }) {
             val fake = d.tools - toolNames
             assertTrue("${d.id} claims skills that don't exist: $fake", fake.isEmpty())
         }
@@ -85,4 +85,16 @@ class AgentsTest {
         assertFalse(Builder.offLimits("app/src/main/java/com/ziyair/jarvis/Reflex.kt"))
         assertFalse(Builder.offLimits("config/persona.json"))
     }
+
+    @Test fun onlyThePhoneAgentCanSend() {
+        val senders = setOf("send_text", "reply_message", "call", "phone_task", "answer_call")
+        for (d in Agents.ALL.filter { it.id != "phone" }) assertTrue("${d.id} must not be able to send or call", (d.tools intersect senders).isEmpty())
+    }
+
+    @Test fun pursuitNeverSends() {
+        val src = File("src/main/java/com/ziyair/jarvis/Pursuit.kt").readText()
+        for (bad in listOf("startActivity", "SmsManager", "Intent(", "URL(")) assertFalse("Pursuit must stay on the phone: found $bad", src.contains(bad))
+    }
+
+    @Test fun agentIdsAreUnique() { assertEquals(Agents.ALL.size, Agents.ALL.map { it.id }.toSet().size) }
 }
