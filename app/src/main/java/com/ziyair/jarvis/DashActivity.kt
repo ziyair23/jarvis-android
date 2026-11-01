@@ -33,8 +33,9 @@ class DashActivity : Activity() {
         web.loadUrl("file:///android_asset/dash.html")
     }
 
-    override fun onResume() { super.onResume(); Orb.inApp = true; if (::web.isInitialized) { LogBus.listen(refresh); refresh() } }
-    override fun onPause() { Orb.inApp = false; LogBus.unlisten(refresh); super.onPause() }
+    override fun onResume() { super.onResume(); Orb.inApp = true; if (::web.isInitialized) { web.onResume(); web.resumeTimers(); LogBus.listen(refresh); refresh() } }
+    // the page's timers and animation stop while the app isn't on screen (battery)
+    override fun onPause() { Orb.inApp = false; LogBus.unlisten(refresh); if (::web.isInitialized) { web.onPause(); web.pauseTimers() }; super.onPause() }
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() { if (::web.isInitialized && web.canGoBack()) web.goBack() else super.onBackPressed() }

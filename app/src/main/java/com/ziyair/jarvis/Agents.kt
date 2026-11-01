@@ -79,6 +79,7 @@ object Agents {
     /** Inner skills used recently (so Jarvis knows "play_music" ran even when an agent did it). */
     private val inner = CopyOnWriteArrayList<Pair<Long, String>>()
     fun usedRecently(name: String, ms: Long) = inner.any { it.second == name && System.currentTimeMillis() - it.first < ms }
+    fun usedSince(name: String, since: Long) = inner.any { it.second == name && it.first >= since }
     fun drainInner(): List<String> { val l = inner.map { it.second }; inner.clear(); return l }
 
     // ---------------- what Jarvis sees ----------------
@@ -107,6 +108,9 @@ object Agents {
     }
 
     // ---------------- running an agent ----------------
+    /** Skills that send, call or act on his behalf: their confirmed flag always equals Marcus's actual yes. */
+    val CONFIRMABLE = setOf("send_text", "reply_message", "phone_task")
+
     /** Skills that need a look at the result before the agent is done (everything else returns straight away). */
     private val LOOK_AGAIN = setOf("screen_read", "read_messages", "earnings_summary", "expenses_summary", "baby_status", "journal_read",
         "read_file", "list_files", "build_status", "read_build_errors")
@@ -155,8 +159,7 @@ object Agents {
                         "tool_use" -> {
                             val name = p.optString("name"); val input = p.optJSONObject("input") ?: JSONObject()
                             // the confirm rule is enforced here, not left to the model
-                            if (!confirmed && input.has("confirmed")) input.put("confirmed", false)
-                            if (!confirmed && name == "phone_task") input.put("confirmed", false)
+                            if (name in CONFIRMABLE) input.put("confirmed", confirmed)
                             val out = when {
                                 name == "note_to_self" -> if (addNote(c, id, input.optString("note"))) "Noted." else "Already noted."
                                 id == "builder" -> Builder.run(c, name, input, confirmed)

@@ -166,7 +166,7 @@ section.on{display:block}
 
 <section id="s-brain">
   <div style="position:relative;margin:0 -18px">
-    <canvas id="brain" width="800" height="760" style="width:100%;height:auto;display:block;touch-action:none"></canvas>
+    <canvas id="brain" width="800" height="680" style="width:100%;height:auto;display:block;touch-action:none"></canvas>
     <div id="brain-hint" class="faint" style="position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Drag to turn · tap an agent</div>
   </div>
   <div class="card" id="ag-card">
@@ -388,11 +388,11 @@ requestAnimationFrame(orbFrame);
   const cv = document.getElementById('brain'); if (!cv) return;
   const g = cv.getContext('2d');
   let A = [], sel = 'jarvis', yaw = 0.6, pitch = -0.22, vy = 0.12, vp = 0, drag = null, lastT = 0, pulses = [], lastActive = {};
-  const POS = {phone:[0,0.18,1.02], money:[0.62,0.62,-0.05], family:[-0.92,-0.12,0.18], builder:[0.05,0.1,-1.02]};
+  const POS = {phone:[0,0.22,1.02], money:[0.64,0.6,-0.1], family:[-0.92,-0.18,0.25], builder:[-0.1,0.62,-0.9]};
   // a seeded point cloud shaped like a brain: two hemispheres with folds
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const P = [];
-  for (let i = 0; i < 460; i++) {
+  for (let i = 0; i < 620; i++) {
     const side = i % 2 ? 1 : -1, u = rnd() * Math.PI * 2, v = Math.acos(2 * rnd() - 1);
     let x = Math.sin(v) * Math.cos(u), y = Math.cos(v), z = Math.sin(v) * Math.sin(u);
     const fold = 1 + 0.07 * Math.sin(u * 6 + v * 5) * Math.sin(v * 7);
@@ -409,16 +409,18 @@ requestAnimationFrame(orbFrame);
     const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
     let x = p[0] * cy + p[2] * sy, z = -p[0] * sy + p[2] * cy;
     let y = p[1] * cp - z * sp; z = p[1] * sp + z * cp;
-    const f = 3.2 / (3.2 - z), S = cv.width * 0.34;
+    const f = 3.2 / (3.2 - z), S = cv.width * 0.4;
     return [cv.width / 2 + x * S * f, cv.height / 2 - y * S * f, z, f];
   }
-  function refresh() { try { A = JSON.parse(J.agents()); } catch (e) { A = []; }
+  const visible = () => document.getElementById('s-brain').classList.contains('on');
+  function refresh() { if (A.length && !visible()) return; try { A = JSON.parse(J.agents()); } catch (e) { A = []; }
     A.forEach(a => { if (a.active && !lastActive[a.id]) for (let i = 0; i < 3; i++) pulses.push({id: a.id, t: performance.now() / 1000 + i * 0.25}); lastActive[a.id] = a.active; });
     if (document.getElementById('s-brain').classList.contains('on')) panel(); }
   refresh(); setInterval(refresh, 1000);
   setInterval(() => { const on = A.filter(a => a.on && a.id !== 'jarvis'); if (on.length) pulses.push({id: on[Math.floor(Math.random() * on.length)].id, t: performance.now() / 1000, soft: true}); }, 2600);
 
   function frame(ts) {
+    if (!visible()) { requestAnimationFrame(frame); lastT = ts / 1000; return; }
     const t = ts / 1000, dt = Math.min(0.1, t - lastT); lastT = t;
     if (!drag) { yaw += vy * dt; vy += (0.12 - vy) * 0.02; pitch += vp * dt; vp *= 0.92; pitch += (-0.22 - pitch) * 0.01; }
     const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
@@ -451,8 +453,12 @@ requestAnimationFrame(orbFrame);
       g.fillStyle = gr; g.beginPath(); g.arc(n.p[0], n.p[1], r * 3, 0, 7); g.fill();
       g.fillStyle = on ? (n.a.active ? '#f0c3ba' : '#c9665c') : '#4a4744'; g.beginPath(); g.arc(n.p[0], n.p[1], r, 0, 7); g.fill();
       if (n.a.id === sel) { g.strokeStyle = '#efebe4'; g.lineWidth = 2; g.beginPath(); g.arc(n.p[0], n.p[1], r + 6, 0, 7); g.stroke(); }
-      g.fillStyle = on ? '#efebe4' : '#7d7872'; g.font = `500 ${Math.round(22 * Math.min(1.15, n.p[3]))}px Inter, system-ui, sans-serif`; g.textAlign = 'center';
+      // names on the far side fade back so they never sit on top of the front ones
+      const front = Math.max(0, Math.min(1, (n.p[2] + 0.6) / 1.2));
+      g.globalAlpha = n.a.id === sel ? 1 : 0.25 + 0.75 * front;
+      g.fillStyle = on ? '#efebe4' : '#7d7872'; g.font = `500 ${Math.round((16 + 7 * front) * Math.min(1.15, n.p[3]))}px Inter, system-ui, sans-serif`; g.textAlign = 'center';
       g.fillText(n.a.name, n.p[0], n.p[1] - r - 12);
+      g.globalAlpha = 1;
     });
     g.fillStyle = '#efebe4'; g.font = '300 26px Fraunces, Georgia, serif'; g.textAlign = 'center'; g.fillText('Jarvis', c[0], c[1] + R + 34);
     requestAnimationFrame(frame);

@@ -213,10 +213,11 @@ class Live(
                 Trace.log(context, "tool", "$name $args")
                 if (name == "play_music" || (name == "media_control" && args.optString("action") in setOf("play", "next", "previous"))) endAfterTurn = true
                 toolsRunning++
+                val started = System.currentTimeMillis()
                 thread {
                     val out = try { Actions(context).run(name, args) } catch (e: Exception) { "That didn't work: ${e.message}" } finally { toolsRunning-- }
                     Trace.log(context, "tool", "$name -> ${out.take(160)}")
-                    if (Agents.usedRecently("play_music", 60_000)) endAfterTurn = true
+                    if (Agents.usedSince("play_music", started)) endAfterTurn = true
                     send(JSONObject().put("toolResponse", JSONObject().put("functionResponses", JSONArray().put(
                         JSONObject().put("id", id).put("name", name).put("response", JSONObject().put("result", out))))))
                 }

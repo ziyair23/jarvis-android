@@ -34,6 +34,7 @@ class AgentsTest {
     @Test fun sendingSkillsLiveWithThePhoneAgent() {
         for (s in listOf("send_text", "reply_message", "call", "phone_task")) assertTrue(s in Agents.PHONE.tools)
         for (s in listOf("send_text", "reply_message", "call", "phone_task")) assertFalse("$s must not be a core skill", s in Agents.CORE)
+        for (s in listOf("send_text", "reply_message", "phone_task")) assertTrue("$s must follow his real yes", s in Agents.CONFIRMABLE)
     }
 
     @Test fun sendingToolsStillDemandConfirmation() {
@@ -80,6 +81,7 @@ class AgentsTest {
         assertTrue(Builder.offLimits(".github/workflows/build.yml"))
         assertTrue(Builder.offLimits("app/jarvis.keystore"))
         assertTrue(Builder.offLimits("sdk/home-sdk.tgz.enc"))
+        assertTrue(Builder.offLimits("app/src/test/java/com/ziyair/jarvis/AgentsTest.kt"))   // can't weaken its own tests
         assertFalse(Builder.offLimits("app/src/main/java/com/ziyair/jarvis/Reflex.kt"))
         assertFalse(Builder.offLimits("config/persona.json"))
     }

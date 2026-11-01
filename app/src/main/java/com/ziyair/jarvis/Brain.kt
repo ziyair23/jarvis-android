@@ -188,7 +188,7 @@ class Brain(private val context: Context) {
             }
             if (results.length() > 0) voice.drop() else if (sb.isNotBlank()) voice.flush()
             if (results.length() > 0 && rounds < 10) {
-                if (rounds == 0 && (slow.any { resp.contains("\"name\":\"$it\"") } || resp.contains("\"name\":\"agent_"))) onAck?.invoke()
+                if (rounds == 0 && (slow.any { resp.contains("\"name\":\"$it\"") } || resp.contains("\"name\":\"agent_phone\"") || resp.contains("\"name\":\"agent_builder\""))) onAck?.invoke()
                 rounds++
                 if (sb.isNotBlank()) earlierText = sb.toString().trim()
                 clean.put(JSONObject().put("role", "assistant").put("content", content))

@@ -170,9 +170,12 @@ object Builder {
     } catch (e: Exception) { "That didn't work: ${e.message}" }
 
     // ---------------- level 2: his own code, on a separate branch ----------------
-    private val OFF_LIMITS = Regex("^(\\.github/|app/jarvis\\.keystore|.*\\.(jks|keystore|enc)$|gradle/wrapper/)")
+    private val OFF_LIMITS = Regex("^(\\.github/|app/src/test/|app/jarvis\\.keystore|.*\\.(jks|keystore|enc)$|gradle/wrapper/)")
 
     private fun code(c: Context, name: String, input: JSONObject, confirmed: Boolean): String {
+        val pr = Prefs(c)
+        if (name in setOf("read_file", "list_files", "edit_file", "create_file", "start_test_build") && Spend.thisMonth(pr) >= Spend.budget(pr))
+            return "He's at his Claude budget for the month, so code changes wait until next month (or until he raises the budget)."
         val repo = Brain.REPO
         val token = Prefs(c).sp.getString("github_token", "").orEmpty()
         fun gh(method: String, path: String, body: JSONObject? = null): Pair<Int, String> {
@@ -262,11 +265,12 @@ object Builder {
             }
             "install_test_build" -> {
                 if (!confirmed) return "Not installed: he hasn't said yes yet. Ask him first."
-                val (cd, t) = gh("GET", "/releases?per_page=10")
-                if (cd != 200) return "Couldn't find the test build (GitHub $cd)."
-                val a = JSONArray(t)
-                val rel = (0 until a.length()).map { a.getJSONObject(it) }.firstOrNull { it.optBoolean("prerelease") && it.optString("tag_name").startsWith("test-") }
-                    ?: return "No finished test build to install."
+                val (rc, rt) = gh("GET", "/actions/runs?branch=$BRANCH&status=success&per_page=1")
+                val run = if (rc == 200) JSONObject(rt).optJSONArray("workflow_runs")?.optJSONObject(0)?.optInt("run_number") ?: 0 else 0
+                if (run == 0) return "No finished test build to install."
+                val (cd, t) = gh("GET", "/releases/tags/test-$run")
+                if (cd != 200) return "Test build $run isn't published yet. Try again in a minute."
+                val rel = JSONObject(t)
                 val apk = rel.optJSONArray("assets")?.let { as_ -> (0 until as_.length()).map { as_.getJSONObject(it) }.firstOrNull { it.optString("name").endsWith(".apk") } }
                     ?: return "The test build has no app file."
                 val ok = Updater.installFrom(c, apk.optString("browser_download_url"))
