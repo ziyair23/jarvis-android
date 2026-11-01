@@ -60,7 +60,7 @@ class OfferMathTest {
         val morning = List(6) { OfferMath.Seen(7 + it % 2, 8.4, 3.0, 20) }    // 2.80 a mile
         val evening = List(6) { OfferMath.Seen(17 + it % 2, 4.8, 3.0, 25) }   // 1.60 a mile
         val r = OfferMath.bestHours(morning + evening)
-        assertTrue(r, r.startsWith("Your best stretch is 7 AM to 9 AM, about 2.80 dollars a mile"))
+        assertTrue(r, r.startsWith("Your best stretch is 7 AM to 9 AM, about \$2.80 a mile"))
         assertTrue(r, r.contains("from 6 offers"))
         assertTrue(r, r.contains("Weakest is 5 PM to 7 PM"))
         assertTrue(r.split(" ").size < 40)

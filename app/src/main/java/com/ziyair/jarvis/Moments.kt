@@ -89,6 +89,7 @@ object OfferJudge {
     fun setRule(context: Context, perMile: Double?, on: Boolean?, perHour: Double? = null): String {
         val p = Prefs(context)
         perMile?.let { p.sp.edit().putFloat("min_per_mile", it.toFloat()).apply() }
+        if (perHour != null && perHour !in 5.0..100.0) return "That hourly minimum sounds off, sir. Somewhere between five and a hundred?"
         perHour?.let { p.sp.edit().putFloat("min_per_hour", it.toFloat()).apply() }
         on?.let { p.sp.edit().putBoolean("judge_offers", it).apply() }
         return if (!on(p)) "Order judging is off."
@@ -107,15 +108,22 @@ object OfferJudge {
         val sig = "${o.pay}|${o.miles}"
         if (sig == lastSig && now - lastAt < 120_000) return
         lastSig = sig; lastAt = now
-        try { remember(p, cal.get(Calendar.HOUR_OF_DAY), o) } catch (e: Exception) { Problems.log(context, "offer diary: ${e.message}") }
         try {
             context.startService(Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY)
                 .putExtra("text", OfferMath.line(o, minPerMile(p), minPerHour(p))))
         } catch (_: Exception) {}
+        // save to the diary after speaking, off the main thread, so the call-out is never late
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        Thread { try { remember(p, hour, o) } catch (e: Exception) { Problems.log(context, "offer diary: ${e.message}") } }.start()
     }
 
     // ---- offer diary (lab L1): every judged offer, kept only on the phone ----
     fun diary(p: Prefs): JSONArray = try { JSONArray(p.sp.getString("offer_log", "[]")) } catch (_: Exception) { JSONArray() }
+
+    @Synchronized private fun clear(p: Prefs) {
+        // keep the last diary as a backup in case it was cleared by mistake
+        p.sp.edit().putString("offer_log_prev", p.sp.getString("offer_log", "[]")).putString("offer_log", "[]").apply()
+    }
 
     @Synchronized private fun remember(p: Prefs, hour: Int, o: OfferMath.Offer) {
         val a = diary(p)
@@ -128,11 +136,11 @@ object OfferJudge {
 
     fun insights(context: Context, action: String?): String {
         val p = Prefs(context)
-        if (action == "clear") { p.sp.edit().putString("offer_log", "[]").apply(); return "Offer diary cleared." }
+        if (action == "clear") { clear(p); return "Offer diary cleared." }
         val a = diary(p)
         val seen = (0 until a.length()).map { a.getJSONObject(it) }.map {
             OfferMath.Seen(it.optInt("h"), it.optDouble("pay"), it.optDouble("mi"), if (it.has("min")) it.optInt("min") else null)
         }
-        return OfferMath.bestHours(seen)
+        return OfferMath.bestHours(seen, minPerMile(p), minPerHour(p))
     }
 }

@@ -17,7 +17,7 @@ class OfferLabTest {
         val o = OfferMath.parse("\$8.50 | 2.1 mi | 18 min | Accept", sevenPm)!!
         assertEquals(28.33, OfferMath.perHour(o)!!, 0.01)
         val line = OfferMath.line(o, 2.0, 20.0)
-        assertTrue(line, line.contains("4.05 dollars a mile, about 28 an hour"))
+        assertTrue(line, line.contains("\$4.05 a mile, about 28 an hour"))
     }
 
     @Test fun l2_t2_hourlyBeatsMile() {
