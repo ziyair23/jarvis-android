@@ -77,6 +77,9 @@ jobs:
             echo "No HOME_SDK_KEY secret: building without Google Home"
           fi
 
+      - name: Unit tests
+        run: gradle :app:testReleaseUnitTest --no-daemon
+
       - name: Build the app
         run: |
           set -o pipefail

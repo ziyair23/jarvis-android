@@ -98,6 +98,7 @@ class JarvisService : Service() {
         // whenever he unlocks the phone, see if there's a new build to slip in (checks GitHub at most hourly)
         registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT))
         registerReceiver(batteryWatch, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        try { getSystemService(android.net.ConnectivityManager::class.java).registerDefaultNetworkCallback(signalWatch) } catch (_: Exception) {}
         try { getSystemService(android.net.ConnectivityManager::class.java).registerNetworkCallback(
             android.net.NetworkRequest.Builder().addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI).build(), wifiWatch) } catch (_: Exception) {}
     }
@@ -117,6 +118,29 @@ class JarvisService : Service() {
     }
 
     /** Home Wi-Fi after being out for a while: "Welcome home, sir," and the lights come on. */
+    /** No-signal mode (lab L8): when the phone is back online, come back to what he asked while it wasn't. */
+    private val signalWatch = object : android.net.ConnectivityManager.NetworkCallback() {
+        override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) {
+            if (Held.count() == 0 || !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return
+            main.removeCallbacks(signalBack); main.postDelayed(signalBack, 2500)
+        }
+    }
+
+    private val signalBack = Runnable {
+        thread {
+            val due = Held.takeDue(System.currentTimeMillis())
+            if (due.isEmpty()) return@thread
+            Trace.log(this, "held", "signal back, ${due.size} to come back to")
+            val replies = due.map { brain.ask(Held.prompt(it, System.currentTimeMillis()), followUp = true, held = it.text) }
+            // if Claude still can't be reached, just remind him what he asked
+            val line = if (replies.any { it.startsWith("I can't reach") || it.isBlank() || it == Held.HELD_LINE }) Held.reminder(due)
+                else Held.join(replies).ifBlank { Held.reminder(due) }
+            if (line.isBlank()) return@thread
+            if (Stealth.on(prefs)) { Stealth.silentNote(this, line); return@thread }
+            try { startService(Intent(this, JarvisService::class.java).setAction(ACTION_SAY).putExtra("text", line)) } catch (_: Exception) {}
+        }
+    }
+
     private val wifiWatch = object : android.net.ConnectivityManager.NetworkCallback() {
         override fun onLost(network: android.net.Network) {
             // only leaving HOME counts (other Wi-Fi along the way doesn't)
@@ -1000,6 +1024,8 @@ class JarvisService : Service() {
         try { unregisterReceiver(unlocked) } catch (_: Exception) {}
         try { unregisterReceiver(batteryWatch) } catch (_: Exception) {}
         try { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(wifiWatch) } catch (_: Exception) {}
+        try { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(signalWatch) } catch (_: Exception) {}
+        main.removeCallbacks(signalBack)
         try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(carWatch) } catch (_: Exception) {}
         DriveMode.on = false
         quiet(false)

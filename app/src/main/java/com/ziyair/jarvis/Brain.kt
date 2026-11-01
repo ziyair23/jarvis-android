@@ -81,10 +81,19 @@ class Brain(private val context: Context) {
     } catch (_: Exception) { "" }
 
     /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. */
-    fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, onAck: (() -> Unit)? = null): String {
+    /** True unless the phone has no usable network at all (a weak signal still counts as online). */
+    private fun online(): Boolean = try {
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
+        val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+        caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    } catch (_: Exception) { true }
+
+    fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, onAck: (() -> Unit)? = null, held: String? = null): String {
         val voice = Sentences(onSentence)
         val key = prefs.claudeKey
         if (key.isBlank()) return "I need my Claude key first, sir. Open the Jarvis app and add it."
+        // no-signal mode (lab L8): no network at all, so don't sit through a timeout; hold it and come back to it
+        if (held == null && !online()) { Trace.log(context, "held", "no network: \"$text\""); return Held.add(text, System.currentTimeMillis()) }
         val cfg = config()
         val msgs = JSONArray()
         val h = prefs.history()
@@ -115,7 +124,8 @@ class Brain(private val context: Context) {
 
         lastTools.clear()
         val actions = Actions(context)
-        val tools = actions.tools()
+        // a request held while there was no signal is answered without any phone tools, so nothing is done late
+        val tools = if (held != null) JSONArray() else actions.tools()
         // the tool list is the same every time: let Claude cache it (much cheaper on repeat questions)
         if (tools.length() > 0) tools.getJSONObject(tools.length() - 1).put("cache_control", JSONObject().put("type", "ephemeral"))
         // real questions get the smarter model and room for a proper answer; quick commands stay fast and cheap
@@ -135,8 +145,8 @@ class Brain(private val context: Context) {
                 .put("model", model)
                 .put("max_tokens", maxTokens)
                 .put("system", systemPrompt(cfg) + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can occasionally misfire on the TV. Only if what you heard is obviously not meant for you (TV dialogue, song lyrics, or a meaningless one or two word fragment) reply with exactly [ignore]. Anything that could be a request or a question, even garbled, is for you: work out what he meant and answer it." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. Only if it is obviously not meant for you (clearly him talking to someone else, the TV, song lyrics), reply with exactly [ignore]. When in doubt, it's for you: answer it." else "")
-                .put("tools", tools)
                 .put("messages", clean)
+            if (tools.length() > 0) body.put("tools", tools)
             val (code, resp) = try {
                 if (onSentence != null) postStream(key, body) { voice.feed(it) } else post(key, body)
             } catch (e: Exception) {
@@ -144,6 +154,7 @@ class Brain(private val context: Context) {
                 Problems.log(context, "network: ${e.message}")
                 if (didSomething && retried >= 1) return "Done, sir."
                 if (retried < 1) { retried++; Thread.sleep(800); continue }
+                if (held == null && !didSomething) { Trace.log(context, "held", "network failed: \"$text\""); return Held.add(text, System.currentTimeMillis()) }
                 return "I can't reach the network right now, sir."
             }
             // web search not turned on for his Claude account: carry on without it
@@ -202,7 +213,7 @@ class Brain(private val context: Context) {
                 .replace(Regex("^(correction|actually|apologies|my apologies|sorry)[,.:!]?\\s*(sir[,.]?\\s*)?", RegexOption.IGNORE_CASE), "")
                 .replaceFirstChar { it.uppercase() }
             if (reply.contains("[ignore]", true)) return ""
-            prefs.addTurn("user", text)
+            prefs.addTurn("user", held ?: text)   // a held request is saved in his own words, not the catch-up note
             prefs.addTurn("assistant", reply)
             return reply
         }
