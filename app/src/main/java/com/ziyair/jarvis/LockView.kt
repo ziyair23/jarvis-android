@@ -27,7 +27,7 @@ class LockView : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(64, 64, 64, 64)
-            setBackgroundColor(0xF2050A12.toInt())
+            setBackgroundColor(0xF50F0F10.toInt())
             setOnClickListener { finish() }
         }
         val orb = (170 * resources.displayMetrics.density).toInt()
@@ -35,17 +35,17 @@ class LockView : Activity() {
             setOnClickListener { try { startService(Intent(this@LockView, JarvisService::class.java).setAction(JarvisService.ACTION_HUSH)) } catch (_: Exception) {} }
         }, LinearLayout.LayoutParams(orb, orb).apply { bottomMargin = 24 })
         root.addView(TextView(this).apply {
-            text = "J A R V I S"; textSize = 20f; setTextColor(0xFF7FE3FF.toInt())
-            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
+            text = "Jarvis"; textSize = 26f; setTextColor(0xFFEFEBE4.toInt())
+            typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL)
             gravity = Gravity.CENTER
         })
         body = TextView(this).apply {
-            textSize = 22f; setTextColor(0xFFE6F7FF.toInt()); gravity = Gravity.CENTER
+            textSize = 20f; setTextColor(0xFFA29D95.toInt()); gravity = Gravity.CENTER
             setPadding(0, 40, 0, 0); setLineSpacing(8f, 1f)
         }
         root.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(TextView(this).apply {
-            text = "Tap the orb to stop him, anywhere else to close"; textSize = 13f; setTextColor(0xFF5B7A8C.toInt()); gravity = Gravity.CENTER; setPadding(0, 60, 0, 0)
+            text = "Tap the halo to stop him, anywhere else to close"; textSize = 13f; setTextColor(0xFF7D7872.toInt()); gravity = Gravity.CENTER; setPadding(0, 60, 0, 0)
         })
         setContentView(root)
         show(intent)

@@ -5,86 +5,95 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Jarvis</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#14110e; --bg2:#1b1713; --card:#231e19; --edge:#3a322a;
-  --ink:#efe6d6; --ink-dim:#b8ac9a; --ink-faint:#8e8475;
-  --accent:#c9a35c; --accent-ink:#17120c; --good:#9fbf8a; --warn:#e0aa66; --bad:#d9826f;
-  --milk:#f2d9a8; --diaper:#a8d8c0; --sleep:#b4c3c6;
-  --serif:"Fraunces",Georgia,serif; --sans:"Barlow",system-ui,sans-serif; --cond:"Barlow Condensed","Barlow",sans-serif;
+  --bg:#0f0f10; --bg2:#141416; --card:#18181a; --edge:#232326;
+  --ink:#efebe4; --ink-dim:#a29d95; --ink-faint:#7d7872;
+  --accent:#b0524a; --accent-soft:#c9665c; --accent-ink:#f6ece8; --good:#8fa58f; --warn:#c9a46a; --bad:#c9665c;
+  --milk:#d8c4a3; --diaper:#9db5a6; --sleep:#a6adb6;
+  --serif:"Fraunces",Georgia,serif; --sans:"Inter",system-ui,sans-serif; --cond:"Inter",system-ui,sans-serif;
   --r:18px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 var(--sans)}
-body{padding:0 16px calc(84px + env(safe-area-inset-bottom));background:radial-gradient(120% 60% at 50% -10%,#2a2219 0%,var(--bg) 60%) fixed}
-header{display:flex;align-items:center;gap:12px;padding:22px 0 14px}
-header h1{font:italic 400 30px/1 var(--serif);margin:0;letter-spacing:.2px}
-header .sub{color:var(--ink-dim);font-size:13px;margin-top:4px}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans)}
+body{padding:0 18px calc(84px + env(safe-area-inset-bottom));background:radial-gradient(140% 55% at 50% -12%,#2a1615 0%,#161012 32%,var(--bg) 62%) fixed}
+header{display:flex;align-items:flex-start;gap:12px;padding:26px 0 4px}
+header .date{font:500 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)}
+header h1{font:300 34px/1.1 var(--serif);margin:6px 0 0;letter-spacing:-.2px}
+header .sub{color:var(--ink-faint);font-size:12px;margin-top:6px}
 header .grow{flex:1}
-.icon{width:42px;height:42px;border-radius:50%;border:1px solid var(--edge);background:var(--card);color:var(--ink-dim);display:grid;place-items:center;font-size:19px}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ink-faint);margin-right:6px;vertical-align:1px}
-.dot.on{background:var(--good);box-shadow:0 0 0 4px rgba(159,191,138,.15)}
-.card{background:var(--card);border:1px solid var(--edge);border-radius:var(--r);padding:16px;margin:0 0 12px}
-.label{font:600 12px/1 var(--cond);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:10px}
-.big{font:600 34px/1.05 var(--serif)}
-.mid{font:500 20px/1.2 var(--serif)}
+.icon{width:40px;height:40px;border-radius:50%;border:1px solid var(--edge);background:transparent;color:var(--ink-dim);display:grid;place-items:center;font-size:17px;min-height:40px;padding:0}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ink-faint);margin-right:7px;vertical-align:1px}
+.dot.on{background:var(--accent-soft);box-shadow:0 0 0 4px rgba(176,82,74,.18)}
+.card{background:var(--card);border:1px solid var(--edge);border-radius:var(--r);padding:16px;margin:0 0 10px}
+.label{font:500 12px/1 var(--sans);color:var(--ink-faint);margin-bottom:10px}
+.big{font:400 30px/1.05 var(--serif);letter-spacing:-.3px}
+.mid{font:400 19px/1.25 var(--serif)}
 .dim{color:var(--ink-dim)} .faint{color:var(--ink-faint);font-size:13px}
 .row{display:flex;gap:10px;align-items:center}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
-button{font:600 14px var(--sans);color:var(--ink);background:var(--bg2);border:1px solid var(--edge);border-radius:14px;padding:12px 8px;min-height:44px}
+.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:14px}
+button{font:500 14px var(--sans);color:var(--ink);background:var(--bg2);border:1px solid var(--edge);border-radius:12px;padding:11px 8px;min-height:44px}
 button:active{transform:scale(.97)}
-.q-feed{border-color:#5c513c;color:var(--milk)} .q-diaper{border-color:#3f5a4d;color:var(--diaper)} .q-sleep{border-color:#45525a;color:var(--sleep)}
+.q-feed,.q-diaper,.q-sleep{color:var(--ink-dim)}
 .primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.talk{width:100%;padding:16px;font-size:17px;border-radius:16px;margin:0 0 14px}
-.bar{height:10px;border-radius:6px;background:var(--bg2);overflow:hidden;margin:12px 0 6px;border:1px solid var(--edge)}
-.bar>i{display:block;height:100%;background:linear-gradient(90deg,#a7864a,var(--accent));border-radius:6px}
+.talk{width:100%;padding:14px;font-size:15px;border-radius:14px;margin:0 0 10px;background:transparent}
+.bar{height:4px;border-radius:2px;background:#26262a;overflow:hidden;margin:12px 0 8px}
+.bar>i{display:block;height:100%;background:var(--accent-soft);border-radius:2px}
 .list{margin:0;padding:0;list-style:none}
 .list li{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--edge)}
 .list li:first-child{border-top:0}
-.list .t{font:500 15px var(--sans);min-width:64px;color:var(--ink-dim)}
+.list .t{font:500 13px var(--sans);min-width:60px;color:var(--ink-faint)}
 .list .x{margin-left:auto;background:none;border:0;color:var(--ink-faint);min-height:36px;padding:6px 10px;font-size:18px}
-.chip{display:inline-block;font:600 12px var(--cond);letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:999px;border:1px solid var(--edge)}
-.k-feed{color:var(--milk);border-color:#5c513c} .k-diaper{color:var(--diaper);border-color:#3f5a4d} .k-sleep,.k-wake{color:var(--sleep);border-color:#45525a}
-.day{font:600 13px var(--cond);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin:18px 2px 8px}
-input{font:16px var(--sans);color:var(--ink);background:var(--bg2);border:1px solid var(--edge);border-radius:12px;padding:12px;width:100%;min-height:46px}
+.chip{display:inline-block;font:500 12px var(--sans);padding:3px 9px;border-radius:999px;border:1px solid var(--edge);color:var(--ink-dim)}
+.k-feed{color:var(--milk)} .k-diaper{color:var(--diaper)} .k-sleep,.k-wake{color:var(--sleep)}
+.day{font:500 12px var(--sans);color:var(--ink-faint);margin:18px 2px 8px}
+input{font:15px var(--sans);color:var(--ink);background:var(--bg2);border:1px solid var(--edge);border-radius:12px;padding:12px;width:100%;min-height:46px}
 input:focus{outline:none;border-color:var(--accent)}
+input::placeholder{color:#5f5b56}
 .bars{display:flex;align-items:flex-end;gap:5px;height:90px;margin-top:8px}
-.bars div{flex:1;background:#4a3f30;border-radius:5px 5px 2px 2px;min-height:3px;position:relative}
+.bars div{flex:1;background:#2e2a2a;border-radius:4px 4px 2px 2px;min-height:3px;position:relative}
 .bars div.today{background:var(--accent)}
-.bars-l{display:flex;gap:5px;margin-top:6px}.bars-l span{flex:1;text-align:center;font:500 11px var(--cond);color:var(--ink-faint)}
-.chat p{margin:0 0 12px}.chat .you{color:var(--ink-dim)}.chat b{font:600 12px var(--cond);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);display:block}
-nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(20,17,14,.94);backdrop-filter:blur(10px);border-top:1px solid var(--edge);padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
-nav button{flex:1;background:none;border:0;color:var(--ink-faint);font:600 12px var(--cond);letter-spacing:.1em;text-transform:uppercase;min-height:52px;border-radius:12px}
-nav button.on{color:var(--ink);background:var(--card)}
-section{display:none;animation:fade .25s ease}
+.bars-l{display:flex;gap:5px;margin-top:6px}.bars-l span{flex:1;text-align:center;font:500 11px var(--sans);color:var(--ink-faint)}
+.chat p{margin:0 0 14px;line-height:1.55}.chat .you{color:var(--ink-dim)}.chat b{font:500 11px var(--sans);letter-spacing:.06em;color:var(--ink-faint);display:block;margin-bottom:2px}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(15,15,16,.92);backdrop-filter:blur(12px);border-top:1px solid var(--edge);padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+nav button{flex:1;background:none;border:0;color:var(--ink-faint);font:500 12px var(--sans);min-height:50px;border-radius:12px}
+nav button.on{color:var(--ink)}
+nav button.on::after{content:"";display:block;width:4px;height:4px;border-radius:50%;background:var(--accent-soft);margin:4px auto 0}
+section{display:none;animation:fade .3s ease}
 section.on{display:block}
 @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .empty{color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
 @media (prefers-reduced-motion:reduce){section{animation:none}}
-#orbwrap{display:flex;flex-direction:column;align-items:center;margin:4px 0 14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-#orb{width:240px;height:240px;max-width:72vw;max-height:72vw}
-#orbcap{font:600 12px var(--cond);letter-spacing:.18em;text-transform:uppercase;color:#7fe3ff;margin-top:2px;opacity:.85}
+#orbwrap{display:flex;flex-direction:column;align-items:center;margin:4px 0 6px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#orb{width:200px;height:200px;max-width:58vw;max-height:58vw}
+#orbcap{font:500 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-top:-4px}
+#brief{font:300 19px/1.45 var(--serif);color:var(--ink-dim);margin:14px 2px 20px}
+#brief b{font-weight:400;color:var(--ink)}
+.stat .big{margin-top:2px}
 </style>
 </head>
 <body>
 <header>
   <div class="grow">
-    <h1 id="hello">Evening, sir</h1>
+    <div class="date" id="date"></div>
+    <h1 id="hello">Evening.</h1>
     <div class="sub"><span id="dot" class="dot"></span><span id="state">…</span></div>
   </div>
   <button class="icon" aria-label="Setup" onclick="J.openSetup()">⚙</button>
 </header>
 
 <section id="s-today" class="on">
-  <div id="orbwrap" onclick="orbTap()" role="button" aria-label="Talk to Jarvis"><canvas id="orb" width="520" height="520"></canvas><div id="orbcap">Tap to talk</div></div>
-  <button id="health-warn" class="talk" style="display:none;margin-top:-6px;border-color:#ff8a7a;color:#ff8a7a" onclick="document.querySelector('nav button[data-s=chat]').click()"></button>
-  <button id="quietBtn" class="talk" style="margin-top:-6px" onclick="D && D.stealth ? J.quietEnd() : J.quietStart()">Quiet mode</button>
+  <div id="orbwrap" onclick="orbTap()" role="button" aria-label="Talk to Jarvis"><canvas id="orb" width="480" height="480"></canvas><div id="orbcap">Tap to talk</div></div>
+  <p id="brief"></p>
+  <button id="health-warn" class="talk" style="display:none;border-color:var(--accent);color:var(--accent-soft)" onclick="document.querySelector('nav button[data-s=chat]').click()"></button>
+  <div class="grid2">
+    <div class="card stat"><div class="label">Today</div><div class="big" id="t-earn">$0</div><div class="faint" id="t-week"></div></div>
+    <div class="card stat"><div class="label" id="t-goal-l">Macan fund</div><div id="t-goal"></div></div>
+  </div>
   <div class="card">
-    <div class="label">Baby</div>
-    <div class="mid" id="t-feed">—</div>
-    <div class="faint" id="t-baby"></div>
+    <div class="row"><div><div class="label" id="t-baby-l">Ziyair</div><div class="mid" id="t-feed">—</div><div class="faint" id="t-baby"></div></div></div>
     <div class="quick">
       <button class="q-feed" onclick="baby('feed')">Fed</button>
       <button class="q-diaper" onclick="baby('diaper')">Diaper</button>
@@ -93,20 +102,16 @@ section.on{display:block}
     </div>
   </div>
   <div class="card">
-    <div class="label">DoorDash today</div>
-    <div class="row"><div class="big" id="t-earn">$0</div><div class="grow"></div><div class="faint" id="t-week"></div></div>
-    <div id="t-goal"></div>
+    <div class="label">Coming up</div>
+    <ul class="list" id="t-rem"></ul>
+    <div class="faint" id="t-spend" style="margin-top:8px"></div>
   </div>
   <div class="card">
     <div class="label">List</div>
-    <div class="grid2"><input id="l-in" placeholder="Diapers, wipes…"><button class="primary" onclick="addL()">Add</button></div>
+    <div class="grid2"><input id="l-in" placeholder="Diapers, wipes"><button class="primary" onclick="addL()">Add</button></div>
     <ul class="list" id="l-list" style="margin-top:8px"></ul>
   </div>
-  <div class="card">
-    <div class="label">Coming up</div>
-    <div class="faint" id="t-spend" style="margin:-4px 0 6px"></div>
-    <ul class="list" id="t-rem"></ul>
-  </div>
+  <button id="quietBtn" class="talk" onclick="D && D.stealth ? J.quietEnd() : J.quietStart()">Quiet mode</button>
 </section>
 
 <section id="s-baby">
@@ -204,10 +209,13 @@ function addMem() { const v = $('mem-in').value.trim(); if (!v) return; J.rememb
 function load() {
   try { D = JSON.parse(J.data()); } catch (e) { return; }
   const h = new Date().getHours();
-  $('hello').textContent = (h < 5 ? 'Late one, sir' : h < 12 ? 'Morning, sir' : h < 17 ? 'Afternoon, sir' : 'Evening, sir');
+  const who = D.name || 'sir';
+  $('hello').textContent = (h < 5 ? 'Late one, ' : h < 12 ? 'Morning, ' : h < 17 ? 'Afternoon, ' : 'Evening, ') + who + '.';
+  $('date').textContent = new Date().toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'});
   $('dot').className = 'dot' + (D.running ? ' on' : '');
-  $('state').textContent = D.stealth ? 'Quiet mode — saving everything for later' : D.running ? 'Listening for "Hey Jarvis"' : 'Off — start him in setup';
-  $('quietBtn').textContent = D.stealth ? 'End quiet mode & catch me up' : 'Quiet mode';
+  $('state').textContent = D.stealth ? 'Quiet mode, saving everything for later' : D.running ? 'Listening for his name' : 'Off. Start him in setup';
+  $('quietBtn').textContent = D.stealth ? 'End quiet mode and catch me up' : 'Quiet mode';
+  $('t-baby-l').textContent = D.babyName || 'Baby';
 
   // baby
   const log = [];
@@ -255,9 +263,21 @@ function load() {
   const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
   let week = 0; Object.keys(byDay).forEach(k => { if (k >= ymd(mon)) week += byDay[k]; });
   $('t-earn').textContent = money(byDay[todayK] || 0);
-  $('t-week').textContent = 'Week ' + money(week);
+  const target = D.target || 120, made = byDay[todayK] || 0;
+  $('t-week').textContent = 'of ' + money(target) + ' · week ' + money(week);
   const pct = D.goal > 0 ? Math.min(100, total / D.goal * 100) : 0;
-  $('t-goal').innerHTML = D.goal > 0 ? `<div class="bar"><i style="width:${pct}%"></i></div><div class="faint">${money(total)} of ${money(D.goal)} toward ${esc(D.goalName)} · ${pct.toFixed(1)}%</div>` : '<div class="faint" style="margin-top:8px">Tell Jarvis what the Macan costs to track it here.</div>';
+  $('t-goal-l').textContent = (D.goalName || 'the Macan').replace(/^the /i, '') + ' fund';
+  $('t-goal').innerHTML = D.goal > 0 ? `<div class="big">${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%</div><div class="bar"><i style="width:${pct}%"></i></div><div class="faint">${money(total)} of ${money(D.goal)}</div>` : '<div class="faint" style="margin-top:4px">Tell Jarvis the price to track it.</div>';
+  // the brief: where the day stands, in a couple of plain sentences
+  const brief = [];
+  if (D.stealth) brief.push('Quiet mode is on. I\'m saving everything for later.');
+  if (made >= target) brief.push(`You've cleared today's target with <b>${money(made)}</b>.`);
+  else if (made > 0) brief.push(`You're at <b>${money(made)}</b> today, ${money(target - made)} off your target.`);
+  else if (h >= 6 && h < 22) brief.push('Nothing logged from the road yet today.');
+  if (lastFeed) { const nf = lastFeed.at + D.feedHours * 3600000; brief.push(nf > Date.now() ? `${esc(D.babyName || 'The baby')}'s next feed is around <b>${clock(nf)}</b>.` : `${esc(D.babyName || 'The baby')} is due a feed.`); }
+  const remS = []; for (let i = 0; i < D.reminders.length; i++) remS.push(D.reminders[i]); remS.sort((a, b) => a.at - b.at);
+  if (remS.length) brief.push(`Next up: ${esc(remS[0].label)} at ${clock(remS[0].at)}.`);
+  $('brief').innerHTML = brief.join(' ') || 'All quiet. Say his name when you need him.';
   $('m-goal-l').textContent = 'Toward ' + (D.goalName || 'the Macan');
   $('m-saved').textContent = money(total);
   $('m-bar').style.width = pct + '%';
@@ -274,7 +294,7 @@ function load() {
   $('x-list').innerHTML = X.slice().reverse().slice(0, 20).map(x => `<li><span class="t">${new Date(x.d + 'T12:00').toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span><span>${esc(x.w)}</span><span class="mid" style="margin-left:auto">${money(x.a)}</span><button class="x" style="margin-left:4px" aria-label="Delete" onclick="if(confirm('Delete this expense?'))J.expenseDelete('${x.at}')">×</button></li>`).join('') || '<li class="empty">Say "Hey Jarvis, spent 40 on gas."</li>';
   $('m-days').innerHTML = keys.length ? keys.map(k => `<li><span class="t">${new Date(k + 'T12:00').toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}</span><span class="mid">${money(byDay[k])}</span><button class="x" aria-label="Delete" onclick="if(confirm('Delete ${k}?'))J.deleteEarn('${k}')">×</button></li>`).join('') : '<li class="empty">Nothing logged yet. Say "Hey Jarvis, made 60 this morning."</li>';
 
-  $('t-spend').textContent = D.budget ? 'Jarvis this month: ' + money(D.spend || 0) + ' of ' + money(D.budget) + ' Claude budget' : '';
+  $('t-spend').textContent = D.budget ? 'Jarvis this month: ' + money(D.spend || 0) + ' of ' + money(D.budget) : '';
 
   // reminders
   const rem = []; for (let i = 0; i < D.reminders.length; i++) rem.push(D.reminders[i]);
@@ -312,40 +332,32 @@ setInterval(load, 30000);
 let OS = 0, OL = 0, shown = 0, spin = 0, lastT = 0, prevTarget = 0, lastRip = 0, rips = [];
 function orbTap(){ if (OS === 0) J.talk(); else J.hush(); }
 setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; } catch(e) {} }, 40);
-const CAP = ['Tap to talk', 'Listening', 'Thinking', 'Speaking · tap to stop'];
+const CAP = ['Tap to talk', 'Listening', 'Thinking', 'Speaking, tap to stop'];
+// the halo: dark core, one thin oxblood ring, a soft glow that breathes, listens, thinks and speaks
 function orbFrame(ts){
   const t = ts / 1000, dt = Math.min(0.1, Math.max(0, t - lastT)); lastT = t;
   const cv = document.getElementById('orb'); if (!cv) return;
   const g = cv.getContext('2d'), W = cv.width, cx = W/2, cy = W/2, r = W/2;
   let target;
-  if (OS === 1) target = 0.15 + OL * 0.85;
-  else if (OS === 3) target = OL >= 0 ? 0.22 + OL * 0.78 : 0.35 + 0.45 * Math.abs(Math.sin(t*7.3));
-  else if (OS === 2) target = 0.3 + 0.1 * Math.sin(t*4);
-  else target = 0.14 + 0.06 * Math.sin(t*1.4);
-  shown += (target - shown) * (target > shown ? 0.5 : 0.18);
-  if ((OS === 3 || OS === 1) && shown > 0.55 && t - lastRip > 0.22 && target - prevTarget > 0.12) { rips.push(t); lastRip = t; }
-  prevTarget = target; rips = rips.filter(b => t - b < 0.9);
-  spin += dt * (OS === 2 ? 260 : OS === 3 ? 70 : 30);
-  const main = OS === 2 ? [255,196,107] : [79,216,255], acc = OS === 2 ? [79,216,255] : [184,241,255];
-  const c = (k, a) => `rgba(${k[0]},${k[1]},${k[2]},${Math.max(0, Math.min(1, a))})`;
+  if (OS === 1) target = 0.25 + OL * 0.75;
+  else if (OS === 3) target = OL >= 0 ? 0.3 + OL * 0.7 : 0.4 + 0.35 * Math.abs(Math.sin(t*6.5));
+  else if (OS === 2) target = 0.35 + 0.08 * Math.sin(t*3);
+  else target = 0.18 + 0.1 * (0.5 + 0.5 * Math.sin(t*1.2));
+  shown += (target - shown) * (target > shown ? 0.45 : 0.12);
+  if ((OS === 3 || OS === 1) && shown > 0.55 && t - lastRip > 0.28 && target - prevTarget > 0.12) { rips.push(t); lastRip = t; }
+  prevTarget = target; rips = rips.filter(b => t - b < 1.2);
+  spin += dt * 140;
+  const ox = 'rgba(176,82,74,', rose = 'rgba(201,102,92,', glow = 'rgba(236,170,160,';
+  const ringR = r * (0.5 + (OS === 1 ? 0.06 * shown : 0.02 * shown));
   g.clearRect(0, 0, W, W);
-  let gr = g.createRadialGradient(cx, cy, 0, cx, cy, r*0.95);
-  gr.addColorStop(0, c(main, 0.5 + 0.4*shown)); gr.addColorStop(0.5, c(main, 0.16)); gr.addColorStop(1, c(main, 0));
-  g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, r*0.95, 0, 7); g.fill();
-  const core = r * (0.2 + 0.11*shown);
-  gr = g.createRadialGradient(cx, cy, 0, cx, cy, core);
-  gr.addColorStop(0, '#fff'); gr.addColorStop(0.55, c(acc, 0.95)); gr.addColorStop(1, c(main, 0));
-  g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, core, 0, 7); g.fill();
-  g.lineCap = 'round';
-  for (const b of rips) { const k = (t - b) / 0.9; g.lineWidth = r*0.03*(1-k); g.strokeStyle = c(main, 0.7*(1-k)); g.beginPath(); g.arc(cx, cy, r*(0.35 + 0.62*k), 0, 7); g.stroke(); }
-  for (let i = 0; i < 3; i++) {
-    const rr = r * (0.42 + 0.14*i + (OS === 1 ? 0.05*shown : 0));
-    g.lineWidth = r * (0.045 - 0.01*i); g.strokeStyle = c(i === 1 ? acc : main, 0.85 - 0.22*i);
-    const dir = i % 2 ? -1 : 1, st = (spin*dir*(1 + 0.35*i) + i*40) * Math.PI/180;
-    const sw = (55 + 30*i + (OS === 2 ? 25*Math.sin(t*3 + i) : 0)) * Math.PI/180;
-    g.beginPath(); g.arc(cx, cy, rr, st, st + sw); g.stroke();
-    g.beginPath(); g.arc(cx, cy, rr, st + Math.PI, st + Math.PI + sw); g.stroke();
-  }
+  let gr = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+  gr.addColorStop(0, ox + '0)'); gr.addColorStop(0.42, ox + '0)'); gr.addColorStop(0.58, ox + (0.18 + 0.5*shown) + ')'); gr.addColorStop(1, ox + '0)');
+  g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill();
+  for (const b of rips) { const k = (t - b) / 1.2; g.lineWidth = r*0.012; g.strokeStyle = rose + (0.45*(1-k)) + ')'; g.beginPath(); g.arc(cx, cy, ringR + (r*0.98 - ringR)*k, 0, 7); g.stroke(); }
+  g.fillStyle = '#151517'; g.beginPath(); g.arc(cx, cy, ringR*0.94, 0, 7); g.fill();
+  if (OS === 1 || OS === 3) { gr = g.createRadialGradient(cx, cy, 0, cx, cy, ringR*0.9); gr.addColorStop(0, ox + (0.35*shown) + ')'); gr.addColorStop(1, ox + '0)'); g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, ringR*0.9, 0, 7); g.fill(); }
+  g.lineWidth = r*0.022; g.strokeStyle = rose + (0.55 + 0.4*shown) + ')'; g.beginPath(); g.arc(cx, cy, ringR, 0, 7); g.stroke();
+  if (OS === 2) { const a0 = spin * Math.PI/180; g.lineCap = 'round'; g.lineWidth = r*0.04; g.strokeStyle = glow + '0.95)'; g.beginPath(); g.arc(cx, cy, ringR, a0, a0 + 70*Math.PI/180); g.stroke(); }
   const cap = document.getElementById('orbcap'); if (cap && cap.textContent !== CAP[OS]) cap.textContent = CAP[OS] || CAP[0];
   requestAnimationFrame(orbFrame);
 }

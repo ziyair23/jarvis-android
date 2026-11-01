@@ -19,8 +19,8 @@
             android:fontFamily="serif"
             android:text="Jarvis"
             android:textColor="@color/ink"
-            android:textSize="40sp"
-            android:textStyle="italic" />
+            android:textSize="38sp"
+            android:letterSpacing="0.01" />
 
         <TextView
             android:id="@+id/status"
@@ -71,10 +71,13 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <TextView style="@style/Label" android:text="SETUP" />
+            <TextView style="@style/Label" android:layout_marginTop="0dp" android:text="Your keys" />
 
             <TextView style="@style/Hint" android:text="Claude API key (from platform.claude.com)" />
             <EditText android:id="@+id/claudeKey" style="@style/Field" android:inputType="textPassword" android:hint="sk-ant-..." />
+
+            <TextView style="@style/Hint" android:text="Gemini key for live talking (free, from aistudio.google.com)" />
+            <EditText android:id="@+id/geminiKey" style="@style/Field" android:inputType="textPassword" android:hint="Starts with AIza" />
 
             <EditText android:id="@+id/picoKey" style="@style/Field" android:inputType="textPassword" android:visibility="gone" />
 
@@ -84,14 +87,16 @@
             <TextView style="@style/Hint" android:text="Voice name (optional)" />
             <EditText android:id="@+id/voiceName" style="@style/Field" android:inputType="text" android:hint="en-GB-Chirp3-HD-Charon" />
 
+            <TextView style="@style/Label" android:layout_marginTop="26dp" android:text="About you" />
             <TextView style="@style/Hint" android:text="Your partner's name (optional)" />
             <EditText android:id="@+id/herName" style="@style/Field" android:inputType="textPersonName|textCapWords" />
 
             <TextView style="@style/Hint" android:text="What Jarvis should know about your day" />
             <EditText android:id="@+id/notes" style="@style/Field" android:hint="Your routine, family, goals, where you live…" android:gravity="top" android:inputType="textMultiLine|textCapSentences" android:minLines="4" />
 
+            <TextView style="@style/Label" android:layout_marginTop="26dp" android:text="Your day" />
             <TextView style="@style/Hint" android:text="Your city (for weather)" />
-            <EditText android:id="@+id/city" style="@style/Field" android:inputType="textCapWords" android:hint="e.g. Spokane" />
+            <EditText android:id="@+id/city" style="@style/Field" android:inputType="textCapWords" android:hint="Spokane" />
 
             <TextView style="@style/Hint" android:text="Lunch rush (24-hour, start-end)" />
             <EditText android:id="@+id/lunch" style="@style/Field" android:inputType="text" android:hint="11:00-14:00" />
@@ -99,11 +104,9 @@
             <TextView style="@style/Hint" android:text="Dinner rush (24-hour, start-end)" />
             <EditText android:id="@+id/dinner" style="@style/Field" android:inputType="text" android:hint="17:00-21:00" />
 
+            <TextView style="@style/Label" android:layout_marginTop="26dp" android:text="Car and home" />
             <TextView style="@style/Hint" android:text="Your car's Bluetooth name (for driving mode)" />
-            <EditText android:id="@+id/carName" style="@style/Field" android:inputType="text" android:hint="e.g. Honda, CAR MULTIMEDIA" />
-
-            <TextView style="@style/Hint" android:text="Gemini key for live talking (free, from aistudio.google.com)" />
-            <EditText android:id="@+id/geminiKey" style="@style/Field" android:inputType="textPassword" android:hint="Starts with AIza" />
+            <EditText android:id="@+id/carName" style="@style/Field" android:inputType="text" android:hint="Honda, CAR MULTIMEDIA" />
 
             <TextView style="@style/Hint" android:text="Govee lights key (optional)" />
             <EditText android:id="@+id/goveeKey" style="@style/Field" android:inputType="textPassword" android:hint="From the Govee Home app" />

@@ -122,7 +122,12 @@ object Orb {
     }
 }
 
-/** Draws the orb. Reads Orb.state every frame, so any number of these mirror Jarvis (overlay and lock screen). */
+/**
+ * The halo ("After hours"): a dark core with one thin oxblood ring and a soft glow around it.
+ * Waiting: breathes slowly. Listening: the ring opens up and the glow follows his voice.
+ * Thinking: a brighter arc travels around the ring. Speaking: the glow pulses with Jarvis's real voice and
+ * faint rings drift outward on strong words. Reads Orb.state every frame, so every copy mirrors Jarvis.
+ */
 class OrbView(c: Context) : View(c) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
@@ -135,7 +140,7 @@ class OrbView(c: Context) : View(c) {
     private var lastRipple = 0f
     private val ripples = ArrayList<Float>()
 
-    private fun withAlpha(color: Int, a: Float) = Color.argb((a.coerceIn(0f, 1f) * 255).toInt(), Color.red(color), Color.green(color), Color.blue(color))
+    private fun col(rgb: Int, a: Float) = Color.argb((a.coerceIn(0f, 1f) * 255).toInt(), Color.red(rgb), Color.green(rgb), Color.blue(rgb))
 
     override fun onDraw(cv: Canvas) {
         super.onDraw(cv)
@@ -144,58 +149,65 @@ class OrbView(c: Context) : View(c) {
         val st = Orb.state
         val voice = if (st == Orb.SPEAK) Orb.voiceLevel() else -1f
         val target = when (st) {
-            Orb.LISTEN -> 0.15f + Orb.level * 0.85f
-            // pulses with his real voice, syllable by syllable (a gentle made-up pulse for the phone's voice)
-            Orb.SPEAK -> if (voice >= 0f) 0.22f + voice * 0.78f else 0.35f + 0.45f * abs(sin(t * 7.3f)) * (0.6f + 0.4f * abs(sin(t * 2.1f + 1f)))
-            Orb.THINK -> 0.3f + 0.1f * sin(t * 4f)
-            else -> 0.12f + 0.05f * sin(t * 1.5f)
+            Orb.LISTEN -> 0.25f + Orb.level * 0.75f
+            Orb.SPEAK -> if (voice >= 0f) 0.3f + voice * 0.7f else 0.4f + 0.35f * abs(sin(t * 6.5f))
+            Orb.THINK -> 0.35f + 0.08f * sin(t * 3f)
+            else -> 0.18f + 0.1f * (0.5f + 0.5f * sin(t * 1.2f))   // slow breathing
         }
-        shown += (target - shown) * (if (target > shown) 0.5f else 0.18f)   // quick attack, soft release
-        // a ring ripples out on each strong syllable, like the films
-        if ((st == Orb.SPEAK || st == Orb.LISTEN) && shown > 0.55f && t - lastRipple > 0.22f && target - prevTarget > 0.12f) { ripples.add(t); lastRipple = t }
+        shown += (target - shown) * (if (target > shown) 0.45f else 0.12f)
+        if ((st == Orb.SPEAK || st == Orb.LISTEN) && shown > 0.55f && t - lastRipple > 0.28f && target - prevTarget > 0.12f) { ripples.add(t); lastRipple = t }
         prevTarget = target
-        ripples.removeAll { t - it > 0.9f }
-        spin += dt * when (st) { Orb.THINK -> 260f; Orb.SPEAK -> 70f; else -> 40f }
+        ripples.removeAll { t - it > 1.2f }
+        spin += dt * 140f
 
         val cx = width / 2f; val cy = height / 2f
         val r = min(cx, cy)
-        val main = when (st) { Orb.THINK -> 0xFFFFC46B.toInt(); else -> 0xFF4FD8FF.toInt() }
-        val accent = when (st) { Orb.THINK -> 0xFF4FD8FF.toInt(); else -> 0xFFB8F1FF.toInt() }
+        val ringR = r * (0.5f + (if (st == Orb.LISTEN) 0.06f * shown else 0.02f * shown))
 
-        // dark backing so it reads on any app
-        fill.shader = RadialGradient(cx, cy, r, intArrayOf(0xE6070C14.toInt(), 0xB3070C14.toInt(), 0x00070C14),
-            floatArrayOf(0f, 0.7f, 1f), Shader.TileMode.CLAMP)
+        // the glow around the ring
+        fill.shader = RadialGradient(cx, cy, r, intArrayOf(col(OX, 0f), col(OX, 0f), col(OX, 0.18f + 0.5f * shown), col(OX, 0f)),
+            floatArrayOf(0f, 0.42f, 0.58f, 1f), Shader.TileMode.CLAMP)
         cv.drawCircle(cx, cy, r, fill)
-        // glow
-        fill.shader = RadialGradient(cx, cy, r * 0.95f, intArrayOf(withAlpha(main, 0.55f + 0.35f * shown), withAlpha(main, 0.18f), 0),
-            floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
-        cv.drawCircle(cx, cy, r * 0.95f, fill)
-        // core
-        val core = r * (0.2f + 0.11f * shown)
-        fill.shader = RadialGradient(cx, cy, core, intArrayOf(Color.WHITE, withAlpha(accent, 0.95f), withAlpha(main, 0.0f)),
-            floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
-        cv.drawCircle(cx, cy, core, fill)
         fill.shader = null
 
-        // ripples
-        for (born in ripples) {
-            val k = (t - born) / 0.9f
-            ring.strokeWidth = r * 0.03f * (1 - k)
-            ring.color = withAlpha(main, 0.7f * (1 - k))
-            cv.drawCircle(cx, cy, r * (0.35f + 0.62f * k), ring)
+        // ripples drifting outward
+        for (b in ripples) {
+            val k = (t - b) / 1.2f
+            ring.strokeWidth = r * 0.012f
+            ring.color = col(ROSE, 0.45f * (1 - k))
+            cv.drawCircle(cx, cy, ringR + (r * 0.98f - ringR) * k, ring)
         }
-        // rings
-        for (i in 0..2) {
-            val rr = r * (0.42f + 0.14f * i + if (st == Orb.LISTEN) 0.05f * shown else 0f)
-            box.set(cx - rr, cy - rr, cx + rr, cy + rr)
-            ring.strokeWidth = r * (0.045f - 0.01f * i)
-            ring.color = withAlpha(if (i == 1) accent else main, 0.85f - 0.22f * i)
-            val dir = if (i % 2 == 0) 1f else -1f
-            val start = spin * dir * (1f + 0.35f * i) + i * 40f
-            val sweep = 55f + 30f * i + if (st == Orb.THINK) 25f * sin(t * 3f + i) else 0f
-            cv.drawArc(box, start, sweep, false, ring)
-            cv.drawArc(box, start + 180f, sweep, false, ring)
+
+        // dark core
+        fill.color = CORE
+        cv.drawCircle(cx, cy, ringR * 0.94f, fill)
+
+        // the ring
+        ring.strokeWidth = r * 0.022f
+        ring.color = col(ROSE, 0.55f + 0.4f * shown)
+        cv.drawCircle(cx, cy, ringR, ring)
+
+        // thinking: a brighter arc travelling around
+        if (st == Orb.THINK) {
+            box.set(cx - ringR, cy - ringR, cx + ringR, cy + ringR)
+            ring.strokeWidth = r * 0.04f
+            ring.color = col(GLOW, 0.95f)
+            cv.drawArc(box, spin, 70f, false, ring)
+        }
+
+        // a faint warm light in the core when he's talking
+        if (st == Orb.SPEAK || st == Orb.LISTEN) {
+            fill.shader = RadialGradient(cx, cy, ringR * 0.9f, intArrayOf(col(OX, 0.35f * shown), col(OX, 0f)), null, Shader.TileMode.CLAMP)
+            cv.drawCircle(cx, cy, ringR * 0.9f, fill)
+            fill.shader = null
         }
         if (isAttachedToWindow) postInvalidateOnAnimation()
+    }
+
+    companion object {
+        private val OX = Color.rgb(176, 82, 74)      // oxblood
+        private val ROSE = Color.rgb(201, 102, 92)   // the ring, a shade lighter
+        private val GLOW = Color.rgb(236, 170, 160)
+        private val CORE = Color.rgb(21, 21, 23)
     }
 }

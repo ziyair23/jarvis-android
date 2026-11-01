@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#14110E</color>
-    <color name="card">#231E19</color>
-    <color name="edge">#3A322A</color>
-    <color name="ink">#EFE6D6</color>
-    <color name="inkDim">#B8AC9A</color>
-    <color name="inkFaint">#8E8475</color>
-    <color name="accent">#C9A35C</color>
-    <color name="accentInk">#17120C</color>
+    <!-- After hours: charcoal, warm off-white, one oxblood accent -->
+    <color name="bg">#0F0F10</color>
+    <color name="card">#18181A</color>
+    <color name="edge">#26262A</color>
+    <color name="field">#131315</color>
+    <color name="ink">#EFEBE4</color>
+    <color name="inkDim">#A29D95</color>
+    <color name="inkFaint">#7D7872</color>
+    <color name="accent">#B0524A</color>
+    <color name="accentInk">#F6ECE8</color>
 </resources>

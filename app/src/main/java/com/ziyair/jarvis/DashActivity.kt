@@ -24,7 +24,7 @@ class DashActivity : Activity() {
         super.onCreate(savedInstanceState)
         if (Prefs(this).claudeKey.isBlank()) { startActivity(Intent(this, MainActivity::class.java)); finish(); return }
         web = WebView(this)
-        web.setBackgroundColor(0xFF14110E.toInt())
+        web.setBackgroundColor(0xFF0F0F10.toInt())
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
         web.webChromeClient = android.webkit.WebChromeClient()
@@ -61,6 +61,9 @@ class DashActivity : Activity() {
                 .put("problems", Problems.all(p))
                 .put("ears", Ear.status(ctx))
                 .put("health", Health.json(ctx))
+                .put("name", Regex("(?i)name is ([A-Za-z]+)").find(p.notes)?.groupValues?.get(1) ?: "")
+                .put("babyName", p.babyName)
+                .put("target", p.sp.getFloat("daily_target", 120f).toDouble())
                 .put("spend", Spend.thisMonth(p)).put("budget", Spend.budget(p))
                 .put("reminders", p.reminders())
                 .put("history", p.history())
