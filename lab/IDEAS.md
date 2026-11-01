@@ -5,8 +5,8 @@ Notes that start with "Marcus:" always win.
 
 | id | title | theme | pitch | score | status |
 |----|-------|-------|-------|-------|--------|
-| L1 | Offer diary + best hours | Business partner | Jarvis quietly keeps every DoorDash offer he judges (pay, miles, minutes, time of day) on the phone, so "when are my best hours?" gets a real answer from his own data. | 37 | testing |
-| L2 | Per-hour offer judging | Business partner | The offer call-out adds dollars per hour (from the minutes or "deliver by" time on the card), and the verdict uses both per mile and per hour, so long-wait short-distance orders stop looking good. | 39 | testing |
+| L1 | Offer diary + best hours | Business partner | Jarvis quietly keeps every DoorDash offer he judges (pay, miles, minutes, time of day) on the phone, so "when are my best hours?" gets a real answer from his own data. | 37 | failed |
+| L2 | Per-hour offer judging | Business partner | The offer call-out adds dollars per hour (from the minutes or "deliver by" time on the card), and the verdict uses both per mile and per hour, so long-wait short-distance orders stop looking good. | 39 | passed |
 | L3 | Auto-log earnings | Business partner | When a dash ends, Jarvis reads the Dasher summary screen and logs the total itself ("Logged 54 dollars, sir"), no voice entry needed. | 37 | new |
 | L4 | Dash mileage log | Business partner | Counts miles driven while online in Dasher for tax time (2026 IRS rate), on the phone only. | 31 | new |
 | L5 | Shift wrap line | Running his day | One sentence when he goes offline: earned, per hour, days left to the Macan. Risky for taste (he dropped the spoken brief). | 29 | parked |
