@@ -53,6 +53,9 @@ class Actions(private val context: Context) {
         put(tool("remember", "Save something to long-term memory so you know it in future conversations (a fact about him, a person, a plan, a preference, where he parked, a code).",
             props("fact" to str("One short sentence in third person, e.g. 'His girlfriend's name is Bri.'")), listOf("fact")))
         put(tool("forget", "Delete remembered facts about something he wants forgotten.", props("about" to str("Words that identify what to forget")), listOf("about")))
+        put(tool("memory_list", "Everything Jarvis remembers about him, numbered, oldest first, with when each was saved.", props(), listOf()))
+        put(tool("memory_fix", "Replace one remembered fact with a corrected or merged version (by its number from memory_list), or drop it with an empty new_fact.",
+            props("number" to num("Fact number from memory_list"), "new_fact" to str("The corrected fact, or empty to drop it")), listOf("number")))
         put(tool("log_earnings", "Log money he made DoorDashing. Amounts for the same day add up (two shifts) unless replace is true (he's correcting the day's total). Reply with the result's totals in one or two short sentences.",
             props("amount" to num("Dollars made"), "day" to str("'today', 'yesterday' or YYYY-MM-DD"), "replace" to bool("true if this is a correction of that day's total")), listOf("amount")))
         put(tool("earnings_summary", "His earnings so far today, this week, this month, his daily average and progress toward his savings goal (the Macan).", props(), listOf()))
@@ -206,6 +209,8 @@ class Actions(private val context: Context) {
                 if (Inbox.reply(context, m, input.getString("message"))) "Replied to ${m.sender} on ${m.app}." else "The reply didn't go through."
             }
             "remember" -> if (Memory.add(context, input.getString("fact"))) "Saved to memory." else "Already remembered."
+            "memory_list" -> Memory.listNumbered(context)
+            "memory_fix" -> Memory.fix(context, input.optInt("number"), input.optString("new_fact"))
             "forget" -> { val n = Memory.forget(context, input.getString("about")); if (n > 0) "Forgot $n thing${if (n > 1) "s" else ""}." else "Nothing matched to forget." }
             "log_earnings" -> Earnings.log(context, input.getDouble("amount"), input.optString("day", "today"), input.optBoolean("replace"))
             "earnings_summary" -> Earnings.summary(context)
@@ -232,7 +237,7 @@ class Actions(private val context: Context) {
             "quiet_mode" -> if (input.optBoolean("on")) Stealth.start(context, if (input.has("minutes")) input.optInt("minutes") else null) else Stealth.end(context)
             "set_voice" -> {
                 val v = input.getString("name").lowercase().trim()
-                if (v !in Piper.NAMES) "Voices available: Alan, George, Lewis, Daniel, Fable." else {
+                if (v !in Piper.NAMES) "Voices available: Jarvis (his own blended voice), Alan, George, Lewis, Daniel, Fable." else {
                     Piper.setPick(context, v)
                     if (Piper.pickReady(context)) "Switched to ${v.replaceFirstChar { it.uppercase() }}." else {
                         Thread { Piper.download(context) }.start()

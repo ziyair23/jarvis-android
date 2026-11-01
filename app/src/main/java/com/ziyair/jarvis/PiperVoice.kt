@@ -27,7 +27,11 @@ object Piper {
     private const val OLD_KOKORO = "kokoro-int8-en-v0_19"
 
     /** Voice name -> (model, speaker id). Kokoro v1.0 British men: 24 daniel, 25 fable, 26 george, 27 lewis. */
-    private val VOICES = linkedMapOf("alan" to (ALAN to 0), "george" to (KOKORO to 26), "lewis" to (KOKORO to 27), "daniel" to (KOKORO to 24), "fable" to (KOKORO to 25))
+    /** Slot 50 of the voice file is rewritten on the phone with Jarvis's own blended voice (see blend()). */
+    private const val BLEND_SLOT = 50
+    private val VOICES = linkedMapOf("jarvis" to (KOKORO to BLEND_SLOT), "alan" to (ALAN to 0), "george" to (KOKORO to 26), "lewis" to (KOKORO to 27), "daniel" to (KOKORO to 24), "fable" to (KOKORO to 25))
+    private val SPEAKER = mapOf("daniel" to 24, "fable" to 25, "george" to 26, "lewis" to 27)
+    @Volatile private var blendKey = ""
     val NAMES = VOICES.keys.toList()
 
     @Volatile var state = ""
@@ -39,7 +43,45 @@ object Piper {
     private fun dir(c: Context, m: Model) = File(root(c), m.dir)
     private fun ready(c: Context, m: Model) = File(dir(c, m), ".ok").exists()
 
-    fun pick(c: Context) = Prefs(c).sp.getString("voice_pick", "alan")?.takeIf { it in VOICES } ?: "alan"
+    fun pick(c: Context): String {
+        val p = Prefs(c)
+        // a voice change sent from config (e.g. switching him to his own blended voice), applied once
+        val def = try { Brain(c).config().optString("voice_default") } catch (_: Exception) { "" }
+        if (def in VOICES && p.sp.getString("voice_default_applied", "") != def) p.sp.edit().putString("voice_pick", def).putString("voice_default_applied", def).apply()
+        return p.sp.getString("voice_pick", "alan")?.takeIf { it in VOICES } ?: "alan"
+    }
+
+    /**
+     * Jarvis's own voice: a mix of the British voices, written into one slot of the voice file on the phone.
+     * The mix comes from config ("voice_blend": {"george": 0.6, "lewis": 0.4}), so it can be retuned without a new build.
+     */
+    private fun blend(c: Context, d: File): String {
+        val cfg = try { Brain(c).config() } catch (_: Exception) { null }
+        val b = cfg?.optJSONObject("voice_blend") ?: org.json.JSONObject().put("george", 0.6).put("lewis", 0.4)
+        val key = b.toString()
+        val mark = File(d, ".blend")
+        if (mark.exists() && mark.readText() == key) return key
+        val n = 510 * 256; val bytes = n * 4
+        java.io.RandomAccessFile(File(d, "voices.bin"), "rw").use { f ->
+            val out = FloatArray(n)
+            var total = 0.0
+            for (name in b.keys()) {
+                val sid = SPEAKER[name] ?: continue
+                val w = b.optDouble(name, 0.0); if (w <= 0) continue
+                total += w
+                val buf = ByteArray(bytes); f.seek(sid.toLong() * bytes); f.readFully(buf)
+                val fb = java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
+                for (i in 0 until n) out[i] += (fb.get(i) * w).toFloat()
+            }
+            if (total <= 0) return key
+            val ob = java.nio.ByteBuffer.allocate(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            for (i in 0 until n) ob.putFloat((out[i] / total).toFloat())
+            f.seek(BLEND_SLOT.toLong() * bytes); f.write(ob.array())
+        }
+        mark.writeText(key)
+        Trace.log(c, "voice", "blended his own voice: $key")
+        return key
+    }
     fun setPick(c: Context, v: String) = Prefs(c).sp.edit().putString("voice_pick", v).apply()
     fun pickReady(c: Context) = ready(c, VOICES[pick(c)]!!.first)
 
@@ -109,6 +151,8 @@ object Piper {
     }
 
     @Synchronized private fun engine(c: Context, m: Model): OfflineTts? {
+        // a new blend means the voice file changed: reload the engine
+        if (m.kokoro && ready(c, m)) try { val k = blend(c, dir(c, m)); if (k != blendKey) { blendKey = k; if (engineFor === m) { try { engine?.release() } catch (_: Throwable) {}; engine = null; engineFor = null } } } catch (e: Exception) { Problems.log(c, "voice blend: ${e.message}") }
         if (engineFor === m) engine?.let { return it }
         try { engine?.release() } catch (_: Throwable) {}
         engine = null; engineFor = null
@@ -148,7 +192,8 @@ object Piper {
     @Synchronized fun synth(c: Context, text0: String, speed: Float): Pair<FloatArray, Int>? {
         val (m, sid) = current(c) ?: return null
         val text = speakable(text0).ifBlank { return null }
-        val vid = m.dir + "_" + sid
+        val vid = m.dir + "_" + sid + (if (sid == BLEND_SLOT) "_" + blendKey.hashCode().toUInt().toString(16) else "")
+        if (sid == BLEND_SLOT) engine(c, m)   // make sure the blend is current before using the phrasebook
         Voicebank.get(c, vid, text, speed)?.let { return it }
         return try {
             engine(c, m)?.generate(text, sid, speed)?.let { it.samples to it.sampleRate }?.takeIf { it.first.isNotEmpty() }
@@ -160,7 +205,7 @@ object Piper {
     fun cached(c: Context, text0: String, speed: Float): Pair<FloatArray, Int>? {
         val (m, sid) = current(c) ?: return null
         val text = speakable(text0).ifBlank { return null }
-        return Voicebank.get(c, m.dir + "_" + sid, text, speed)
+        return Voicebank.get(c, m.dir + "_" + sid + (if (sid == BLEND_SLOT) "_" + blendKey.hashCode().toUInt().toString(16) else ""), text, speed)
     }
 
     /** Load the voice ahead of time so the first reply isn't slow. */

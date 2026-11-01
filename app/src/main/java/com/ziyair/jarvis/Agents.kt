@@ -52,10 +52,15 @@ object Agents {
         "Save ideas the moment he says them, tagged (design, drop, post, collab or the product). When he asks what's left or what ideas he has, read back " +
             "the best few, newest first. Talk like a sharp co-founder: practical, no hype. Never post, message or buy anything.")
 
+    val MEMORY = Def("memory", "Memory", "Keeps everything Jarvis knows about him accurate: what he remembers, corrections, and forgetting on request.",
+        setOf("remember", "forget", "memory_list", "memory_fix"),
+        "Read memory_list before changing anything. When he asks what you know, give the few things that matter most in two or three sentences, not the whole list. " +
+            "When tidying, merge duplicates and fix outdated facts with memory_fix; never invent facts. Forget means delete, completely.")
+
     val BUILDER = Def("builder", "Builder", "Works on Jarvis himself: changes how he talks and behaves, and builds new versions for Marcus to approve.",
         Builder.TOOL_NAMES, Builder.STYLE)
 
-    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, BUILDER)
+    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER)
     fun def(id: String) = ALL.firstOrNull { it.id == id }
 
     // ---------------- switches, notebooks, stats ----------------
@@ -127,7 +132,7 @@ object Agents {
 
     /** Skills that need a look at the result before the agent is done (everything else returns straight away). */
     private val LOOK_AGAIN = setOf("screen_read", "read_messages", "earnings_summary", "expenses_summary", "baby_status", "journal_read",
-        "calendar_events", "list_reminders", "briefing", "pursuit_list",
+        "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list",
         "read_file", "list_files", "build_status", "read_build_errors")
 
     /** Runs one job on an agent (blocking, background thread). Returns what happened, for Jarvis to say. */
