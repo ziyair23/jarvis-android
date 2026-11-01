@@ -46,7 +46,7 @@ object Music {
         return false
     }
 
-    fun play(context: Context, pkg: String, name: String, query: String, song: String?, taps: Boolean = true): String {
+    fun play(context: Context, pkg: String, name: String, query: String, song: String?): String {
         val before = title(Apps.player(context, pkg))
         wasPlaying = playing(Apps.player(context, pkg)); seen = Apps.player(context, pkg) != null
         // Jarvis lets go of the speaker first: while he holds it the music app is paused, and when he let go
@@ -103,7 +103,7 @@ object Music {
         if (started(context, pkg, before, 3000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
         // the page is open but sitting paused: press play himself, again and again for up to ~10 seconds, until it's going.
         // Only ever on HIS song (once the app has loaded it), never on the old one.
-        val access = taps && JarvisAccess.on(context)   // protocols pass taps=false: never touch the screen
+        val access = JarvisAccess.on(context)
         if (!access) Trace.log(context, "music", "screen control is off, can only press play through the player")
         var tappedSong = false
         val until = System.currentTimeMillis() + 10_000
@@ -137,7 +137,6 @@ object Music {
         Trace.log(context, "music", "gave up: player says \"${title(Apps.player(context, pkg))}\", playing=${playing(Apps.player(context, pkg))}")
         // what's playing isn't his song (the old queue): pause it instead of claiming success
         Apps.player(context, pkg)?.let { c -> if (playing(c) && title(c) == before && !looksLike(nowSong(c), query)) try { c.transportControls.pause() } catch (_: Exception) {} }
-        if (!taps) return "Couldn't start $query; it's open in $name."
         if (!access) return "Opened $query in $name, but I can't press play without screen control. Tell him: open the Jarvis app, tap Allow screen control, and it'll press play for him from then on."
         if (!seen) return "Opened $query in $name."
         return "Opened $query in $name but it wouldn't start, even after I pressed play. Tell him plainly he'll need to tap it this once."

@@ -82,8 +82,8 @@ class Actions(private val context: Context) {
         put(tool("set_budget", "Set his monthly Claude budget in dollars (he gets a warning near it).", props("dollars" to num("Monthly budget")), listOf("dollars")))
         put(tool("briefing", "His morning briefing: weather and roads, next shift, calendar, the baby overnight, money and the Macan goal, lists, reminders. Use for 'brief me', 'morning briefing', 'what's my day look like', 'what's the plan today'. Only when he asks.", props(), listOf()))
         put(tool("status_report", "Status report: battery, weather and roads, earnings today, the baby, next shift, next reminder. Use for 'status report', 'how are we looking', 'catch me up'.", props(), listOf()))
-        put(tool("run_protocol", "Run one of his named protocols (his own saved ones too; use name 'list' to hear them all): 'dash' (heading out to DoorDash: driving mode, opens Dasher, starts music, weather), 'baby' (night feed: quiet phone, dim warm lights, low volume, baby status), 'home' (done for the night: driving off, lights on, earnings and baby recap), 'goodnight' (lights off, phone quiet until before his next shift with starred contacts still ringing, next shift time).",
-            props("name" to str("dash, baby, home, goodnight, one of his own saved protocols, or 'list'")), listOf("name")))
+        put(tool("run_protocol", "Run one of his named protocols: 'dash' (heading out to DoorDash: driving mode, opens Dasher, starts music, weather), 'baby' (night feed: quiet phone, dim warm lights, low volume, baby status), 'home' (done for the night: driving off, lights on, earnings and baby recap), 'goodnight' (lights off, phone quiet until before his next shift with starred contacts still ringing, next shift time).",
+            props("name" to str("dash, baby, home or goodnight")), listOf("name")))
         put(tool("lights", "Control his Govee lights: on/off, brightness 1-100, color (red, orange, yellow, green, blue, purple, pink, white, warm, cool). which = a light's name or 'all'.",
             props("which" to str("Light name or 'all'"), "on" to bool("true on, false off"), "brightness" to num("1-100"), "color" to str("Color name")), listOf()))
         put(tool("find_phone", "He can't find his phone and asked where you are: ring loudly (even on silent) and flash the light.", props(), listOf()))
@@ -94,11 +94,6 @@ class Actions(private val context: Context) {
         put(tool("answer_call", "Answer the phone call that's ringing right now.", props(), listOf()))
         put(tool("decline_call", "Decline the phone call that's ringing right now.", props(), listOf()))
         put(tool("offer_rule", "Change DoorDash order judging: minimum dollars per mile, or turn it on/off.", props("per_mile" to num("Minimum $ per mile"), "on" to bool("Judge offers or not")), listOf()))
-        put(tool("save_protocol", "Save (or replace) one of his own protocols: a name plus steps Jarvis runs in order when he says '<name> protocol'. Steps may only use: " + ProtocolRules.ALLOWED.joinToString() + ". Never texts, calls, replies or screen taps. Each step's input is exactly what that tool takes (e.g. {\"tool\":\"phone_control\",\"input\":{\"action\":\"quiet_on\"}}, {\"tool\":\"play_music\",\"input\":{\"query\":\"workout playlist\"}}, {\"tool\":\"lights\",\"input\":{\"which\":\"all\",\"on\":false}}).",
-            props("name" to str("Short protocol name, e.g. gym"), "steps" to JSONObject().put("type", "array").put("description", "Steps in order")
-                .put("items", JSONObject().put("type", "object").put("properties", JSONObject().put("tool", str("Tool name")).put("input", JSONObject().put("type", "object").put("description", "That tool's input")))
-                    .put("required", JSONArray(listOf("tool"))))), listOf("name", "steps")))
-        put(tool("delete_protocol", "Delete one of his own protocols by name. (Built-in ones can't be deleted.)", props("name" to str("Protocol name")), listOf("name")))
         put(tool("driving_mode", "Turn driving mode on or off (short answers, messages read aloud).", props("on" to bool("true for on")), listOf("on")))
     }
 
@@ -181,7 +176,7 @@ class Actions(private val context: Context) {
                 val pkg = current ?: listOf(YT_MUSIC, SPOTIFY).firstOrNull { has(it) } ?: return "No music app found (YouTube Music or Spotify)."
                 val name = if (pkg == SPOTIFY) "Spotify" else "YouTube Music"
                 if (q.isBlank() || q.lowercase() in setOf("music", "something", "my music", "anything")) return Apps.media(context, "play")
-                Music.play(context, pkg, name, q, input.optString("song").ifBlank { null }, taps = !input.optBoolean("no_screen"))
+                Music.play(context, pkg, name, q, input.optString("song").ifBlank { null })
             }
             "get_weather" -> Weather.report(context, input.optString("place")) ?: "Couldn't get the weather right now."
             "open_app" -> Apps.open(context, input.getString("name"))
@@ -250,8 +245,6 @@ class Actions(private val context: Context) {
             "status_report" -> Status.report(context)
             "briefing" -> Briefing.build(context)
             "run_protocol" -> Protocols.run(context, input.getString("name"))
-            "save_protocol" -> CustomProtocols.save(context, input.optString("name"), input.optJSONArray("steps"))
-            "delete_protocol" -> CustomProtocols.delete(context, input.optString("name"))
             "lights" -> Lights.set(context, input.optString("which", "all"), if (input.has("on")) input.optBoolean("on") else null,
                 if (input.has("brightness")) input.optInt("brightness") else null, input.optString("color").ifBlank { null })
             "find_phone" -> FindPhone.ring(context)

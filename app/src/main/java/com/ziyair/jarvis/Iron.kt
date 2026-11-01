@@ -179,75 +179,9 @@ object FindPhone {
     }
 }
 
-/** Protocols he makes himself by voice (lab L11). Stored only on the phone: {"gym":[{"tool":"lights","input":{...}}]} */
-object CustomProtocols {
-    private fun load(p: Prefs): JSONObject = try { JSONObject(p.sp.getString("custom_protocols", "{}")) } catch (_: Exception) { JSONObject() }
-    fun names(context: Context): List<String> = load(Prefs(context)).keys().asSequence().toList().sorted()
-
-    @Synchronized fun save(context: Context, rawName: String, steps: JSONArray?): String {
-        val p = Prefs(context); val all = load(p)
-        val name = ProtocolRules.normName(rawName)
-        val list = (0 until (steps?.length() ?: 0)).mapNotNull { steps!!.optJSONObject(it) }
-        val tools = list.map { it.optString("tool") }
-        ProtocolRules.check(rawName, tools, all.keys().asSequence().toSet())?.let { return it }
-        val clean = JSONArray()
-        list.forEach { clean.put(JSONObject().put("tool", it.optString("tool")).put("input", it.optJSONObject("input") ?: JSONObject())) }
-        val updated = all.has(name)
-        all.put(name, clean)
-        p.sp.edit().putString("custom_protocols", all.toString()).apply()
-        return ProtocolRules.savedLine(name, list.map { ProtocolRules.describe(it.optString("tool"), detail(it.optJSONObject("input"))) }, updated)
-    }
-
-    @Synchronized fun delete(context: Context, rawName: String): String {
-        val p = Prefs(context); val all = load(p); val name = ProtocolRules.normName(rawName)
-        if (name in ProtocolRules.BUILT_IN) return "That one's built in, sir. It stays."
-        val key = ProtocolRules.find(name, all.keys().asSequence().toList()) ?: return "There's no protocol called $name, sir."
-        all.remove(key)
-        p.sp.edit().putString("custom_protocols", all.toString()).apply()
-        return "Deleted the $name protocol."
-    }
-
-    fun list(context: Context) = ProtocolRules.listLine(names(context))
-
-    /** Runs a saved protocol, or returns null if there isn't one with that name. Each step runs even if one fails. */
-    fun run(context: Context, rawName: String): String? {
-        val all = load(Prefs(context))
-        val name = ProtocolRules.find(rawName, all.keys().asSequence().toList()) ?: return null
-        val steps = all.optJSONArray(name) ?: return null
-        val actions = Actions(context)
-        val done = mutableListOf<String>(); val failed = mutableListOf<String>(); val info = mutableListOf<String>()
-        for (i in 0 until steps.length()) {
-            val st = steps.optJSONObject(i) ?: continue
-            val tool = st.optString("tool")
-            if (tool !in ProtocolRules.ALLOWED) continue   // re-checked at run time too
-            // a copy of the saved input; music in a protocol never taps the screen
-            val inp = JSONObject((st.optJSONObject("input") ?: JSONObject()).toString())
-            if (tool == "play_music") inp.put("no_screen", true)
-            val what = ProtocolRules.describe(tool, detail(inp))
-            try {
-                if (tool in ProtocolRules.INFO) {
-                    info.add(if (tool == "get_weather") Weather.now(context) ?: "No weather right now." else actions.run(tool, inp))
-                    continue
-                }
-                val r = actions.run(tool, inp)
-                if (ProtocolRules.failed(r)) { failed.add(what); Problems.log(context, "custom protocol $name/$tool: $r") } else done.add(what)
-            } catch (e: Exception) { failed.add(what); Problems.log(context, "custom protocol $name/$tool: ${e.message}") }
-        }
-        return ProtocolRules.runLine(name, done, failed, info)
-    }
-
-    private fun detail(i: JSONObject?): String? = i?.let {
-        it.optString("query").ifBlank { it.optString("name") }.ifBlank { it.optString("action") }
-            .ifBlank { if (it.has("on")) (if (it.optBoolean("on")) "on" else "off") else "" }
-            .ifBlank { null }
-    }
-}
-
 /** Named routines, like the films. Each returns what happened for Jarvis to sum up in one line. */
 object Protocols {
     fun run(context: Context, nameIn: String): String {
-        if (ProtocolRules.normName(nameIn) in setOf("list", "all", "mine")) return CustomProtocols.list(context)
-        CustomProtocols.run(context, nameIn)?.let { return it }
         val name = nameIn.lowercase()
         val out = mutableListOf<String>()
         fun step(label: String, f: () -> String) { try { out.add(f()) } catch (e: Exception) { Problems.log(context, "protocol $label: ${e.message}") } }
@@ -273,7 +207,7 @@ object Protocols {
                 out.add("Earned today ${Earnings.money(Earnings.today(context))}. Ask him how the shift went if nothing's logged.")
                 out.add(Baby.status(context))
             }
-            else -> return "No protocol called $nameIn. " + CustomProtocols.list(context)
+            else -> return "No protocol called $nameIn. Known: dash, baby, home, goodnight."
         }
         return out.joinToString(" ")
     }
