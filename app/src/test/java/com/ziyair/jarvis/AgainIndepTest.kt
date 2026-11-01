@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 
 /** Independent tester, L20, against lab/specs/L20.md only. Calls Again the way JarvisService does. */
@@ -48,7 +47,6 @@ class AgainIndepTest {
     // AT 6 as it happens on the phone: "drop it" is a reflex whose reply "Dropped, sir." is spoken and then recorded
     // by JarvisService.handle (Again.said(reply, ...)), after Reflex called Again.forget().
     // IGNORED only so lab-branch CI still builds; FAILS today (lab/reports/L20-2026-11-01.md). Un-ignore with the fix.
-    @Ignore("L20 bug: Dropped, sir. is recorded as the last line; un-ignore with the fix")
     @Test fun at6ThroughTheService() {
         Again.said(weather, t0)
         Again.forget(); Again.said("Dropped, sir.", t0 + min)

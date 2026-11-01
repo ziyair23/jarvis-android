@@ -9,6 +9,7 @@ import java.util.Locale
 object Again {
     const val KEEP_MS = 10 * 60_000L
     const val NOTHING = "Nothing to repeat, sir."
+    const val DROPPED = "Dropped, sir."
 
     private var last = ""
     private var at = 0L
@@ -20,14 +21,15 @@ object Again {
     /** Jarvis just said [line] out loud. */
     @Synchronized fun said(line: String, now: Long) {
         val l = line.trim()
-        if (l.isEmpty() || l == lastReplay || l == NOTHING) return
+        if (l == lastReplay) { lastReplay = ""; return }
+        if (l.isEmpty() || l == NOTHING || l == DROPPED) return
         last = l; at = now
     }
 
     @Synchronized fun forget() { last = ""; at = 0L; lastReplay = "" }
 
     private val WHOLE = Regex("^(say (that|it) again|say that one more time|(can you )?repeat (that|it)( again)?|repeat|come again|what was that|what('s| was) that again|" +
-        "what did you (just )?say|sorry what|sorry|pardon|pardon me|i didn't catch (that|it)|didn't catch (that|it)|i missed (that|it)|one more time|again)$")
+        "what did you (just )?say|sorry what|pardon|pardon me|i didn't catch (that|it)|didn't catch (that|it)|i missed (that|it)|one more time)$")
     private val TAIL = Regex("^(say the last (bit|part)( again)?|what was the last (bit|part)|repeat the last (bit|part)|the last (bit|part)( again)?)$")
 
     private fun norm(t0: String): String {

@@ -780,7 +780,7 @@ class JarvisService : Service() {
         val onCall = getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL
         if (onCall || PhoneControl.nightQuiet(this)) { note(line); Scheduler.notify(this, "Jarvis", line, false); if (!prefs.running && !busy) stopEverything(); return }
         // mid-conversation: hold it and say it right after
-        if (busy) { if (pending.size < 5) pending.add(line to thenListen); return }
+        if (busy) { if (pending.size < 5) pending.add(Triple(line, thenListen, chime)); return }
         note(line)
         Again.said(line, System.currentTimeMillis())
         busy = true
@@ -835,7 +835,7 @@ class JarvisService : Service() {
         } catch (_: Exception) {}
     }
 
-    private val pending = ArrayList<Pair<String, Boolean>>()
+    private val pending = ArrayList<Triple<String, Boolean, Boolean>>()
 
     private fun finishTurn() {
         Orb.set(this, Orb.HIDDEN)
@@ -846,9 +846,9 @@ class JarvisService : Service() {
         thinking = false
         inConvo = false
         if (pending.isNotEmpty() && prefs.running) {
-            val (line, listenAfter) = pending.removeAt(0)
+            val (line, listenAfter, chime) = pending.removeAt(0)
             busy = false
-            main.postDelayed({ sayFirst(line, listenAfter) }, 400)
+            main.postDelayed({ sayFirst(line, listenAfter, chime = chime) }, 400)
             return
         }
         try { recognizer?.destroy() } catch (_: Exception) {}

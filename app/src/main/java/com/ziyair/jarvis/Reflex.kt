@@ -61,7 +61,7 @@ object Reflex {
                 Inbox.lastAnnounced = null
                 Again.forget()
                 Memory.purgeSensitive(c)
-                return Hit("Dropped, sir.", true)
+                return Hit(Again.DROPPED, true)
             }
             m(t, "what time is it|what's the time|what is the time|time|what time is it right now|got the time") ->
                 return Hit("It's ${SimpleDateFormat("h:mm", Locale.US).format(now)}, sir.")

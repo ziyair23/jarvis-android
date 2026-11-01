@@ -198,7 +198,7 @@ class Live(
                 turnDoneAt = System.currentTimeMillis()
                 val u = userBuf.toString().trim(); val m = modelBuf.toString().trim()
                 if (u.isNotBlank()) Prefs(context).addTurn("user", u)
-                if (m.isNotBlank()) Prefs(context).addTurn("assistant", m)
+                if (m.isNotBlank()) { Prefs(context).addTurn("assistant", m); Again.said(m, System.currentTimeMillis()) }
                 if (u.isNotBlank() || m.isNotBlank()) Trace.log(context, "live", "turn: \"${u.take(100)}\" -> \"${m.take(140)}\"")
                 userBuf.setLength(0); modelBuf.setLength(0)
                 LogBus.changed()
@@ -331,7 +331,7 @@ class Live(
         try { track?.pause(); track?.flush() } catch (_: Exception) {}
         val u = userBuf.toString().trim(); val m = modelBuf.toString().trim()
         if (u.isNotBlank()) Prefs(context).addTurn("user", u)
-        if (m.isNotBlank()) Prefs(context).addTurn("assistant", m)
+        if (m.isNotBlank()) { Prefs(context).addTurn("assistant", m); Again.said(m, System.currentTimeMillis()) }
         main.postDelayed({
             callAudio(false)
             try { client.dispatcher.executorService.shutdown() } catch (_: Exception) {}

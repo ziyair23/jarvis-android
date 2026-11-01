@@ -72,4 +72,25 @@ class AgainTest {
         Again.said(Again.NOTHING, t0 + min)
         assertEquals(weather, Again.ask("repeat that", t0 + 2 * min))
     }
+
+    @Test fun bareSorryAndAgainGoElsewhere() {
+        Again.said(weather, t0)
+        assertNull(Again.ask("sorry", t0 + min))
+        assertNull(Again.ask("again", t0 + min))
+    }
+
+    @Test fun droppedIsNeverTheLastLine() {
+        Again.said(weather, t0)
+        Again.forget()
+        Again.said(Again.DROPPED, t0 + min)
+        assertEquals(Again.NOTHING, Again.ask("say that again", t0 + 2 * min))
+    }
+
+    @Test fun sameLineSaidForRealAgainRefreshesItsTime() {
+        Again.said("Done, sir.", t0)
+        assertEquals("Done, sir.", Again.ask("say that again", t0 + min))
+        Again.said("Done, sir.", t0 + min)        // the replay itself
+        Again.said("Done, sir.", t0 + 9 * min)    // Jarvis really says it again later
+        assertEquals("Done, sir.", Again.ask("say that again", t0 + 18 * min))
+    }
 }
