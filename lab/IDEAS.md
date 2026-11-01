@@ -25,5 +25,5 @@ Marcus (2026-11-01): no more DoorDash features from the lab. Pitch other areas.
 | L14 | Say it once, Jarvis learns the shortcut | Running his day | When he asks for the same 2–3 things together a few times, Jarvis offers once: "Want that as a protocol, sir?" Builds on L11. | 31 | rejected (built on L11) |
 | L15 | Morning-free quiet start | Conversation | Jarvis greets with the one thing that matters only when he opens him first each day (a reminder due, a missed call), never a brief. | 27 | new |
 | L16 | Memory check-in on request | Conversation | "What do you know about me?" reads back his saved facts in two lines, "forget the one about…" removes it. Makes memory feel trustworthy. | 30 | new |
-| L17 | Phone-call notes | Running his day | After a call he can say "note that": Jarvis saves a one-line note tied to the caller and brings it up next time that person calls. | 33 | new |
+| L17 | Phone-call notes | Running his day | After a call he can say "note that": Jarvis saves a one-line note tied to the caller and brings it up next time that person calls. | 33 | testing |
 | B3 | Big bet: Jarvis on the PC | Big bet | A small Windows companion: same Jarvis memory and voice, opens apps and files on his PC, drives video edits with him. Phone and PC share one brain. | — | idea |

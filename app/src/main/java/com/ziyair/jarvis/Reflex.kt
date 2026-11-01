@@ -35,6 +35,11 @@ object Reflex {
     fun handle(c: Context, text: String): Hit? {
         if (!Brain(c).config().optBoolean("reflexes", true)) return null
         val t = norm(text)
+        // call notes (lab L17): kept on the phone only, so not added to the conversation Claude sees
+        if (t.isNotEmpty()) {
+            val note = try { CallNotesStore.handle(c, t) } catch (e: Exception) { Problems.log(c, "call notes: ${e.message}"); null }
+            if (note != null) return Hit(note)
+        }
         if (t.isEmpty() || t.split(" ").size > 9) return null
         val hit = try { match(c, t) } catch (e: Exception) { Problems.log(c, "reflex: ${e.message}"); null } ?: return null
         // Claude still sees it in the conversation, so "and turn it up a bit" afterwards makes sense to him

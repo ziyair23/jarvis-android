@@ -125,6 +125,7 @@ class MessageListener : NotificationListenerService() {
         val now = System.currentTimeMillis()
         if (who == lastCaller && now - lastCallAt < 60_000) return
         lastCaller = who; lastCallAt = now
+        try { CallNotesStore.called(this, who) } catch (e: Exception) { Problems.log(this, "call notes: ${e.message}") }
         val digits = who.replace(Regex("[^0-9]"), "")
         CallControl.ringing(n.actions?.firstOrNull { a -> a.title?.toString()?.lowercase()?.let { it.contains("answer") || it.contains("accept") } == true },
             n.actions?.firstOrNull { a -> a.title?.toString()?.lowercase()?.let { it.contains("decline") || it.contains("reject") || it.contains("dismiss") } == true })
@@ -137,7 +138,10 @@ class MessageListener : NotificationListenerService() {
             DriveMode.on -> "$who is calling, sir. Answer it?" to true
             else -> "$who is calling, sir." to false
         }
-        try { startService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", line).putExtra("ringing", true).putExtra("listen", ask)) } catch (_: Exception) {}
+        // call notes (lab L17): his newest note on a known caller goes into the announcement
+        val note = if (unknown || spammy) "" else try { CallNotesStore.ringNote(this, who) } catch (_: Exception) { "" }
+        val said = CallNotes.ringLine(line, note)
+        try { startService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", said).putExtra("ringing", true).putExtra("listen", ask)) } catch (_: Exception) {}
     }
 
     private fun appName(pkg: String) = when (pkg) {

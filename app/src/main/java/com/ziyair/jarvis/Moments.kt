@@ -53,6 +53,24 @@ object HomeReminders {
     }
 }
 
+/** Call notes on the phone (lab L17): load, change and save the notebook in one go. Never leaves the phone. */
+object CallNotesStore {
+    private fun <T> edit(c: Context, f: (CallNotes.Book) -> T): T = synchronized(CallNotes) {
+        val p = Prefs(c)
+        val b = CallNotes.load(p.sp.getString("call_notes", ""))
+        val r = f(b)
+        p.sp.edit().putString("call_notes", CallNotes.dump(b)).apply()
+        r
+    }
+
+    fun called(c: Context, who: String) { edit(c) { CallNotes.called(it, who, System.currentTimeMillis()) } }
+    fun ringNote(c: Context, who: String): String = edit(c) { CallNotes.ringNote(it, who) }
+    fun handle(c: Context, t: String): String? {
+        val cmd = CallNotes.parse(t) ?: return null
+        return edit(c) { CallNotes.handle(it, cmd, System.currentTimeMillis()) }
+    }
+}
+
 /** The phone's ringing-call notification, so Jarvis can answer or decline by voice. */
 object CallControl {
     @Volatile private var answer: Notification.Action? = null
