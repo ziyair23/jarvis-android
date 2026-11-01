@@ -106,8 +106,8 @@ object Reflex {
         }
         // his own protocols (lab L11): "gym protocol", "run gym", "start gym mode"
         if (m(t, "(what|which) protocols do i have|list (my )?protocols|what are my protocols")) return Hit(CustomProtocols.list(c))
-        ProtocolRules.match(t, CustomProtocols.names(c))?.let { n -> CustomProtocols.run(c, n)?.let { return Hit(it) } }
-                timer(c, t)?.let { return it }
+        ProtocolRules.match(t, CustomProtocols.names(c))?.let { n -> CustomProtocols.run(c, n)?.let { return Hit(it, endConvo = true) } }
+        timer(c, t)?.let { return it }
         return null
     }
 

@@ -18,8 +18,15 @@ object ProtocolRules {
 
     /** Things that talk to other people or act on the screen: never inside a protocol. */
     private val PEOPLE_OR_SCREEN = setOf(
-        "send_text", "call", "reply_message", "answer_call", "decline_call", "screen_tap", "screen_type", "screen_action"
+        "send_text", "call", "reply_message", "answer_call", "decline_call", "screen_tap", "screen_type", "screen_action",
+        "run_protocol", "phone_task"
     )
+
+    /** Steps that report something (spoken as-is, short) rather than do something. */
+    val INFO = setOf("get_weather", "calendar_events", "status_report", "list_read")
+
+    /** Same patterns the built-in protocols answer to, so a custom name can never take one of them over. */
+    private val BUILT_IN_PATTERN = Regex("\\b(good ?night|sleep\\w*|bed\\w*|dash|work|baby|night|feed|home)\\b")
 
     val BUILT_IN = setOf("dash", "work", "baby", "night", "feed", "home", "goodnight", "good night", "sleep", "bed")
 
@@ -35,7 +42,7 @@ object ProtocolRules {
     fun check(rawName: String, tools: List<String>, existing: Set<String>): String? {
         val name = normName(rawName)
         if (name.length < 2 || name.length > 30) return "I need a short name for it, sir."
-        if (name in BUILT_IN) return "That one's built in, sir. Pick another name."
+        if (name in BUILT_IN || BUILT_IN_PATTERN.containsMatchIn(name)) return "That one's built in, sir. Pick another name."
         if (tools.any { it in PEOPLE_OR_SCREEN }) return "I can't put texting, calls or screen taps in a protocol, sir."
         if (tools.isEmpty()) return "That protocol has nothing in it yet, sir."
         if (tools.size > MAX_STEPS) return "That's more than $MAX_STEPS steps, sir. Trim it down a little."
@@ -87,6 +94,18 @@ object ProtocolRules {
         val title = name.replaceFirstChar { it.uppercase() }
         return "$title protocol ${if (updated) "updated" else "saved"}: ${steps.joinToString(", ")}."
     }
+
+    /** What he hears after a protocol runs: "Gym protocol: quiet, workout playlist, lights off." */
+    fun runLine(name: String, done: List<String>, failed: List<String>, info: List<String>): String {
+        val t = name.replaceFirstChar { it.uppercase() }
+        val s = StringBuilder(if (done.isEmpty()) "$t protocol." else "$t protocol: ${done.joinToString(", ")}.")
+        if (failed.isNotEmpty()) s.append(" ${failed.joinToString(" and ").replaceFirstChar { it.uppercase() }} didn't work.")
+        info.forEach { s.append(" ").append(it) }
+        return s.toString().trim()
+    }
+
+    /** Whether a tool's reply means the step failed. */
+    fun failed(result: String) = Regex("couldn't|can't|cannot|didn't|wouldn't|isn't|needs to|failed|unknown|no lights|no flashlight|no \\w+ app|not (allowed|set up|found|available|connected|granted)|only \\d+ of", RegexOption.IGNORE_CASE).containsMatchIn(result)
 
     fun listLine(custom: List<String>): String =
         if (custom.isEmpty()) "Built in: dash, baby, home and goodnight. None of your own yet."

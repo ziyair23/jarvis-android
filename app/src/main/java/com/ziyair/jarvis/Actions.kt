@@ -83,7 +83,7 @@ class Actions(private val context: Context) {
         put(tool("briefing", "His morning briefing: weather and roads, next shift, calendar, the baby overnight, money and the Macan goal, lists, reminders. Use for 'brief me', 'morning briefing', 'what's my day look like', 'what's the plan today'. Only when he asks.", props(), listOf()))
         put(tool("status_report", "Status report: battery, weather and roads, earnings today, the baby, next shift, next reminder. Use for 'status report', 'how are we looking', 'catch me up'.", props(), listOf()))
         put(tool("run_protocol", "Run one of his named protocols (his own saved ones too; use name 'list' to hear them all): 'dash' (heading out to DoorDash: driving mode, opens Dasher, starts music, weather), 'baby' (night feed: quiet phone, dim warm lights, low volume, baby status), 'home' (done for the night: driving off, lights on, earnings and baby recap), 'goodnight' (lights off, phone quiet until before his next shift with starred contacts still ringing, next shift time).",
-            props("name" to str("dash, baby, home or goodnight")), listOf("name")))
+            props("name" to str("dash, baby, home, goodnight, one of his own saved protocols, or 'list'")), listOf("name")))
         put(tool("lights", "Control his Govee lights: on/off, brightness 1-100, color (red, orange, yellow, green, blue, purple, pink, white, warm, cool). which = a light's name or 'all'.",
             props("which" to str("Light name or 'all'"), "on" to bool("true on, false off"), "brightness" to num("1-100"), "color" to str("Color name")), listOf()))
         put(tool("find_phone", "He can't find his phone and asked where you are: ring loudly (even on silent) and flash the light.", props(), listOf()))
@@ -181,7 +181,7 @@ class Actions(private val context: Context) {
                 val pkg = current ?: listOf(YT_MUSIC, SPOTIFY).firstOrNull { has(it) } ?: return "No music app found (YouTube Music or Spotify)."
                 val name = if (pkg == SPOTIFY) "Spotify" else "YouTube Music"
                 if (q.isBlank() || q.lowercase() in setOf("music", "something", "my music", "anything")) return Apps.media(context, "play")
-                Music.play(context, pkg, name, q, input.optString("song").ifBlank { null })
+                Music.play(context, pkg, name, q, input.optString("song").ifBlank { null }, taps = !input.optBoolean("no_screen"))
             }
             "get_weather" -> Weather.report(context, input.optString("place")) ?: "Couldn't get the weather right now."
             "open_app" -> Apps.open(context, input.getString("name"))
