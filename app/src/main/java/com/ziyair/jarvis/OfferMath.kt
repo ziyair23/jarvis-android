@@ -28,7 +28,8 @@ object OfferMath {
     /** How long the offer takes: an explicit "32 min" wins, else "Deliver by 7:42 PM" counted from now. Null if unknown or odd. */
     fun minutes(all0: String, nowMinutes: Int): Int? {
         val all = spaces(all0)
-        Regex("(\\d{1,3})\\s?(?:min|mins|minutes)\\b", RegexOption.IGNORE_CASE).findAll(all)
+        // only a screen item that is nothing but a duration ("18 min"), so banners like "Dash ends in 45 min" don't count
+        all.split(" | ").mapNotNull { Regex("^\\s*(\\d{1,3})\\s?(?:min|mins|minutes)\\s*$", RegexOption.IGNORE_CASE).find(it) }
             .map { it.groupValues[1].toInt() }.firstOrNull { it in 3..120 }?.let { return it }
         val by = Regex("deliver(?:y)?\\s+by\\s+(\\d{1,2}):(\\d{2})\\s*([ap])\\.?\\s?m\\.?", RegexOption.IGNORE_CASE).find(all) ?: return null
         var h = by.groupValues[1].toInt() % 12
@@ -71,13 +72,14 @@ object OfferMath {
         val payWords = money(o.pay)
         val milesWords = if (o.miles == Math.floor(o.miles)) "${o.miles.toInt()} miles" else "${o.miles} miles"
         val rate = o.pay / o.miles
-        val rateWords = if (rate < 1) "${Math.round(rate * 100)} cents" else money(rate)
+        val rateWords = if (Math.round(rate * 100) < 100) "${Math.round(rate * 100)} cents" else money(rate)
         val hourWords = perHour(o)?.let { ", about ${Math.round(it)} an hour" } ?: ""
         return "$payWords for $milesWords. $rateWords a mile$hourWords. ${verdictWords(overall(o, minPerMile, minPerHour))}"
     }
 
     /** "When are my best hours?" from the diary. Short and written to be spoken. */
     fun bestHours(seen: List<Seen>, minPerMile: Double = 2.0, minPerHour: Double = 20.0): String {
+        if (seen.isEmpty()) return "I haven't seen any offers yet; give me a few dashes."
         if (seen.size < 10) return "I've only seen ${seen.size} offer${if (seen.size == 1) "" else "s"} so far; give me a few more dashes."
         class Band(val start: Int, val list: List<Seen>) {
             val perMile = list.sumOf { it.pay } / list.sumOf { it.miles }.coerceAtLeast(0.1)
@@ -95,7 +97,11 @@ object OfferMath {
         best.perHour?.let { sb.append(" and ${Math.round(it)} an hour") }
         sb.append(", from ${best.list.size} offers.")
         val worst = bands.filter { it.list.intersect(best.list.toSet()).isEmpty() }.minByOrNull { it.score }
-        if (worst != null && worst.score < best.score * 0.75) sb.append(" Weakest is ${clock(worst.start)} to ${clock(worst.start + 2)}, ${money(worst.perMile)} a mile.")
+        if (worst != null && worst.score < best.score * 0.75) {
+            val hourIsWorse = worst.perHour != null && worst.perHour / minPerHour < worst.perMile / minPerMile
+            val why = if (hourIsWorse) "about ${Math.round(worst.perHour!!)} an hour" else "${money(worst.perMile)} a mile"
+            sb.append(" Weakest is ${clock(worst.start)} to ${clock(worst.start + 2)}, $why.")
+        }
         return sb.toString()
     }
 

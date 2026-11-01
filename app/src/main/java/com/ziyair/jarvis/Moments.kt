@@ -87,9 +87,9 @@ object OfferJudge {
     fun on(p: Prefs) = p.sp.getBoolean("judge_offers", true)
 
     fun setRule(context: Context, perMile: Double?, on: Boolean?, perHour: Double? = null): String {
+        if (perHour != null && perHour !in 5.0..100.0) return "That hourly minimum sounds off, sir. Somewhere between five and a hundred?"
         val p = Prefs(context)
         perMile?.let { p.sp.edit().putFloat("min_per_mile", it.toFloat()).apply() }
-        if (perHour != null && perHour !in 5.0..100.0) return "That hourly minimum sounds off, sir. Somewhere between five and a hundred?"
         perHour?.let { p.sp.edit().putFloat("min_per_hour", it.toFloat()).apply() }
         on?.let { p.sp.edit().putBoolean("judge_offers", it).apply() }
         return if (!on(p)) "Order judging is off."
