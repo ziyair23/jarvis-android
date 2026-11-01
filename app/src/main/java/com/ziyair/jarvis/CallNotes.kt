@@ -75,6 +75,13 @@ object CallNotes {
         if (k.isEmpty()) return null
         val names = known(b)
         return names.firstOrNull { key(it) == k } ?: names.firstOrNull { key(it).split(" ").first() == k }
+            ?: names.firstOrNull { sound(key(it)) == sound(k) } ?: names.firstOrNull { sound(key(it).split(" ").first()) == sound(k) }
+    }
+
+    /** A rough sound-alike key, so a misheard "Abby" still finds "Abbey" and "Jess" finds "Jesse": first letter, then consonants, no doubles. */
+    fun sound(name: String): String = name.split(" ").filter { it.isNotEmpty() }.joinToString(" ") { w ->
+        val first = w.first().toString()
+        (first + w.drop(1).replace(Regex("[aeiouyhw' ]"), "")).replace(Regex("(.)\\1+"), "$1")
     }
 
     /** Splits "abbey smith she wants the hoodie" into the person and the note, using the names Jarvis knows. */
@@ -83,7 +90,10 @@ object CallNotes {
         if (r.isEmpty()) return null
         val cands = known(b).flatMap { n -> listOf(key(n) to n, key(n).split(" ").first() to n) }
             .filter { it.first.isNotEmpty() }.sortedByDescending { it.first.length }
+        val words = r.split(" ")
         val hit = cands.firstOrNull { r == it.first || r.startsWith(it.first + " ") }
+            // misheard name: compare by sound, same number of words
+            ?: cands.firstOrNull { c -> val n = c.first.split(" ").size; words.size >= n && sound(words.take(n).joinToString(" ")) == sound(c.first) }
         // only people Jarvis knows (callers or earlier notes); anything else goes to Claude as usual
             ?: return null
         val after = rest.trim().split(Regex("\\s+")).drop(hit.first.split(" ").size).joinToString(" ")
@@ -96,7 +106,7 @@ object CallNotes {
 
     /** What he said (already lower-cased, punctuation stripped) as a call-note command, or null. */
     fun parse(t: String): Cmd? {
-        Regex("^(?:what are|what're|read|read me|any|tell me|what's in) $P$").find(t)?.let { return Cmd.Read(it.groupValues[1].trim()) }
+        Regex("^(?:what are|what're|read|read me|any|tell me|what's in|do i have any|have i got any|got any) $P$").find(t)?.let { return Cmd.Read(it.groupValues[1].trim()) }
         Regex("^what did i note (?:on|for|about) (.+)$").find(t)?.let { return Cmd.Read(it.groupValues[1].trim()) }
         Regex("^(?:delete|clear|forget|remove|wipe) $P$").find(t)?.let { return Cmd.Clear(it.groupValues[1].trim()) }
         Regex("^(?:note|add a note|make a note|save a note|call note) (?:for|about|on) (.+)$").find(t)?.let { return Cmd.AddFor(it.groupValues[1].trim()) }

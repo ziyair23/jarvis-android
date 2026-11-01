@@ -90,4 +90,15 @@ class CallNotesTest {
         for (t in listOf("drop it", "forget it", "forget about that", "pause", "louder", "what time is it", "open my notes", "notes", "note to self buy milk"))
             assertNull(t, CallNotes.parse(t))
     }
+
+    // round 2: noisy car mishears the name
+    @Test fun misheardNamesStillFindThePerson() {
+        val b = CallNotes.Book()
+        CallNotes.called(b, "Abbey", t0); CallNotes.called(b, "Jesse Ruiz", t0 + min)
+        assertEquals("Noted for Abbey, sir.", say(b, "note for abby she owes me twenty", t0 + 2 * min))
+        assertEquals("she owes me twenty", CallNotes.notesFor(b, "Abbey").single().text)
+        assertEquals("Noted for Jesse Ruiz, sir.", say(b, "note for jess bring the samples", t0 + 3 * min))
+        assertEquals("Abbey, sir: she owes you twenty.", say(b, "do i have any notes on abby", t0 + 4 * min))
+        assertNull(say(b, "note for mark he called", t0 + 5 * min))
+    }
 }
