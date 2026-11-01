@@ -104,6 +104,10 @@ object Reflex {
                 return Hit(if (failed) r else if (on) "Lights on, sir." else "Lights off, sir.")
             }
         }
+        // offer diary (lab L1)
+        if (m(t, "(when|what) are my best (hours|times)( to dash)?|my best (hours|times)|best hours|when do i get (the )?best offers|how (have|are) my offers( been)?"))
+            return Hit(OfferJudge.insights(c, null))
+        if (m(t, "clear (my |the )?offer (diary|log)")) return Hit(OfferJudge.insights(c, "clear"))
         timer(c, t)?.let { return it }
         return null
     }
