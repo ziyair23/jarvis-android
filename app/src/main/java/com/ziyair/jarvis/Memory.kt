@@ -63,6 +63,25 @@ object Memory {
 
     fun clear(context: Context) = Prefs(context).saveMemory(JSONArray())
 
+    fun listNumbered(context: Context): String {
+        val a = Prefs(context).memory()
+        if (a.length() == 0) return "Nothing remembered yet."
+        val f = java.text.SimpleDateFormat("MMM d", java.util.Locale.US)
+        return (0 until a.length()).joinToString("\n") { i -> a.getJSONObject(i).let { "${i + 1}. ${it.optString("t")} (${f.format(java.util.Date(it.optLong("at")))})" } }
+    }
+
+    /** Correct, merge or drop one fact (1-based number). */
+    @Synchronized fun fix(context: Context, number: Int, newFact: String): String {
+        val p = Prefs(context); val a = p.memory()
+        if (number < 1 || number > a.length()) return "No fact number $number."
+        val old = a.getJSONObject(number - 1).optString("t")
+        val n = newFact.trim().removeSuffix(".")
+        if (n.isBlank()) { val keep = JSONArray(); for (i in 0 until a.length()) if (i != number - 1) keep.put(a.get(i)); p.saveMemory(keep); return "Dropped: $old." }
+        if (sensitive(n)) return "That can't be stored."
+        a.getJSONObject(number - 1).put("t", n).put("at", System.currentTimeMillis()); p.saveMemory(a)
+        return "Updated: \"$old\" is now \"$n\"."
+    }
+
     fun promptBlock(context: Context): String {
         val facts = all(context)
         if (facts.isEmpty()) return ""
