@@ -72,6 +72,10 @@ class Prefs(context: Context) {
     var readMessages: String
         get() = sp.getString("read_messages", "driving") ?: "driving"
         set(v) = sp.edit().putString("read_messages", v).apply()
+    /** Google Gemini key (free from aistudio.google.com) for live, natural back-and-forth talking. */
+    var geminiKey: String
+        get() = sp.getString("gemini_key", "") ?: ""
+        set(v) = sp.edit().putString("gemini_key", v.trim()).apply()
     /** Govee lights developer key (free, from the Govee Home app). */
     var goveeKey: String
         get() = sp.getString("govee_key", "") ?: ""

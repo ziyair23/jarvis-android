@@ -102,6 +102,9 @@
             <TextView style="@style/Hint" android:text="Your car's Bluetooth name (for driving mode)" />
             <EditText android:id="@+id/carName" style="@style/Field" android:inputType="text" android:hint="e.g. Honda, CAR MULTIMEDIA" />
 
+            <TextView style="@style/Hint" android:text="Gemini key for live talking (free, from aistudio.google.com)" />
+            <EditText android:id="@+id/geminiKey" style="@style/Field" android:inputType="textPassword" android:hint="Starts with AIza" />
+
             <TextView style="@style/Hint" android:text="Govee lights key (optional)" />
             <EditText android:id="@+id/goveeKey" style="@style/Field" android:inputType="textPassword" android:hint="From the Govee Home app" />
 

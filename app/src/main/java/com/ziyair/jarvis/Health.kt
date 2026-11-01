@@ -30,6 +30,7 @@ object Health {
             Item("key", "Claude key", p.claudeKey.isNotBlank(), "His brain needs it to answer anything."),
             Item("overlay", "Display over other apps", Settings.canDrawOverlays(c), "Needed to open apps, play songs and show the orb."),
             Item("screen", "Screen control", JarvisAccess.on(c), "Needed to press Play on songs and work inside apps."),
+            Item("sms", "Send texts", c.checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED, "Lets him send a text himself once you say yes, no tapping."),
             Item("listener", "Read notifications", listener, "Needed to announce callers and read messages, and to control music."),
             Item("dnd", "Do Not Disturb access", nm.isNotificationPolicyAccessGranted, "Needed for quiet mode and goodnight."),
             Item("ears", "Phone ears downloaded", Ear.ready(c), "One-time 104 MB download on Wi-Fi; Google listening covers until then."),
@@ -55,7 +56,7 @@ object Health {
             "screen" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
             "listener" -> Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
             "dnd" -> Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-            "mic" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)
+            "mic", "sms" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)
             "ears" -> { Thread { Ear.download(c) }.start(); null }
             "voice" -> { Thread { Piper.download(c) }.start(); null }
             else -> Intent(c, MainActivity::class.java)

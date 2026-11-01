@@ -29,6 +29,8 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
     @Volatile private var boost = 1f
     /** How much easier "Hey Jarvis" is to trigger while music is playing (set from config). */
     @Volatile var musicFactor = 0.7f
+    /** Battery saver in front of the wake word (see WakeGate). */
+    val gate = WakeGate(this)
     fun sensitive(normal: Boolean) { boost = if (normal) 1f else 1.15f }
     private var worker: Thread? = null
 
@@ -91,7 +93,7 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
             try { if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) android.media.audiofx.AcousticEchoCanceler.create(rec.audioSessionId)?.let { it.enabled = true; fx.add(it) } } catch (_: Exception) {}
             try { if (android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(rec.audioSessionId)?.let { it.enabled = true; fx.add(it) } } catch (_: Exception) {}
             val chunk = ShortArray(CHUNK)
-            reset()
+            reset(); gate.reset()
             try {
                 rec.startRecording()
                 while (running) {
@@ -102,7 +104,7 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
                         got += n
                     }
                     if (!running || got < CHUNK) continue
-                    if (feed(chunk)) { running = false; onWake() }
+                    if (gate.feed(chunk)) { running = false; onWake() }
                 }
             } catch (_: Exception) {
             } finally {
@@ -171,5 +173,46 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
     companion object {
         const val RATE = 16000
         const val CHUNK = 1280
+    }
+}
+
+/**
+ * Battery saver for the wake word. In a quiet room the three wake-word models don't need to run 12 times a second:
+ * after ~2.5 s of quiet it "dozes" and only keeps the last 2 seconds of sound. The moment anything louder than the
+ * room's own background noise comes in, it wakes, catches up on those 2 seconds (so "Hey Jarvis" said right then is
+ * never missed) and runs normally again.
+ */
+class WakeGate(private val wake: WakeWord) {
+    @Volatile var enabled = true
+    private val ring = ArrayDeque<ShortArray>()
+    private var floor = 0.004f
+    private var quiet = 0
+    private var dozing = false
+    var dozedChunks = 0L; private set
+    var totalChunks = 0L; private set
+
+    fun reset() { ring.clear(); quiet = 0; dozing = false }
+
+    fun feed(chunk: ShortArray): Boolean {
+        totalChunks++
+        if (!enabled) return wake.feed(chunk)
+        var sum = 0.0
+        for (v in chunk) { val f = v / 32768.0; sum += f * f }
+        val rms = kotlin.math.sqrt(sum / chunk.size).toFloat()
+        // the room's background level: follows quiet moments quickly, loud ones slowly
+        floor = if (rms < floor) floor * 0.9f + rms * 0.1f else floor * 0.998f + rms * 0.002f
+        val gate = maxOf(0.003f, floor * 2.2f)
+        ring.addLast(chunk.copyOf()); while (ring.size > 25) ring.removeFirst()
+        if (rms < gate) quiet++ else quiet = 0
+        if (dozing) {
+            if (rms < gate) { dozedChunks++; return false }
+            dozing = false
+            wake.reset()
+            var hit = false
+            for (c in ring) if (wake.feed(c)) hit = true
+            return hit
+        }
+        if (quiet > 32) { dozing = true; dozedChunks++; return false }
+        return wake.feed(chunk)
     }
 }

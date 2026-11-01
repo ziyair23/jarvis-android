@@ -225,6 +225,8 @@ class JarvisAccess : AccessibilityService() {
         }
 
         private fun gestureTap(s: JarvisAccess, x: Float, y: Float) = swipe(s, x, y, x, y, 60)
+        /** Tap (or long-press) a spot on the screen, in real screen pixels. */
+        fun tapAt(x: Float, y: Float, long: Boolean = false): Boolean { val s = me ?: return false; return swipe(s, x, y, x, y, if (long) 700 else 60) }
 
         private fun swipe(s: JarvisAccess, x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 300): Boolean {
             val p = Path().apply { moveTo(x1, y1); lineTo(x2, y2) }

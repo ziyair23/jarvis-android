@@ -44,12 +44,9 @@ class Actions(private val context: Context) {
         put(tool("media_control", "Control whatever is playing (music, YouTube, podcasts): play/resume, pause, toggle, next (skip), previous, stop. Use this for 'skip', 'next song', 'pause', 'resume', 'turn it back on'.",
             props("action" to JSONObject().put("type", "string").put("enum", JSONArray(listOf("play", "pause", "toggle", "next", "previous", "stop")))), listOf("action")))
         put(tool("stop_navigation", "Cancel/end Google Maps directions.", props(), listOf()))
-        put(tool("screen_read", "See what's on his screen right now: the app and the visible buttons and text ([tap] marks tappable things). Use before tapping if unsure.", props(), listOf()))
-        put(tool("screen_tap", "Tap a button, link, tab or item on screen by its visible text or label. Returns what's on screen afterwards, so you can keep going step by step.",
-            props("target" to str("The text or label of what to tap"), "long_press" to bool("Long-press instead")), listOf("target")))
-        put(tool("screen_type", "Type text into the text box on screen (search bars, message boxes).", props("text" to str("What to type"), "submit" to bool("Press enter/search after")), listOf("text")))
-        put(tool("screen_action", "Phone buttons and gestures: back, home, recent_apps, notifications, quick_settings, scroll_down, scroll_up (also next video on TikTok/Reels/Shorts), lock_screen, screenshot.",
-            props("action" to JSONObject().put("type", "string").put("enum", JSONArray(listOf("back", "home", "recent_apps", "notifications", "quick_settings", "scroll_down", "scroll_up", "lock_screen", "screenshot")))), listOf("action")))
+        put(tool("phone_task", "Do something on his phone screen, by looking at it like a person would: anything inside an app (send a Snapchat or Instagram DM, search YouTube and play a video, change a setting, fill a form, order the usual). Describe the whole task in one sentence. For anything that sends, posts, calls or buys, read it back to him first and only set confirmed=true after he says yes.",
+            props("task" to str("The full task, e.g. 'In Instagram, DM abbey: running 10 min late'"), "confirmed" to bool("He said yes to sending/posting/buying")), listOf("task")))
+        put(tool("screen_read", "Quickly list what's on his screen right now (app, buttons, text). For doing things, use phone_task.", props(), listOf()))
         put(tool("read_messages", "Read his recent incoming messages (texts, WhatsApp and similar), newest first.", props(), listOf()))
         put(tool("reply_message", "Reply to someone who messaged him, in the same app. Use who='last' for the message just read out. Read the reply back and get a yes first; only call with confirmed=true after he says yes. In driving mode, if he dictated the reply right after being asked, a quick 'sending: ... ' confirmation question is still required.",
             props("who" to str("Sender name, or 'last'"), "message" to str("The reply text"), "confirmed" to bool("He said yes to sending this exact reply")), listOf("who", "message", "confirmed")))
@@ -142,10 +139,23 @@ class Actions(private val context: Context) {
                 Inbox.findByName(partnerAlias(input.getString("who")))?.takeIf { it.reply != null }?.let { m ->
                     if (Inbox.reply(context, m, msg)) return "Sent to ${m.sender} on ${m.app}."
                 }
-                if (!canOpenApps()) return NEED_OPEN_APPS
                 val (name, number) = findNumber(input.getString("who")) ?: return "No contact found for that name."
+                // he said yes: send it straight away, no tapping
+                if (has(Manifest.permission.SEND_SMS)) try {
+                    val sms = if (android.os.Build.VERSION.SDK_INT >= 31) context.getSystemService(android.telephony.SmsManager::class.java) else @Suppress("DEPRECATION") android.telephony.SmsManager.getDefault()
+                    val parts = sms.divideMessage(msg)
+                    if (parts.size > 1) sms.sendMultipartTextMessage(number, null, parts, null, null) else sms.sendTextMessage(number, null, msg, null, null)
+                    Trace.log(context, "text", "sent to $name")
+                    return "Sent to $name."
+                } catch (e: Exception) { Problems.log(context, "sms: ${e.message}") }
+                if (!canOpenApps()) return NEED_OPEN_APPS
                 context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(number)))
                     .putExtra("sms_body", msg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                // and press Send for him
+                if (JarvisAccess.me != null) {
+                    Thread.sleep(1800)
+                    for (l in listOf("Send", "Send SMS", "Send message", "Send MMS")) if (JarvisAccess.tap(l, exactOnly = true).startsWith("Tapped")) return "Sent to $name."
+                }
                 "Text to $name is ready in Messages; he just needs to tap send."
             }
             "navigate" -> {
@@ -173,6 +183,7 @@ class Actions(private val context: Context) {
             "media_control" -> Apps.media(context, input.getString("action"))
             "stop_navigation" -> JarvisAccess.stopNavigation(context)
             "screen_read" -> JarvisAccess.read()
+            "phone_task" -> Hands.run(context, input.getString("task"), input.optBoolean("confirmed"))
             "screen_tap" -> JarvisAccess.tap(input.getString("target"), input.optBoolean("long_press"))
             "screen_type" -> JarvisAccess.type(input.getString("text"), input.optBoolean("submit"))
             "screen_action" -> JarvisAccess.press(input.getString("action"))

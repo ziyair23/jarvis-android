@@ -107,12 +107,12 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                     if (modeChanged || m != last) {
                         modeChanged = false
                         if (m == Mode.LISTEN) { vad.reset(); speechAt = 0L }
-                        if ((m == Mode.SLEEP || m == Mode.SPEAKING) && last != Mode.SLEEP && last != Mode.SPEAKING) wake.reset()
+                        if ((m == Mode.SLEEP || m == Mode.SPEAKING) && last != Mode.SLEEP && last != Mode.SPEAKING) { wake.reset(); wake.gate.reset() }
                         wake.sensitive(m != Mode.SPEAKING)
                         last = m
                     }
                     when (m) {
-                        Mode.SLEEP, Mode.SPEAKING -> if (wake.feed(chunk)) {
+                        Mode.SLEEP, Mode.SPEAKING -> if ((if (m == Mode.SLEEP) wake.gate.feed(chunk) else wake.feed(chunk))) {
                             // catch whatever he says straight after "Jarvis", in the same breath
                             if (m == Mode.SLEEP) { mode = Mode.LISTEN; speechStarted = false; vad.reset(); speechAt = 0L; last = Mode.LISTEN }
                             main.post { events.onWake() }

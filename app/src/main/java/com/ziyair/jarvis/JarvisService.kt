@@ -227,6 +227,7 @@ class JarvisService : Service() {
                     wakeWord = WakeWord(applicationContext, th) { main.post { if (speaking) interrupt() else onWake() } }
                 }
                 wakeWord?.musicFactor = brain.config().optDouble("music_wake_factor", 0.7).toFloat()
+                wakeWord?.gate?.enabled = brain.config().optBoolean("battery_saver", true)
                 // the one-ear stream: the wake word just listens to it, no separate mic
                 if (ensureEar()) { ear?.set(if (whileSpeaking) Ear.Mode.SPEAKING else Ear.Mode.SLEEP); return@post }
                 wakeWord?.sensitive(!whileSpeaking)
