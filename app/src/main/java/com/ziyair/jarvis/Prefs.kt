@@ -114,8 +114,9 @@ class Prefs(context: Context) {
         val h = history()
         h.put(JSONObject().put("role", role).put("content", content).put("at", System.currentTimeMillis()).apply { if (quick) put("q", true) })
         val trimmed = JSONArray()
-        val start = maxOf(0, h.length() - 40)
-        for (i in start until h.length()) trimmed.put(h.get(i))
+        // keep 40 real turns and 10 quick ones, so reflexes can't push the real topic out (lab L27)
+        val quick = (0 until h.length()).map { h.optJSONObject(it)?.optBoolean("q", false) == true }
+        for (i in Recap.keep(quick)) trimmed.put(h.get(i))
         sp.edit().putString("history", trimmed.toString()).apply()
     }
 

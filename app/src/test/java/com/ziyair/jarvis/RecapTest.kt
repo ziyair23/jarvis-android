@@ -62,4 +62,21 @@ class RecapTest {
             u("where were we", now - 5 * 60_000), a("You'd asked: …", now - 5 * 60_000), u("yeah", now - 4 * 60_000), a("Right, sir.", now - 4 * 60_000))
         assertEquals("You'd asked: how many hoodies did you sell this week. I said: Twelve, sir.", Recap.answer(h, now))
     }
+
+    @Test fun quickTurnsCantPushTheTopicOut() {
+        val quick = listOf(false, false) + List(60) { true }
+        val kept = Recap.keep(quick)
+        assertEquals(listOf(0, 1) + (52 until 62).toList(), kept)
+        val real = List(45) { false } + listOf(true)
+        assertEquals((5 until 46).toList(), Recap.keep(real))
+    }
+
+    @Test fun recognizerCapitalsLowered() {
+        assertEquals("You'd asked: what time does the post office close.", Recap.answer(listOf(u("What time does the post office close?", now - 60_000)), now))
+    }
+
+    @Test fun smallHoursAreLastNight() {
+        assertEquals("Last night,", Recap.whenSaid(at(4, 1), at(4, 9)))
+        assertEquals("Earlier today,", Recap.whenSaid(at(4, 6), at(4, 9)))
+    }
 }

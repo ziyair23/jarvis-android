@@ -812,7 +812,8 @@ class JarvisService : Service() {
             if (!inCar) {
                 // park reminders wait 15 s, so a Bluetooth blip at a red light doesn't use them up (lab L26)
                 val parkDue = try { CarRemindersStore.has(this, true) } catch (_: Exception) { false }
-                if (parkDue) main.postDelayed({ if (!DriveMode.on) sayFirst("Driving mode off, sir." + carDue(true)) }, 15_000)
+                main.removeCallbacks(parkLine)
+                if (parkDue) main.postDelayed(parkLine, 15_000)
                 else sayFirst("Driving mode off, sir.")
                 return
             }
@@ -825,6 +826,9 @@ class JarvisService : Service() {
             }
         }
     }
+
+    /** The delayed "Driving mode off" line with park reminders; only one ever waiting (lab L26). */
+    private val parkLine = Runnable { if (!DriveMode.on) sayFirst("Driving mode off, sir." + carDue(true)) }
 
     /** Car reminders due as he gets in or out (lab L26); never lets a storage problem stop the car line. */
     private fun carDue(out: Boolean): String = try { CarRemindersStore.due(this, out) } catch (e: Exception) { Problems.log(this, "car reminders: ${e.message}"); "" }
