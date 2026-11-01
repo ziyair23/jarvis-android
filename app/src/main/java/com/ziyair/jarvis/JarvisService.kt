@@ -98,6 +98,8 @@ class JarvisService : Service() {
         // whenever he unlocks the phone, see if there's a new build to slip in (checks GitHub at most hourly)
         registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT))
         registerReceiver(batteryWatch, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        netDown = !brain.isOnline()
+        Held.onHold = { netDown = true }
         try { getSystemService(android.net.ConnectivityManager::class.java).registerDefaultNetworkCallback(signalWatch) } catch (_: Exception) {}
         try { getSystemService(android.net.ConnectivityManager::class.java).registerNetworkCallback(
             android.net.NetworkRequest.Builder().addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI).build(), wifiWatch) } catch (_: Exception) {}
@@ -117,30 +119,40 @@ class JarvisService : Service() {
         }
     }
 
-    /** Home Wi-Fi after being out for a while: "Welcome home, sir," and the lights come on. */
     /** No-signal mode (lab L8): when the phone is back online, come back to what he asked while it wasn't. */
     private val signalWatch = object : android.net.ConnectivityManager.NetworkCallback() {
+        override fun onLost(network: android.net.Network) { netDown = true }
         override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) {
-            if (Held.count() == 0 || !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return
-            main.removeCallbacks(signalBack); main.postDelayed(signalBack, 2500)
+            if (!caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)) { netDown = true; return }
+            // only a real comeback counts: the network was down (or something was held), and now it's validated again
+            if (!netDown || Held.count() == 0) return
+            netDown = false
+            main.removeCallbacks(signalBack); Held.onHold = null; main.postDelayed(signalBack, 2500)
         }
     }
+    @Volatile private var netDown = false
 
-    private val signalBack = Runnable {
+    private val signalBack: Runnable = Runnable {
+        // he's mid-conversation right now: come back to it a little later instead of talking over him
+        if (thinking || busy) { main.postDelayed(signalBack, 4000); return@Runnable }
         thread {
             val due = Held.takeDue(System.currentTimeMillis())
             if (due.isEmpty()) return@thread
             Trace.log(this, "held", "signal back, ${due.size} to come back to")
-            val replies = due.map { brain.ask(Held.prompt(it, System.currentTimeMillis()), followUp = true, held = it.text) }
-            // if Claude still can't be reached, just remind him what he asked
-            val line = if (replies.any { it.startsWith("I can't reach") || it.isBlank() || it == Held.HELD_LINE }) Held.reminder(due)
-                else Held.join(replies).ifBlank { Held.reminder(due) }
+            // each one answered on its own; any that still fails is just a reminder in his words
+            val answered = mutableListOf<String>(); val missed = mutableListOf<Held.Item>()
+            for (it in due) {
+                val r = brain.ask(Held.prompt(it, System.currentTimeMillis()), followUp = true, held = it.text)
+                if (r.isBlank() || r == Held.HELD_LINE) missed.add(it) else answered.add(r)
+            }
+            val line = Held.combine(answered, missed)
             if (line.isBlank()) return@thread
             if (Stealth.on(prefs)) { Stealth.silentNote(this, line); return@thread }
-            try { startService(Intent(this, JarvisService::class.java).setAction(ACTION_SAY).putExtra("text", line)) } catch (_: Exception) {}
+            try { startService(Intent(this, JarvisService::class.java).setAction(ACTION_SAY).putExtra("text", line).putExtra("chime", false)) } catch (_: Exception) {}
         }
     }
 
+    /** Home Wi-Fi after being out for a while: "Welcome home, sir," and the lights come on. */
     private val wifiWatch = object : android.net.ConnectivityManager.NetworkCallback() {
         override fun onLost(network: android.net.Network) {
             // only leaving HOME counts (other Wi-Fi along the way doesn't)
@@ -208,9 +220,10 @@ class JarvisService : Service() {
                 val text = intent.getStringExtra("text")
                 val thenListen = intent.getBooleanExtra("listen", false)
                 val ringing = intent.getBooleanExtra("ringing", false)
+                val chime = intent.getBooleanExtra("chime", true)
                 thread {
                     val line = moment?.let { Scheduler.momentLine(this, it) } ?: text.orEmpty()
-                    if (line.isNotBlank()) main.post { sayFirst(line, thenListen, ringing) }
+                    if (line.isNotBlank()) main.post { sayFirst(line, thenListen, ringing, chime) }
                 }
                 return START_STICKY
             }
@@ -647,7 +660,7 @@ class JarvisService : Service() {
             val quick = Reflex.handle(this, text)
             if (quick != null) { brain.lastTools.clear(); Trace.log(this, "reflex", "handled on the phone: ${quick.reply}") }
             // live talking: a real two-way voice conversation takes it from here
-            if (quick == null && liveOK(wasQuiet)) { main.post { live?.cancel(); stream = null; startLive(text, followUp, turn) }; return@thread }
+            if (quick == null && liveOK(wasQuiet) && brain.isOnline()) { main.post { live?.cancel(); stream = null; startLive(text, followUp, turn) }; return@thread }
             else Trace.log(this, "ask", if (followUp) "follow-up to Claude" else "to Claude")
             val reply = quick?.reply ?: brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false); Orb.set(this@JarvisService, Orb.SPEAK) }; s.add(line) } }) { main.post { ack() } }
             Trace.log(this, "reply", "${System.currentTimeMillis() - t0}ms, tools ${brain.lastTools.joinToString(",").ifBlank { "none" }}: \"${reply.take(160)}\"")
@@ -732,7 +745,7 @@ class JarvisService : Service() {
     private fun dropLive(why: String) { liveSession?.let { liveSession = null; it.stop(why) } }
 
     /** Jarvis speaks up on his own (heads-ups, timers, reminders), then goes back to listening. */
-    private fun sayFirst(line: String, thenListen: Boolean = false, ringing: Boolean = false) {
+    private fun sayFirst(line: String, thenListen: Boolean = false, ringing: Boolean = false, chime: Boolean = true) {
         if (Stealth.on(prefs)) { Stealth.miss(this, line.replace(" Answer it?", "").replace(" Decline it?", "").replace(" Want to reply, sir?", "")); if (!prefs.running && !busy) stopEverything(); return }
         if (ringing) {
             if (PhoneControl.nightQuiet(this)) { Problems.log(this, "call not announced (goodnight quiet hours): $line"); return }
@@ -764,7 +777,7 @@ class JarvisService : Service() {
         acquire()
         stopWakeWord()
         holdFocus(true)
-        Sfx.play("alert")
+        if (chime) Sfx.play("alert")
         val say: (String, () -> Unit) -> Unit = if (Cast.mode(prefs) != "off") { t, f -> speakHouse(t, f) } else { t, f -> speak(t, f) }
         main.postDelayed({ say(line) { if (thenListen) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() } }, 300)
     }

@@ -109,7 +109,7 @@ class Prefs(context: Context) {
     /** Conversation history: [{"role":"user"|"assistant","content":"..."}], newest last. */
     fun history(): JSONArray = try { JSONArray(sp.getString("history", "[]")) } catch (e: Exception) { JSONArray() }
 
-    fun addTurn(role: String, content: String) {
+    fun addTurn(role: String, content: String) = synchronized(Prefs::class.java) {
         val h = history()
         h.put(JSONObject().put("role", role).put("content", content).put("at", System.currentTimeMillis()))
         val trimmed = JSONArray()

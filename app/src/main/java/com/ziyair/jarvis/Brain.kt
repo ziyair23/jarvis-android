@@ -80,20 +80,28 @@ class Brain(private val context: Context) {
         "\nToday so far (from his Jarvis dashboard): baby: $baby Earned today: ${Earnings.money(earned)}."
     } catch (_: Exception) { "" }
 
-    /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. */
     /** True unless the phone has no usable network at all (a weak signal still counts as online). */
-    private fun online(): Boolean = try {
+    fun isOnline(): Boolean = try {
         val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
         val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
         caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     } catch (_: Exception) { true }
 
-    fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, onAck: (() -> Unit)? = null, held: String? = null): String {
+    /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. [held] = his words for a request held with no signal (lab L8); failures then return "". */
+    private fun validated(): Boolean = try {
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
+        cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+    } catch (_: Exception) { true }
+
+    /** Tell Android this network isn't really working, so it re-checks (and we hear when it truly comes back). */
+    private fun reportBad() { try { val cm = context.getSystemService(android.net.ConnectivityManager::class.java); cm.reportNetworkConnectivity(cm.activeNetwork, false) } catch (_: Exception) {} }
+
+    fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, held: String? = null, onAck: (() -> Unit)? = null): String {
         val voice = Sentences(onSentence)
         val key = prefs.claudeKey
-        if (key.isBlank()) return "I need my Claude key first, sir. Open the Jarvis app and add it."
+        if (key.isBlank()) return if (held != null) "" else "I need my Claude key first, sir. Open the Jarvis app and add it."
         // no-signal mode (lab L8): no network at all, so don't sit through a timeout; hold it and come back to it
-        if (held == null && !online()) { Trace.log(context, "held", "no network: \"$text\""); return Held.add(text, System.currentTimeMillis()) }
+        if (held == null && !isOnline()) { Trace.log(context, "held", "no network: \"$text\""); return Held.add(text, System.currentTimeMillis()) }
         val cfg = config()
         val msgs = JSONArray()
         val h = prefs.history()
@@ -152,8 +160,16 @@ class Brain(private val context: Context) {
             } catch (e: Exception) {
                 if (voice.spoke) return voice.all()
                 Problems.log(context, "network: ${e.message}")
+                if (held != null) return ""
                 if (didSomething && retried >= 1) return "Done, sir."
+                // a dead connection (no route, no DNS, timed out) on an unvalidated network: hold it now instead of waiting through a retry
+                val dead = e is java.net.UnknownHostException || e is java.net.ConnectException || e is java.net.SocketTimeoutException
+                if (dead && !didSomething && !validated()) {
+                    reportBad()
+                    Trace.log(context, "held", "network dead: \"$text\""); return Held.add(text, System.currentTimeMillis())
+                }
                 if (retried < 1) { retried++; Thread.sleep(800); continue }
+                reportBad()
                 if (held == null && !didSomething) { Trace.log(context, "held", "network failed: \"$text\""); return Held.add(text, System.currentTimeMillis()) }
                 return "I can't reach the network right now, sir."
             }
@@ -162,6 +178,7 @@ class Brain(private val context: Context) {
                 tools.getJSONObject(tools.length() - 1).optString("name") == "web_search") { tools.remove(tools.length() - 1); continue }
             if (code !in 200..299) Problems.log(context, "Claude $code: ${resp.take(160)}")
             if ((code == 429 || code == 529 || code >= 500) && retried < 1) { retried++; Thread.sleep(1200); continue }
+            if (code !in 200..299 && held != null) return ""
             if (code !in 200..299 && didSomething) return "Done, sir."
             when {
                 code == 401 || code == 403 -> return "My Claude key isn't working, sir. Check it in the Jarvis app."
@@ -269,7 +286,7 @@ class Brain(private val context: Context) {
         body.put("stream", true)
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
         c.requestMethod = "POST"
-        c.connectTimeout = 10000; c.readTimeout = 30000
+        c.connectTimeout = 6000; c.readTimeout = 30000
         c.doOutput = true
         c.setRequestProperty("content-type", "application/json")
         c.setRequestProperty("x-api-key", key)
@@ -374,7 +391,7 @@ class Brain(private val context: Context) {
     private fun post(key: String, body: JSONObject): Pair<Int, String> {
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
         c.requestMethod = "POST"
-        c.connectTimeout = 10000; c.readTimeout = 30000
+        c.connectTimeout = 6000; c.readTimeout = 30000
         c.doOutput = true
         c.setRequestProperty("content-type", "application/json")
         c.setRequestProperty("x-api-key", key)

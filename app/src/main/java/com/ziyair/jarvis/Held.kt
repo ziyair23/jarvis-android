@@ -15,6 +15,9 @@ object Held {
 
     private val items = mutableListOf<Item>()
 
+    /** Called whenever something is held (the service uses it to wait for a real comeback). */
+    @Volatile var onHold: (() -> Unit)? = null
+
     const val HELD_LINE = "No signal, sir. I'll come back to that when it's back."
 
     /** Hold a request. Duplicates are dropped and only the newest three are kept. Returns the spoken line. */
@@ -24,6 +27,7 @@ object Held {
         items.removeAll { it.text.equals(t, ignoreCase = true) }
         items.add(Item(t, now))
         while (items.size > MAX) items.removeAt(0)
+        try { onHold?.invoke() } catch (_: Exception) {}
         return HELD_LINE
     }
 
@@ -51,6 +55,14 @@ object Held {
         val lead = Regex("^\\s*signal'?s back,? sir[.,!]?\\s*", RegexOption.IGNORE_CASE)
         val body = replies.map { it.replace(lead, "").trim() }.filter { it.isNotEmpty() }.joinToString(" ")
         return if (body.isEmpty()) "" else "Signal's back, sir. $body"
+    }
+
+    /** The catch-up line: answers first, then a reminder for anything that still couldn't be answered. */
+    fun combine(answered: List<String>, missed: List<Item>): String {
+        val a = join(answered)
+        if (missed.isEmpty()) return a
+        val r = reminder(missed)
+        return if (a.isEmpty()) r else a + " " + r.removePrefix("Signal's back, sir. ")
     }
 
     /** Fallback if Claude can't be reached even now: just remind him, in his words. */
