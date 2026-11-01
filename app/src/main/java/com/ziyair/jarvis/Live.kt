@@ -55,6 +55,8 @@ class Live(
     @Volatile private var turnDoneAt = 0L
     @Volatile private var endAfterTurn = false
     @Volatile private var toolsRunning = 0
+    @Volatile private var micSamples = 0L
+    @Volatile private var outSamples = 0L
     private var orbState = -1
     private val startedAt = System.currentTimeMillis()
     private val userBuf = StringBuilder()
@@ -172,6 +174,7 @@ class Live(
                     ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcm)
                     if (!spoke) Trace.log(context, "live", "first sound back")
                     spoke = true
+                    outSamples += pcm.size
                     audioQ.put(pcm)
                 }
             }
@@ -215,9 +218,6 @@ class Live(
                 }
             }
         }
-        j.optJSONObject("usageMetadata")?.let { u ->
-            Spend.recordLive(context, cfg, u.optLong("promptTokenCount"), u.optLong("responseTokenCount"))
-        }
         if (j.has("goAway")) { Trace.log(context, "live", "server asked to wrap up"); main.post { stop("time") } }
     }
 
@@ -250,6 +250,7 @@ class Live(
                     val rms = sqrt(sum / got).toFloat()
                     if (rms > 0.02f) lastUserLoudAt = System.currentTimeMillis()
                     if (audioQ.isEmpty()) Orb.level(rms * 14f)
+                    micSamples += got
                     val b64 = Base64.encodeToString(bytes.array(), 0, got * 2, Base64.NO_WRAP)
                     send(JSONObject().put("realtimeInput", JSONObject().put("audio", JSONObject().put("data", b64).put("mimeType", "audio/pcm;rate=$rate"))))
                 }
@@ -317,6 +318,10 @@ class Live(
         if (ended) return
         ended = true
         running = false
+        // cost from how long each side actually talked (25 audio tokens a second each way, plus a little for context)
+        val inTok = (micSamples / IN_RATE.toDouble() * 25 * 1.3).toLong()
+        val outTok = (outSamples / OUT_RATE.toDouble() * 25 * 1.1).toLong()
+        Spend.recordLive(context, cfg, inTok, outTok)
         Trace.log(context, "live", "ended: $reason (${(System.currentTimeMillis() - startedAt) / 1000}s, tools ${tools.joinToString(",").ifBlank { "none" }})")
         try { ws?.close(1000, "bye") } catch (_: Exception) {}
         audioQ.clear()
