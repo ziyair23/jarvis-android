@@ -53,6 +53,30 @@ object HomeReminders {
     }
 }
 
+/** Car reminders on the phone (lab L26): load, change and save in one go. */
+object CarRemindersStore {
+    private fun <T> edit(c: Context, f: (MutableList<CarReminders.Item>) -> T): T = synchronized(CarReminders) {
+        val p = Prefs(c)
+        val l = CarReminders.load(p.sp.getString("car_reminders", ""))
+        val r = f(l)
+        p.sp.edit().putString("car_reminders", CarReminders.dump(l)).apply()
+        r
+    }
+
+    /** What Jarvis says if [said] is a car-reminder command, else null. */
+    fun handle(c: Context, said: String): String? {
+        val cmd = CarReminders.parse(said) ?: return null
+        return edit(c) { CarReminders.handle(it, cmd, Prefs(c).carName.isNotBlank(), DriveMode.on, System.currentTimeMillis()) }
+    }
+
+    /** For Claude's remind_in_car tool. */
+    fun add(c: Context, text: String, out: Boolean): String =
+        edit(c) { CarReminders.handle(it, CarReminders.Cmd.Add(text.trim(), out), Prefs(c).carName.isNotBlank(), DriveMode.on, System.currentTimeMillis()) }
+
+    /** " Reminder: …" for what's due as he gets in ([out] false) or out ([out] true); "" when nothing. */
+    fun due(c: Context, out: Boolean): String = edit(c) { CarReminders.line(CarReminders.take(it, out, System.currentTimeMillis())) }
+}
+
 /** Call notes on the phone (lab L17): load, change and save the notebook in one go. Never leaves the phone. */
 object CallNotesStore {
     private fun <T> edit(c: Context, f: (CallNotes.Book) -> T): T = synchronized(CallNotes) {

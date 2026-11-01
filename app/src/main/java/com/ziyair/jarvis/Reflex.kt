@@ -42,6 +42,11 @@ object Reflex {
         }
         // "say that again" (lab L20): replays his last spoken line; kept out of the conversation Claude sees (it may carry a call note)
         if (t.isNotEmpty()) Again.ask(text, System.currentTimeMillis())?.let { return Hit(it) }
+        // car reminders (lab L26): said when the car's Bluetooth connects or drops
+        if (t.isNotEmpty()) {
+            val car = try { CarRemindersStore.handle(c, text) } catch (e: Exception) { Problems.log(c, "car reminders: ${e.message}"); null }
+            if (car != null) { val p = Prefs(c); p.addTurn("user", text); p.addTurn("assistant", car); return Hit(car) }
+        }
         if (t.isEmpty() || t.split(" ").size > 9) return null
         val hit = try { match(c, t) } catch (e: Exception) { Problems.log(c, "reflex: ${e.message}"); null } ?: return null
         // Claude still sees it in the conversation, so "and turn it up a bit" afterwards makes sense to him

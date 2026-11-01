@@ -809,16 +809,19 @@ class JarvisService : Service() {
         }
         if (inCar != DriveMode.on) {
             DriveMode.on = inCar
-            if (!inCar) { sayFirst("Driving mode off, sir."); return }
+            if (!inCar) { sayFirst("Driving mode off, sir." + carDue(true)); return }
             thread {
                 val w = Weather.now(this)
                 val roads = if (w == null) "" else Weather.roadsNote(this).ifBlank { " Roads look clear." }
                 val bat = Status.battery(this).first
-                val line = "Welcome back, sir.$roads" + (if (bat in 0..20) " Battery's at $bat percent, you'll want to plug in." else "")
+                val line = "Welcome back, sir.$roads" + (if (bat in 0..20) " Battery's at $bat percent, you'll want to plug in." else "") + carDue(false)
                 main.post { sayFirst(line) }
             }
         }
     }
+
+    /** Car reminders due as he gets in or out (lab L26); never lets a storage problem stop the car line. */
+    private fun carDue(out: Boolean): String = try { CarRemindersStore.due(this, out) } catch (e: Exception) { Problems.log(this, "car reminders: ${e.message}"); "" }
 
     /** Pauses (or turns down) music and videos while he's talking to Jarvis, then lets them carry on. */
     private var focus: android.media.AudioFocusRequest? = null
