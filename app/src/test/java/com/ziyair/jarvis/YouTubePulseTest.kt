@@ -74,4 +74,17 @@ class YouTubePulseTest {
         assertEquals("Hoodie drop teaser", YouTubePulse.title("Hoodie drop teaser #pursuit #streetwear 🔥🔥"))
         assertEquals("one two three four five six seven eight…", YouTubePulse.title("one two three four five six seven eight nine ten"))
     }
+
+    @Test fun subsOnlyWithMyAndTheChannelOnlyWithDoing() {
+        listOf("how are my subs doing", "how are my subs", "how are my subscribers looking", "how's the channel doing")
+            .forEach { assertTrue(it, YouTubePulse.isAsk(it)) }
+        listOf("how are the subs", "how are subs", "how's the channel", "how are the subscribers")
+            .forEach { assertFalse(it, YouTubePulse.isAsk(it)) }
+    }
+
+    @Test fun tabAndVideoLinksNeverNameAStranger() {
+        assertEquals("forHandle=@marcus27", YouTubePulse.channelQuery("https://www.youtube.com/@marcus27/shorts"))
+        assertEquals("forHandle=@marcus27", YouTubePulse.channelQuery("marcus27"))
+        assertNull(YouTubePulse.channelQuery("https://www.youtube.com/watch"))
+    }
 }

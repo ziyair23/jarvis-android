@@ -13,10 +13,16 @@ object YouTube {
     private class Bad(val line: String) : Exception(line)
 
     private fun get(path: String, key: String): JSONObject {
-        val c = URL(API + path + "&key=" + URLEncoder.encode(key, "UTF-8")).openConnection() as HttpURLConnection
-        c.connectTimeout = 8000; c.readTimeout = 8000
+        // the key goes in a header, never in the URL
+        val c = URL(API + path).openConnection() as HttpURLConnection
+        c.setRequestProperty("X-Goog-Api-Key", key)
+        c.connectTimeout = 5000; c.readTimeout = 5000
         try {
             val code = c.responseCode
+            if (code == 403) {
+                val err = try { c.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty() } catch (_: Exception) { "" }
+                if (err.contains("quotaExceeded") || err.contains("dailyLimitExceeded")) throw Bad(YouTubePulse.QUOTA)
+            }
             if (code == 400 || code == 401 || code == 403) throw Bad(YouTubePulse.NOT_ALLOWED)
             if (code != 200) throw Bad(YouTubePulse.NO_SIGNAL)
             return JSONObject(c.inputStream.bufferedReader().use { it.readText() })
@@ -26,9 +32,17 @@ object YouTube {
     /** The line Jarvis says to "how's my channel doing?". Never throws. */
     fun pulse(context: Context): String {
         val p = Prefs(context)
-        val key = p.youtubeKey.ifBlank { p.ttsKey }.ifBlank { p.geminiKey }
+        val keys = listOf(p.youtubeKey, p.ttsKey, p.geminiKey).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         val q = YouTubePulse.channelQuery(p.youtubeChannel)
-        if (key.isBlank() || q == null) return YouTubePulse.NO_KEY
+        if (keys.isEmpty() || q == null) return YouTubePulse.NO_KEY
+        if (!Brain(context).isOnline()) return YouTubePulse.NO_SIGNAL
+        // a key restricted to something else (the voice) gets one retry with the next key he has
+        var out = YouTubePulse.NOT_ALLOWED
+        for (key in keys.take(2)) { out = pulse(context, p, q, key); if (out != YouTubePulse.NOT_ALLOWED) break }
+        return out
+    }
+
+    private fun pulse(context: Context, p: Prefs, q: String, key: String): String {
         return try {
             val (name, value) = q.split("=", limit = 2)
             val ch = get("channels?part=statistics,contentDetails&$name=" + URLEncoder.encode(value, "UTF-8"), key)
@@ -47,7 +61,7 @@ object YouTube {
                 YouTubePulse.line(stats, prev, videos, now)
             }
         } catch (e: Bad) { e.line }
-        catch (e: Exception) { Problems.log(context, "youtube: ${e.message}"); YouTubePulse.NO_SIGNAL }
+        catch (e: Exception) { Problems.log(context, "youtube: ${e.message?.replace(Regex("key=[^&\\s]+"), "key=…")}"); YouTubePulse.NO_SIGNAL }
     }
 
     /** His newest uploads (up to 6), newest first. */

@@ -19,7 +19,9 @@ object YouTubePulse {
 
     // ---------- what he says ----------
 
-    private val ASK = Regex("^(how's|how is|hows|how are) (my )?(youtube|channel|youtube channel|the channel|my channel|subs|subscribers|youtube doing|videos)( doing| looking| going)?$|" +
+    // "subs" and "subscribers" only with "my" (his subscribers); "the channel" only with doing/looking/going (not the TV)
+    private val ASK = Regex("^(how's|how is|hows|how are) (my (youtube|youtube channel|channel|subs|subscribers|videos)|youtube|youtube channel)( doing| looking| going)?$|" +
+        "^(how's|how is|hows) the channel (doing|looking|going)$|" +
         "^(how's|how is|hows) (my )?(latest|newest|last|new) (video|upload)( doing| looking| going)?$|" +
         "^(how many )?(subs|subscribers) (do i have|have i got)( on youtube)?$|" +
         "^(youtube|channel) (stats|update|numbers|check)$|^(check|give me) (my )?(youtube|channel)( stats| numbers)?$")
@@ -38,9 +40,10 @@ object YouTubePulse {
     fun channelQuery(input: String): String? {
         val s = input.trim().substringBefore('?').trimEnd('/')
         if (s.isEmpty()) return null
-        val last = s.substringAfterLast('/')
-        Regex("^UC[A-Za-z0-9_-]{22}$").find(last)?.let { return "id=${it.value}" }
-        val h = last.removePrefix("@")
+        // a link copied from a tab (/videos, /featured) or a video link must never name someone else's channel
+        val segs = s.split('/').filter { it.isNotEmpty() }
+        segs.firstNotNullOfOrNull { Regex("^UC[A-Za-z0-9_-]{22}$").find(it)?.value }?.let { return "id=$it" }
+        val h = (segs.firstOrNull { it.startsWith("@") } ?: segs.singleOrNull() ?: return null).removePrefix("@")
         if (!Regex("^[A-Za-z0-9._-]{3,30}$").matches(h)) return null
         return "forHandle=@$h"
     }
@@ -146,4 +149,5 @@ object YouTubePulse {
     const val BAD_CHANNEL = "I can't find that channel, sir. Check the handle in Jarvis settings."
     const val NOT_ALLOWED = "YouTube won't take the key, sir. Turn on the YouTube Data API for it in Google Cloud."
     const val NO_SIGNAL = "Can't reach YouTube right now, sir."
+    const val QUOTA = "YouTube's daily limit is used up, sir. Try again tomorrow."
 }

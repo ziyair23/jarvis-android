@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 import java.util.Calendar
 
@@ -58,7 +57,6 @@ class YouTubePulseIndepTest {
     // Spec: "his channel handle (with or without @, or a channel link)". A link copied from the channel's Videos or
     // Featured tab must not look up a stranger's channel called @videos / @featured.
     // IGNORED only so lab-branch CI still builds; FAILS today (lab/reports/L13-2026-11-01.md). Un-ignore with the fix.
-    @Ignore("L13 bug: channel links with a tab path look up the wrong channel; un-ignore with the fix")
     @Test fun channelLinkWithATab() {
         assertEquals("forHandle=@marcus27", YouTubePulse.channelQuery("https://www.youtube.com/@marcus27/videos"))
         assertEquals("forHandle=@marcus27", YouTubePulse.channelQuery("youtube.com/@marcus27/featured"))
