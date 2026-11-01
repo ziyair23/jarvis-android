@@ -52,6 +52,7 @@ class JarvisService : Service() {
         super.onCreate()
         prefs = Prefs(this)
         brain = Brain(this)
+        Live.restoreAudio(this)
         musicFocus = { on: Boolean -> val l = java.util.concurrent.CountDownLatch(1); main.post { holdFocus(on); l.countDown() }; l.await(500, java.util.concurrent.TimeUnit.MILLISECONDS) }
         restoreSound()
         tts = TextToSpeech(this) { status ->
@@ -167,6 +168,7 @@ class JarvisService : Service() {
                 main.post {
                     if (!busy) { Orb.set(this, Orb.HIDDEN); return@post }
                     turnId++
+                    dropLive("tapped")
                     try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
                     recognizer = null
                     inConvo = false; pending.clear()
@@ -613,6 +615,8 @@ class JarvisService : Service() {
             val t0 = System.currentTimeMillis()
             val quick = Reflex.handle(this, text)
             if (quick != null) { brain.lastTools.clear(); Trace.log(this, "reflex", "handled on the phone: ${quick.reply}") }
+            // live talking: a real two-way voice conversation takes it from here
+            if (quick == null && liveOK(wasQuiet)) { main.post { live?.cancel(); stream = null; startLive(text, followUp, turn) }; return@thread }
             else Trace.log(this, "ask", if (followUp) "follow-up to Claude" else "to Claude")
             val reply = quick?.reply ?: brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false); Orb.set(this@JarvisService, Orb.SPEAK) }; s.add(line) } }) { main.post { ack() } }
             Trace.log(this, "reply", "${System.currentTimeMillis() - t0}ms, tools ${brain.lastTools.joinToString(",").ifBlank { "none" }}: \"${reply.take(160)}\"")
@@ -640,6 +644,46 @@ class JarvisService : Service() {
         }
     }
 
+    // ---------------- live talking ----------------
+    private var liveSession: Live? = null
+    private var liveFailedAt = 0L
+    private val goodbyeRe = Regex("^(never ?mind|thanks?( you)?,? (jarvis|that'?s (it|all))|thank you,? jarvis|no thanks?|i'?m good|that'?ll be all|goodbye|see you)\\b")
+
+    private fun liveOK(quietMode: Boolean): Boolean =
+        !quietMode && Live.ready(this) && Cast.mode(prefs) != "everything" && !inCall() &&
+            System.currentTimeMillis() - liveFailedAt > 10 * 60_000L && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    /** Hands the conversation to live talking. The one ear lets go of the mic until it's over. */
+    private fun startLive(text: String, followUp: Boolean, turn: Int) {
+        if (turn != turnId) return
+        Trace.log(this, "live", "starting with \"$text\"")
+        earListening = false
+        try { ear?.stop() } catch (_: Exception) {}
+        ear = null
+        try { wakeWord?.stop() } catch (_: Exception) {}
+        inConvo = false
+        var session: Live? = null
+        session = Live(this, main, { t -> isStop(t) || goodbyeRe.containsMatchIn(t.lowercase(Locale.US)) }) onEnd@{ reason, nothingSaid ->
+            if (liveSession !== session) return@onEnd   // cancelled from outside (a call, the orb, stopping Jarvis)
+            liveSession = null
+            if (nothingSaid && (reason.startsWith("failed") || reason.startsWith("error") || reason == "no answer" || reason.startsWith("mic") || reason.startsWith("speaker"))) {
+                // live talking isn't working right now: answer this one the usual way, and skip live for a while
+                liveFailedAt = System.currentTimeMillis()
+                Trace.log(this, "live", "falling back to the normal voice: $reason")
+                thinking = false
+                handle(text, followUp)
+                return@onEnd
+            }
+            if (reason == "stop word") Sfx.play("off")
+            finishTurn()
+        }
+        liveSession = session
+        session.start(text)
+    }
+
+    /** Ends live talking without the normal wrap-up (the caller handles what happens next). */
+    private fun dropLive(why: String) { liveSession?.let { liveSession = null; it.stop(why) } }
+
     /** Jarvis speaks up on his own (heads-ups, timers, reminders), then goes back to listening. */
     private fun sayFirst(line: String, thenListen: Boolean = false, ringing: Boolean = false) {
         if (Stealth.on(prefs)) { Stealth.miss(this, line.replace(" Answer it?", "").replace(" Decline it?", "").replace(" Want to reply, sir?", "")); if (!prefs.running && !busy) stopEverything(); return }
@@ -649,6 +693,7 @@ class JarvisService : Service() {
             if (busy) {
                 try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
                 recognizer = null; hush(); thinking = false; speaking = false; pending.clear(); turnId++
+                dropLive("phone ringing")
             }
             busy = true; acquire(); stopWakeWord(); followUps = 1
             // his voice goes out on the alarm channel (Android silences assistant audio while it rings), ringtone hushed for a moment
@@ -900,6 +945,8 @@ class JarvisService : Service() {
     private fun release() { try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Exception) {} }
 
     private fun stopEverything() {
+        dropLive("jarvis stopped")
+        main.postDelayed({ Live.restoreAudio(this) }, 400)
         Orb.set(this, Orb.HIDDEN)
         thinking = false
         prefs.running = false
@@ -931,6 +978,8 @@ class JarvisService : Service() {
         try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(carWatch) } catch (_: Exception) {}
         DriveMode.on = false
         quiet(false)
+        dropLive("service ended")
+        Live.restoreAudio(this)
         try { ear?.stop() } catch (_: Exception) {}
         try { wakeWord?.close() } catch (_: Exception) {}
         recognizer?.destroy()

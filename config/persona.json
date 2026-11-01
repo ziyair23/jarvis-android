@@ -83,5 +83,18 @@
     "Still on it, sir.",
     "Bear with me, sir.",
     "Almost there, sir."
-  ]
+  ],
+  "live": true,
+  "live_model": "gemini-3.8-live",
+  "live_voice": "Algenib",
+  "live_budget": 15,
+  "live_idle_seconds": 12,
+  "live_max_minutes": 10,
+  "live_silence_ms": 800,
+  "live_prices": [
+    3,
+    12
+  ],
+  "hands_model": "claude-haiku-5-5",
+  "battery_saver": true
 }

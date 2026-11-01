@@ -63,4 +63,5 @@ dependencies {
     }
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
     implementation("org.apache.commons:commons-compress:1.26.2")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }

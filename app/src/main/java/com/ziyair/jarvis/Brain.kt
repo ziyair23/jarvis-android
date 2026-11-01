@@ -58,6 +58,22 @@ class Brain(private val context: Context) {
             "\nWhen he asks what something is, to read something, or anything that needs eyes ('what's this', 'read this', 'what does this say'), use look, then answer from the photo in a sentence or two. For anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks."
     }
 
+    /** The personality for live talking: the same Jarvis, plus how to sound on a live call, plus the recent conversation. */
+    fun livePrompt(cfg: JSONObject): String {
+        val h = prefs.history()
+        val recent = StringBuilder()
+        for (i in maxOf(0, h.length() - 12) until h.length()) {
+            val m = h.getJSONObject(i)
+            val c = m.optString("content")
+            if (m.optString("role") == "assistant" && c.startsWith("Message from ")) continue
+            recent.append(if (m.optString("role") == "user") "Him: " else "You: ").append(c.take(300)).append("\n")
+        }
+        return systemPrompt(cfg) +
+            "\n\nYou're in a LIVE voice conversation with him right now, like a phone call. " + cfg.optString("live_style",
+                "Speak with a calm, refined British accent and a dry wit, like JARVIS. Talk naturally and briskly: short turns, then let him talk. If he cuts in, stop and listen. Don't announce what you're about to do, just do it and say it's done. Never read out symbols, links or lists.") +
+            (if (recent.isNotBlank()) "\n\nRecent conversation, for context only:\n$recent" else "")
+    }
+
     private fun todaySoFar(): String = try {
         val baby = Baby.status(context)
         val earned = Earnings.today(context)

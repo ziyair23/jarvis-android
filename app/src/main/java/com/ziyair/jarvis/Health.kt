@@ -33,6 +33,7 @@ object Health {
             Item("sms", "Send texts", c.checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED, "Lets him send a text himself once you say yes, no tapping."),
             Item("listener", "Read notifications", listener, "Needed to announce callers and read messages, and to control music."),
             Item("dnd", "Do Not Disturb access", nm.isNotificationPolicyAccessGranted, "Needed for quiet mode and goodnight."),
+            Item("live", "Live talking key", p.geminiKey.isNotBlank(), "Free Gemini key from aistudio.google.com, pasted in Jarvis setup: makes talking feel like a real call."),
             Item("ears", "Phone ears downloaded", Ear.ready(c), "One-time 104 MB download on Wi-Fi; Google listening covers until then."),
             Item("voice", "Voice downloaded", Piper.pickReady(c), "His chosen voice downloads on Wi-Fi."),
         )
@@ -59,6 +60,7 @@ object Health {
             "mic", "sms" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)
             "ears" -> { Thread { Ear.download(c) }.start(); null }
             "voice" -> { Thread { Piper.download(c) }.start(); null }
+            "live" -> Intent(c, MainActivity::class.java)
             else -> Intent(c, MainActivity::class.java)
         } ?: return
         try { c.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }

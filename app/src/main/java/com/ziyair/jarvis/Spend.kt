@@ -49,10 +49,25 @@ object Spend {
         } catch (_: Exception) {}
     }
 
+    fun liveThisMonth(p: Prefs): Double = if (p.sp.getString("live_month", "") == month()) p.sp.getFloat("live_spend", 0f).toDouble() else 0.0
+
+    /** Live talking (Gemini): estimated at the paid rate even on the free tier, so the cap is never a surprise. */
+    @Synchronized fun recordLive(context: Context, cfg: JSONObject, inTok: Long, outTok: Long) {
+        if (inTok <= 0 && outTok <= 0) return
+        val p = Prefs(context)
+        val pr = cfg.optJSONArray("live_prices")
+        val pin = pr?.optDouble(0) ?: 3.0; val pout = pr?.optDouble(1) ?: 12.0
+        val add = (inTok * pin + outTok * pout) / 1_000_000.0
+        p.sp.edit().putString("live_month", month()).putFloat("live_spend", (liveThisMonth(p) + add).toFloat()).apply()
+    }
+
     fun report(context: Context): String {
         val p = Prefs(context)
         val s = thisMonth(p); val b = budget(p)
-        return "About ${String.format(Locale.US, "$%.2f", s)} used this month of a ${Earnings.money(b)} budget (an estimate from Claude's token counts; his Claude Console shows the exact balance)."
+        val live = liveThisMonth(p)
+        return "About ${String.format(Locale.US, "$%.2f", s)} of Claude used this month of a ${Earnings.money(b)} budget" +
+            (if (live > 0) ", plus about ${String.format(Locale.US, "$%.2f", live)} of live talking (Gemini; free tier may make that zero)" else "") +
+            " (estimates; his Claude Console and Google AI Studio show the exact numbers)."
     }
 
     fun setBudget(context: Context, dollars: Double): String {
