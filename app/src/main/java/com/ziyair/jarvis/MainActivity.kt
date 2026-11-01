@@ -139,7 +139,9 @@ class MainActivity : Activity() {
             thread {
                 val r = Updater.check(this, force = true)
                 runOnUiThread {
-                    update.text = if (r != null) "Installing build ${r.build}…" else "Up to date · build ${BuildConfig.VERSION_CODE}"
+                    update.text = if (r != null) "Installing build ${r.build}… (tap Update if Android asks)" else "Up to date · build ${BuildConfig.VERSION_CODE}"
+                    // if nothing has happened a minute later, say so instead of saying "Installing" forever
+                    if (r != null) update.postDelayed({ if (BuildConfig.VERSION_CODE < r.build) update.text = "Update didn't finish · tap to try again" }, 75_000)
                 }
             }
         }
