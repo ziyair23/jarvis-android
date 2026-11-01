@@ -47,6 +47,7 @@ object Trace {
         val ver = try { c.packageManager.getPackageInfo(c.packageName, 0).longVersionCode } catch (_: Exception) { -1 }
         val cfg = try { Brain(c).config() } catch (_: Exception) { null }
         return "Jarvis flight log\nbuild $ver, android ${android.os.Build.VERSION.SDK_INT}, ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n" +
+            "setup: ${Health.summary(c)}\n" +
             "ears: ${Ear.status(c)} | voice: ${Piper.pick(c)}${if (Piper.pickReady(c)) "" else " (not downloaded)"} | quiet mode: ${Stealth.on(p)}\n" +
             "settings: wake ${cfg?.optDouble("wake_threshold")}, ear silence ${cfg?.optInt("ear_silence_ms", 750)} ms, convo ${cfg?.optInt("conversation_seconds")} s\n\n"
     }

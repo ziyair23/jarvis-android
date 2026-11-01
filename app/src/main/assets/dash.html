@@ -79,6 +79,7 @@ section.on{display:block}
 
 <section id="s-today" class="on">
   <div id="orbwrap" onclick="orbTap()" role="button" aria-label="Talk to Jarvis"><canvas id="orb" width="520" height="520"></canvas><div id="orbcap">Tap to talk</div></div>
+  <button id="health-warn" class="talk" style="display:none;margin-top:-6px;border-color:#ff8a7a;color:#ff8a7a" onclick="document.querySelector('nav button[data-s=chat]').click()"></button>
   <button id="quietBtn" class="talk" style="margin-top:-6px" onclick="D && D.stealth ? J.quietEnd() : J.quietStart()">Quiet mode</button>
   <div class="card">
     <div class="label">Baby</div>
@@ -166,7 +167,7 @@ section.on{display:block}
   <div class="card"><div class="label">What Jarvis remembers</div><ul class="list" id="mem-list"></ul></div>
 </section>
 
-<section id="s-chat"><div class="card"><div class="label">Flight recorder</div><p class="dim" id="ears-line" style="margin:4px 0 12px">Every turn Jarvis takes, with timings, so glitches can be fixed.</p><button style="width:100%" onclick="J.shareLog()">Send log to Claude</button></div><div class="card" id="probs" style="display:none"><div class="label">Recent problems <button class="x" style="float:right;margin-top:-10px" onclick="J.clearProblems()">clear</button></div><ul class="list" id="prob-list"></ul></div><div class="card chat" id="chat"></div></section>
+<section id="s-chat"><div class="card" id="health"><div class="label">Health check</div><ul class="list" id="health-list"></ul></div><div class="card"><div class="label">Flight recorder</div><p class="dim" id="ears-line" style="margin:4px 0 12px">Every turn Jarvis takes, with timings, so glitches can be fixed.</p><button style="width:100%" onclick="J.shareLog()">Send log to Claude</button></div><div class="card" id="probs" style="display:none"><div class="label">Recent problems <button class="x" style="float:right;margin-top:-10px" onclick="J.clearProblems()">clear</button></div><ul class="list" id="prob-list"></ul></div><div class="card chat" id="chat"></div></section>
 
 <nav>
   <button class="on" data-s="today">Today</button>
@@ -284,6 +285,15 @@ function load() {
   const mem = []; for (let i = 0; i < D.memory.length; i++) mem.push(D.memory[i]);
   $('mem-list').innerHTML = mem.length ? mem.slice().reverse().map(f => `<li><span>${esc(f)}</span><button class="x" aria-label="Forget" data-f="${esc(f)}" onclick="if(confirm('Forget this?'))J.forget(this.dataset.f)">×</button></li>`).join('') : '<li class="empty">Nothing yet. He learns as you talk.</li>';
 
+  // health check: anything switched off gets a red mark and a tap-to-fix
+  const hl = D.health || [];
+  const badN = hl.filter(h => !h.ok).length;
+  $('health-list').innerHTML = hl.map(h => h.ok
+    ? `<li><span>✓ ${esc(h.n)}</span></li>`
+    : `<li style="cursor:pointer" onclick="J.fix('${h.k}')"><span><b style="color:#ff8a7a">✗ ${esc(h.n)}</b><br><span class="dim">${esc(h.why)} Tap to fix.</span></span></li>`).join('');
+  $('health-warn').style.display = badN ? 'block' : 'none';
+  $('health-warn').textContent = badN === 1 ? '1 setting is holding Jarvis back · fix it' : `${badN} settings are holding Jarvis back · fix them`;
+  $('health').querySelector('.label').textContent = badN ? `Health check · ${badN} to fix` : 'Health check · all good';
   if (D.ears) $('ears-line').textContent = 'Ears: ' + D.ears + '. Every turn is logged with timings, so glitches can be fixed.';
   // problems (helps track down anything that misbehaves)
   const pr = []; for (let i = 0; i < (D.problems || []).length; i++) pr.push(D.problems[i]);
