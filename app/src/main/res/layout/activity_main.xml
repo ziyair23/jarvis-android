@@ -87,6 +87,12 @@
             <TextView style="@style/Hint" android:text="Voice name (optional)" />
             <EditText android:id="@+id/voiceName" style="@style/Field" android:inputType="text" android:hint="en-GB-Chirp3-HD-Charon" />
 
+            <TextView style="@style/Hint" android:text="YouTube channel handle, for how's my channel doing" />
+            <EditText android:id="@+id/youtubeChannel" style="@style/Field" android:inputType="text" android:hint="yourhandle (the @ is optional)" />
+
+            <TextView style="@style/Hint" android:text="YouTube key (optional: blank uses the Google voice or Gemini key, with YouTube Data API turned on)" />
+            <EditText android:id="@+id/youtubeKey" style="@style/Field" android:inputType="textPassword" android:hint="AIza..." />
+
             <TextView style="@style/Label" android:layout_marginTop="26dp" android:text="About you" />
             <TextView style="@style/Hint" android:text="Your partner's name (optional)" />
             <EditText android:id="@+id/herName" style="@style/Field" android:inputType="textPersonName|textCapWords" />

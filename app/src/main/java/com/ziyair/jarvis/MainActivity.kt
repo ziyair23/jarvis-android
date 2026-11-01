@@ -47,6 +47,8 @@ class MainActivity : Activity() {
         val gemini = findViewById<EditText>(R.id.geminiKey); gemini.setText(prefs.geminiKey)
         val ttsKey = findViewById<EditText>(R.id.ttsKey); ttsKey.setText(prefs.ttsKey)
         val voiceName = findViewById<EditText>(R.id.voiceName); voiceName.setText(prefs.voiceName)
+        val ytKey = findViewById<EditText>(R.id.youtubeKey); ytKey.setText(prefs.youtubeKey)
+        val ytChannel = findViewById<EditText>(R.id.youtubeChannel); ytChannel.setText(prefs.youtubeChannel)
 
         findViewById<Button>(R.id.save).setOnClickListener {
             prefs.claudeKey = claude.text.toString(); prefs.picoKey = pico.text.toString()
@@ -55,6 +57,7 @@ class MainActivity : Activity() {
             prefs.dinner = dinner.text.toString(); prefs.bedtime = bed.text.toString()
             prefs.carName = car.text.toString(); prefs.goveeKey = govee.text.toString(); prefs.geminiKey = gemini.text.toString()
             prefs.ttsKey = ttsKey.text.toString(); prefs.voiceName = voiceName.text.toString()
+            prefs.youtubeKey = ytKey.text.toString(); prefs.youtubeChannel = ytChannel.text.toString()
             Scheduler.scheduleDaily(this)
             status.text = "Saved, sir."
             findViewById<View>(R.id.setup).visibility = if (ready()) View.GONE else View.VISIBLE

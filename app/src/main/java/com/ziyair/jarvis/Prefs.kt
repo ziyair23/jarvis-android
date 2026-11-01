@@ -76,6 +76,13 @@ class Prefs(context: Context) {
     var geminiKey: String
         get() = sp.getString("gemini_key", "") ?: ""
         set(v) = sp.edit().putString("gemini_key", v.trim()).apply()
+    /** YouTube pulse (lab L13): a Google API key with YouTube Data API on (blank = try the voice or Gemini key), and his channel handle. */
+    var youtubeKey: String
+        get() = sp.getString("youtube_key", "") ?: ""
+        set(v) = sp.edit().putString("youtube_key", v.trim()).apply()
+    var youtubeChannel: String
+        get() = sp.getString("youtube_channel", "") ?: ""
+        set(v) = sp.edit().putString("youtube_channel", v.trim()).apply()
     /** Govee lights developer key (free, from the Govee Home app). */
     var goveeKey: String
         get() = sp.getString("govee_key", "") ?: ""

@@ -88,6 +88,7 @@ class Actions(private val context: Context) {
             props("which" to str("Light name or 'all'"), "on" to bool("true on, false off"), "brightness" to num("1-100"), "color" to str("Color name")), listOf()))
         put(tool("find_phone", "He can't find his phone and asked where you are: ring loudly (even on silent) and flash the light.", props(), listOf()))
         put(tool("look", "Take a photo with the back camera and look at it (he points the phone at something). Use for 'what's this', 'read this', 'what does this say', 'what's wrong with this'.", props(), listOf()))
+        put(tool("youtube_stats", "His YouTube channel right now: subscribers (and the change since he last asked), his newest video's views, and his recent average. Read-only.", props(), listOf()))
         put(tool("remind_in_car", "Remind him of something when he next gets in the car (car Bluetooth connects), or when he gets out / parks (out=true).",
             props("text" to str("What to remind him, short, in his words"), "out" to bool("true = when he gets out of the car or parks")), listOf("text")))
         put(tool("remind_at_home", "Remind him of something when he gets home (e.g. 'grab the wipes from the car').", props("text" to str("What to remind him")), listOf("text")))
@@ -212,6 +213,7 @@ class Actions(private val context: Context) {
             "calendar_events" -> Cal.events(context, input.optString("day", "today"), input.optInt("days", 1))
             "add_event" -> Cal.add(context, input.getString("title"), input.optString("date", "today"), input.optString("time").ifBlank { null }, input.optInt("minutes", 60))
             "remind_at_home" -> HomeReminders.add(context, input.getString("text"))
+            "youtube_stats" -> YouTube.pulse(context)
             "remind_in_car" -> CarRemindersStore.add(context, input.getString("text"), input.optBoolean("out"))
             "journal_add" -> Journal.add(context, input.getString("text"))
             "journal_read" -> Journal.read(context, input.optString("about"))

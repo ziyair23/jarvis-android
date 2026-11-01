@@ -52,6 +52,12 @@ object Reflex {
             val r = try { recap(c) } catch (e: Exception) { Problems.log(c, "recap: ${e.message}"); null }
             if (r != null) return Hit(r)
         }
+        // YouTube pulse (lab L13): read-only numbers from his channel; kept in the conversation so he can ask more
+        if (t.isNotEmpty() && YouTubePulse.isAsk(text)) {
+            val yt = YouTube.pulse(c)
+            val p = Prefs(c); p.addTurn("user", text); p.addTurn("assistant", yt)
+            return Hit(yt)
+        }
         if (t.isEmpty() || t.split(" ").size > 9) return null
         val hit = try { match(c, t) } catch (e: Exception) { Problems.log(c, "reflex: ${e.message}"); null } ?: return null
         // Claude still sees it in the conversation, so "and turn it up a bit" afterwards makes sense to him
