@@ -27,6 +27,7 @@ object Updater {
     data class Release(val build: Int, val apkUrl: String, val pageUrl: String)
 
     @Volatile private var installing = false
+    @Volatile private var installingSince = 0L
 
     fun latest(): Release? = try {
         val c = URL("https://api.github.com/repos/${Brain.REPO}/releases/latest").openConnection() as HttpURLConnection
@@ -66,8 +67,13 @@ object Updater {
     }
 
     private fun install(context: Context, r: Release): Boolean {
-        if (installing) return true
+        // an install that never finished (the "Update Jarvis?" prompt didn't show or was dismissed) used to block every
+        // later update until a restart: give up on it after 3 minutes
+        if (installing && System.currentTimeMillis() - installingSince < 180_000) return true
         installing = true
+        installingSince = System.currentTimeMillis()
+        // clear out any half-finished install sessions from before
+        try { val pi = context.packageManager.packageInstaller; pi.mySessions.forEach { s -> try { pi.abandonSession(s.sessionId) } catch (_: Exception) {} } } catch (_: Exception) {}
         try {
             val f = File(context.cacheDir, "jarvis-update.apk")
             val c = URL(r.apkUrl).openConnection() as HttpURLConnection
