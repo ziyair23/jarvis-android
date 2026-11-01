@@ -136,6 +136,8 @@ object Agents {
         if (!enabled(c, id)) return "The ${d.name} agent is switched off in the Brain tab."
         val key = Prefs(c).claudeKey
         if (key.isBlank()) return "No Claude key set."
+        // the research agent uses the bigger model: it waits once he's at his monthly budget
+        if (id == "research" && Spend.thisMonth(Prefs(c)) >= Spend.budget(Prefs(c))) return "He's at his Claude budget for the month, so deep research is paused; I can still do a quick search."
         val t0 = System.currentTimeMillis()
         active[id] = t0
         Trace.log(c, "agent", "${d.name} <- \"${task.take(140)}\"${if (confirmed) " (confirmed)" else ""}")
