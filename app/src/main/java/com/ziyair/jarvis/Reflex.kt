@@ -45,16 +45,30 @@ object Reflex {
         // car reminders (lab L26): said when the car's Bluetooth connects or drops
         if (t.isNotEmpty()) {
             val car = try { CarRemindersStore.handle(c, text) } catch (e: Exception) { Problems.log(c, "car reminders: ${e.message}"); null }
-            if (car != null) { val p = Prefs(c); p.addTurn("user", text); p.addTurn("assistant", car); return Hit(car) }
+            if (car != null) { val p = Prefs(c); p.addTurn("user", text, quick = true); p.addTurn("assistant", car, quick = true); return Hit(car) }
+        }
+        // "where were we?" (lab L27): the last real topic, from the saved conversation; not added to it
+        if (t.isNotEmpty() && Recap.isAsk(text)) {
+            val r = try { recap(c) } catch (e: Exception) { Problems.log(c, "recap: ${e.message}"); null }
+            if (r != null) return Hit(r)
         }
         if (t.isEmpty() || t.split(" ").size > 9) return null
         val hit = try { match(c, t) } catch (e: Exception) { Problems.log(c, "reflex: ${e.message}"); null } ?: return null
         // Claude still sees it in the conversation, so "and turn it up a bit" afterwards makes sense to him
         if (hit.reply == "Dropped, sir.") return hit
         val p = Prefs(c)
-        p.addTurn("user", text)
-        p.addTurn("assistant", hit.reply)
+        p.addTurn("user", text, quick = true)
+        p.addTurn("assistant", hit.reply, quick = true)
         return hit
+    }
+
+    private fun recap(c: Context): String {
+        val h = Prefs(c).history()
+        val turns = (0 until h.length()).mapNotNull { i ->
+            val o = h.optJSONObject(i) ?: return@mapNotNull null
+            Recap.Turn(o.optString("role"), o.optString("content"), o.optLong("at", 0L), o.optBoolean("q", false))
+        }
+        return Recap.answer(turns, System.currentTimeMillis())
     }
 
     private fun match(c: Context, t: String): Hit? {

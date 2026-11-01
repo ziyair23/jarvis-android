@@ -109,9 +109,10 @@ class Prefs(context: Context) {
     /** Conversation history: [{"role":"user"|"assistant","content":"..."}], newest last. */
     fun history(): JSONArray = try { JSONArray(sp.getString("history", "[]")) } catch (e: Exception) { JSONArray() }
 
-    fun addTurn(role: String, content: String) = synchronized(Prefs::class.java) {
+    /** [quick] = a phone reflex (pause, louder …), skipped by "where were we?" (lab L27). */
+    fun addTurn(role: String, content: String, quick: Boolean = false) = synchronized(Prefs::class.java) {
         val h = history()
-        h.put(JSONObject().put("role", role).put("content", content).put("at", System.currentTimeMillis()))
+        h.put(JSONObject().put("role", role).put("content", content).put("at", System.currentTimeMillis()).apply { if (quick) put("q", true) })
         val trimmed = JSONArray()
         val start = maxOf(0, h.length() - 40)
         for (i in start until h.length()) trimmed.put(h.get(i))
