@@ -10,6 +10,7 @@ import java.util.Locale
 object IdeaVault {
     const val MAX = 300
     const val READ = 3
+    const val FRESH_MS = 10 * 60_000L
     private const val SEP = '\u0001'
 
     class Idea(val at: Long, val kind: String, val text: String)
@@ -19,7 +20,8 @@ object IdeaVault {
         /** [about] words to match, [kind] a kind to filter on; both null = newest. */
         class Find(val about: String?, val kind: String?) : Cmd()
         class Count(val kind: String?) : Cmd()
-        object DeleteLast : Cmd()
+        /** [explicit] = he said "my last" / "the last"; "scratch that idea" only bins a fresh one. */
+        class DeleteLast(val explicit: Boolean = true) : Cmd()
     }
 
     val KINDS = listOf("design", "drop", "post", "video", "collab")
@@ -58,7 +60,7 @@ object IdeaVault {
     )
     private val FIND = Regex("^$LEAD(?:what|which|read|read me|any|tell me|give me|go over|what are|what're|list)( my| the)?(?: (pursuit|brand))?(?: ($TYPE))? ideas( do i have| have i got| i have| i've got| did i have| did i save)?(?: (?:for|about|on|with) (.+))?$")
     private val COUNT = Regex("^$LEAD(?:how many)(?: (pursuit|brand))?(?: ($TYPE))? ideas(?: do i have| have i got| i have| i've got| are there| saved)?$")
-    private val DELETE = Regex("^$LEAD(?:scratch|delete|remove|forget|undo|bin) (?:that|the last|my last|the) (?:(?:pursuit|brand) )?(?:(?:$TYPE) )?idea$")
+    private val DELETE = Regex("^$LEAD(?:scratch|delete|remove|forget|undo|bin) (that|the last|my last|the) (?:(?:pursuit|brand) )?(?:(?:$TYPE) )?idea$")
     private val TAIL = Regex("(?:^|[\\s,.!?]+)(?:sir|jarvis|please)?[\\s,.!?]*$", RegexOption.IGNORE_CASE)
 
     private fun normWord(w: String) = w.lowercase(Locale.US).replace(Regex("[^a-z0-9']"), "")
@@ -68,13 +70,13 @@ object IdeaVault {
         val n = words.joinToString(" ") { normWord(it) }
         if (n.isEmpty()) return null
         val t = n.replace(Regex("( (please|sir|jarvis))+$"), "")
-        DELETE.find(t)?.let { return Cmd.DeleteLast }
+        DELETE.find(t)?.let { r -> return Cmd.DeleteLast(r.groupValues[r.groupValues.size - 1].endsWith("last")) }
         COUNT.find(t)?.let { r -> return Cmd.Count(kindOf(r.groupValues[r.groupValues.size - 1].ifEmpty { null })) }
         FIND.find(t)?.let { r ->
             val g = r.groupValues   // 1-4 lead, then: my/the, pursuit, type, have, about
             val my = g[g.size - 5]; val brand = g[g.size - 4]; val type = g[g.size - 3]; val have = g[g.size - 2]; val about = g[g.size - 1]
-            // "any ideas?" is him asking Jarvis for ideas, not the vault
-            if (my.trim() != "my" && brand.isEmpty() && type.isEmpty() && have.isEmpty()) return null
+            // "any ideas?" / "any video ideas for the drop?" is him asking Jarvis for ideas, not the vault
+            if (my.trim() != "my" && brand.isEmpty() && have.isEmpty()) return null
             return Cmd.Find(about.ifEmpty { null }, kindOf(type.ifEmpty { null }))
         }
         for (re in ADD) {
@@ -152,7 +154,12 @@ object IdeaVault {
         }
         is Cmd.DeleteLast -> {
             val last = l.maxByOrNull { it.at }
-            if (last == null) "No Pursuit ideas yet, sir." else { l.remove(last); "Scratched: ${spoken(last.text)}." }
+            when {
+                last == null -> "No Pursuit ideas yet, sir."
+                // "scratch that idea" long after saving is probably about something Jarvis just said: don't bin an old idea
+                !cmd.explicit && now - last.at > FRESH_MS -> "Your last saved idea is: ${spoken(last.text)}. Say 'delete my last Pursuit idea' to bin it."
+                else -> { l.remove(last); "Scratched: ${spoken(last.text)}." }
+            }
         }
         is Cmd.Find -> {
             val hits = find(l, cmd.about, cmd.kind)

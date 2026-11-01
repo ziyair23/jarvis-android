@@ -89,4 +89,19 @@ class IdeaVaultTest {
         assertEquals("- D [design] oxblood hoodie", IdeaVault.forClaude(l, "hoodies", null) { "D" })
         assertEquals("No saved Pursuit ideas match.", IdeaVault.forClaude(l, "caps", null) { "D" })
     }
+
+    @Test fun scratchThatLongAfterSavingAsksFirst() {
+        val l = mutableListOf<IdeaVault.Idea>()
+        say(l, "Pursuit idea: oxblood hoodie", t0)
+        assertEquals("Your last saved idea is: oxblood hoodie. Say 'delete my last Pursuit idea' to bin it.", say(l, "scratch that idea", t0 + 11 * min))
+        assertEquals(1, l.size)
+        assertEquals("Scratched: oxblood hoodie.", say(l, "delete the last idea", t0 + 12 * min))
+        assertTrue(l.isEmpty())
+    }
+
+    @Test fun kindWordAloneIsABrainstorm() {
+        listOf("any drop ideas", "give me caption ideas for the hoodie", "what video ideas").forEach { assertNull(it, IdeaVault.parse(it)) }
+        assertTrue(IdeaVault.parse("any Pursuit ideas about caps") is IdeaVault.Cmd.Find)
+        assertTrue(IdeaVault.parse("how many video ideas have I got") is IdeaVault.Cmd.Count)
+    }
 }

@@ -3,7 +3,6 @@ package com.ziyair.jarvis
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 
 /** Independent tester, L12, against lab/specs/L12.md only (plus the L13 polish). */
@@ -29,7 +28,6 @@ class IdeaVaultIndepTest {
 
     // Asking Jarvis to come up with ideas is the same as "any ideas for the caption": it goes to Claude, not the vault.
     // IGNORED only so lab-branch CI still builds; FAILS today (lab/reports/L12-2026-11-01.md). Un-ignore with the fix.
-    @Ignore("L12 bug: brainstorm asks with a kind word are read from the vault; un-ignore with the fix")
     @Test fun brainstormAsksGoToClaude() {
         for (s in listOf("any video ideas for the drop", "give me video ideas for the hoodie", "any caption ideas", "list collab ideas"))
             assertNull(s, IdeaVault.parse(s))
