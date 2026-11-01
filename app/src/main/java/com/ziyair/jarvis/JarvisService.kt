@@ -72,6 +72,7 @@ class JarvisService : Service() {
         // watchdog: if his ears ever stop (mic grabbed by another app, an error), quietly start them again
         main.postDelayed(object : Runnable {
             override fun run() {
+                if (destroyed) return
                 try {
                     if (prefs.running && !busy && !earOn() && wakeWord?.alive() != true && !inCall()) { Problems.log(this@JarvisService, "ears restarted"); startWakeWord() }
                     // phone ears ready but not in use (after a failure or the download just finishing): switch over when idle
@@ -219,8 +220,11 @@ class JarvisService : Service() {
         else startForeground(NOTIF_ID, n)
     }
 
+    @Volatile private var destroyed = false
+
     private fun startWakeWord(whileSpeaking: Boolean = false) {
         main.post {
+            if (destroyed) return@post
             if (busy && !whileSpeaking) return@post
             if (whileSpeaking && (!speaking || !brain.config().optBoolean("interrupt_by_name", true))) return@post
             try {
@@ -256,6 +260,7 @@ class JarvisService : Service() {
 
     /** Starts the one-ear stream if it's set up (model downloaded, not switched off remotely, not broken recently). */
     private fun ensureEar(): Boolean {
+        if (destroyed) return false
         if (earOn()) return true
         if (!prefs.running || inCall()) return false
         if (System.currentTimeMillis() - earBrokenAt < 10 * 60_000L) return false
@@ -583,7 +588,9 @@ class JarvisService : Service() {
     /** A short pause after Jarvis talks so the mic doesn't hear the end of his own voice. */
     private fun afterSpeaking(fn: () -> Unit) { main.postDelayed(fn, 350) }
 
-    private fun handle(text: String, followUp: Boolean = false) {
+    private fun handle(text0: String, followUp: Boolean = false) {
+        val text = text0.replace(Regex("^\\s*((hey|hi|ok|okay|yo)[,.!]?\\s+)?jarvis[,.!?]*\\s*", RegexOption.IGNORE_CASE), "").trim()
+        if (text.isBlank()) { Trace.log(this, "wake", "just his name, listening"); openWindow(convoSeconds()); listen(firstTurn = !followUp); return }
         if (isStop(text)) { Trace.log(this, "stop", "\"$text\""); stopListening(text); return }
         val lower = text.lowercase(Locale.US)
         if (Regex("^(never ?mind|thanks?( you)?,? (jarvis|that'?s (it|all))|thank you,? jarvis|nothing|no thanks?|i'?m good|that'?ll be all|goodbye|see you)\\b").containsMatchIn(lower)
@@ -654,7 +661,13 @@ class JarvisService : Service() {
             System.currentTimeMillis() - liveFailedAt > 10 * 60_000L && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
     /** Hands the conversation to live talking. The one ear lets go of the mic until it's over. */
-    private fun startLive(text: String, followUp: Boolean, turn: Int) {
+    private fun liveModels(): List<String> {
+        val a = brain.config().optJSONArray("live_models")
+        val l = if (a != null) (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } else emptyList()
+        return l.ifEmpty { listOf(brain.config().optString("live_model", "gemini-3.8-live")) }
+    }
+
+    private fun startLive(text: String, followUp: Boolean, turn: Int, model: String = liveModels().first()) {
         if (turn != turnId) return
         Trace.log(this, "live", "starting with \"$text\"")
         earListening = false
@@ -667,8 +680,18 @@ class JarvisService : Service() {
             if (liveSession !== session) return@onEnd   // cancelled from outside (a call, the orb, stopping Jarvis)
             liveSession = null
             if (nothingSaid && (reason.startsWith("failed") || reason.startsWith("error") || reason == "no answer" || reason.startsWith("mic") || reason.startsWith("speaker"))) {
+                val quota = reason.contains("quota", true) || reason.contains("429") || reason.contains("billing", true)
+                val models = liveModels()
+                val next = models.indexOf(model) + 1
+                if (quota && next in models.indices && turn == turnId) {
+                    Trace.log(this, "live", "$model has no quota on his key, trying ${models[next]}")
+                    liveSession = null
+                    startLive(text, followUp, turn, models[next])
+                    return@onEnd
+                }
+                if (quota) Problems.log(this, "live talking: Google says his Gemini key has no quota left for live voice. It needs billing turned on in Google AI Studio (pay as you go, about 2 cents a minute).")
                 // live talking isn't working right now: answer this one the usual way, and skip live for a while
-                liveFailedAt = System.currentTimeMillis()
+                liveFailedAt = System.currentTimeMillis() + (if (quota) 3 * 3600_000L else 0L)
                 Trace.log(this, "live", "falling back to the normal voice: $reason")
                 thinking = false
                 handle(text, followUp)
@@ -678,7 +701,7 @@ class JarvisService : Service() {
             finishTurn()
         }
         liveSession = session
-        session.start(text)
+        session.start(text, model)
     }
 
     /** Ends live talking without the normal wrap-up (the caller handles what happens next). */
@@ -972,6 +995,8 @@ class JarvisService : Service() {
     }
 
     override fun onDestroy() {
+        destroyed = true
+        main.removeCallbacksAndMessages(null)
         try { unregisterReceiver(unlocked) } catch (_: Exception) {}
         try { unregisterReceiver(batteryWatch) } catch (_: Exception) {}
         try { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(wifiWatch) } catch (_: Exception) {}

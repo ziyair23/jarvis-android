@@ -295,6 +295,8 @@ class Brain(private val context: Context) {
                         when (d.optString("type")) {
                             "text_delta" -> { val t = d.optString("text"); b.put("text", b.optString("text") + t); if (!toolStarted) onText(t) }
                             "input_json_delta" -> partial.getOrPut(i) { StringBuilder() }.append(d.optString("partial_json"))
+                            "thinking_delta" -> b.put("thinking", b.optString("thinking") + d.optString("thinking"))
+                            "signature_delta" -> b.put("signature", b.optString("signature") + d.optString("signature"))
                         }
                     }
                     "content_block_stop" -> {
@@ -311,7 +313,8 @@ class Brain(private val context: Context) {
         }
         c.disconnect()
         val content = JSONArray()
-        blocks.filter { it.length() > 0 && !(it.optString("type") == "text" && it.optString("text").isBlank()) }.forEach { content.put(it) }
+        blocks.filter { it.length() > 0 && !(it.optString("type") == "text" && it.optString("text").isBlank()) &&
+            !(it.optString("type") == "thinking" && it.optString("thinking").isBlank() && it.optString("signature").isBlank()) }.forEach { content.put(it) }
         return code to JSONObject().put("content", content).put("stop_reason", stop).put("usage", usage).toString()
     }
 

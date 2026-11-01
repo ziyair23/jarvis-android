@@ -65,10 +65,13 @@ class Live(
 
     private val client = OkHttpClient.Builder().pingInterval(20, TimeUnit.SECONDS).readTimeout(0, TimeUnit.MILLISECONDS).build()
 
-    fun start(first: String?) {
+    private var model = "gemini-3.8-live"
+
+    fun start(first: String?, modelName: String) {
+        model = modelName
         running = true
         val key = Prefs(context).geminiKey
-        Trace.log(context, "live", "connecting (${cfg.optString("live_model", "gemini-3.8-live")})")
+        Trace.log(context, "live", "connecting ($model)")
         callAudio(true)
         val url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$key"
         ws = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
@@ -77,7 +80,7 @@ class Live(
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) { handle(bytes.utf8(), first) }
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 if (!ended) { Trace.log(context, "live", "server closed: $code ${reason.take(160)}"); if (code != 1000) Problems.log(context, "live talking closed: $code ${reason.take(120)}") }
-                stop(if (code == 1000) "closed" else "error $code")
+                stop(if (code == 1000) "closed" else "error $code ${reason.take(120)}")
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 val why = "${response?.code ?: ""} ${t.message ?: ""}".trim()
@@ -125,7 +128,7 @@ class Live(
         val tools = JSONArray().put(JSONObject().put("functionDeclarations", decls))
         if (cfg.optBoolean("web_search", true)) tools.put(JSONObject().put("googleSearch", JSONObject()))
         return JSONObject().put("setup", JSONObject()
-            .put("model", "models/" + cfg.optString("live_model", "gemini-3.8-live"))
+            .put("model", "models/$model")
             .put("generationConfig", JSONObject()
                 .put("responseModalities", JSONArray().put("AUDIO"))
                 .put("speechConfig", JSONObject().put("voiceConfig", JSONObject().put("prebuiltVoiceConfig", JSONObject().put("voiceName", voice)))))
