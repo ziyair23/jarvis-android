@@ -201,8 +201,8 @@ object CustomProtocols {
     @Synchronized fun delete(context: Context, rawName: String): String {
         val p = Prefs(context); val all = load(p); val name = ProtocolRules.normName(rawName)
         if (name in ProtocolRules.BUILT_IN) return "That one's built in, sir. It stays."
-        if (!all.has(name)) return "There's no protocol called $name, sir."
-        all.remove(name)
+        val key = ProtocolRules.find(name, all.keys().asSequence().toList()) ?: return "There's no protocol called $name, sir."
+        all.remove(key)
         p.sp.edit().putString("custom_protocols", all.toString()).apply()
         return "Deleted the $name protocol."
     }
@@ -211,8 +211,9 @@ object CustomProtocols {
 
     /** Runs a saved protocol, or returns null if there isn't one with that name. Each step runs even if one fails. */
     fun run(context: Context, rawName: String): String? {
-        val name = ProtocolRules.normName(rawName)
-        val steps = load(Prefs(context)).optJSONArray(name) ?: return null
+        val all = load(Prefs(context))
+        val name = ProtocolRules.find(rawName, all.keys().asSequence().toList()) ?: return null
+        val steps = all.optJSONArray(name) ?: return null
         val actions = Actions(context)
         val done = mutableListOf<String>(); val failed = mutableListOf<String>(); val info = mutableListOf<String>()
         for (i in 0 until steps.length()) {

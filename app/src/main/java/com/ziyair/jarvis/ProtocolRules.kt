@@ -26,7 +26,7 @@ object ProtocolRules {
     val INFO = setOf("get_weather", "calendar_events", "status_report", "list_read")
 
     /** Same patterns the built-in protocols answer to, so a custom name can never take one of them over. */
-    private val BUILT_IN_PATTERN = Regex("\\b(good ?night|sleep\\w*|bed\\w*|dash|work|baby|night|feed|home)\\b")
+    private val BUILT_IN_PATTERN = Regex("^(good ?night|bed ?time|bed|sleep\\w*|sleep time|night( ?time| feed)?|feed(ing)?( time)?|baby( time)?|dash(ing)?|work( out)?|home( time)?)$")
 
     val BUILT_IN = setOf("dash", "work", "baby", "night", "feed", "home", "goodnight", "good night", "sleep", "bed")
 
@@ -64,7 +64,13 @@ object ProtocolRules {
         val hasCue = m.groupValues[2].isNotEmpty() || Regex("^(run|start|engage|activate|do|begin|go) ").containsMatchIn(t)
         if (!hasCue) return null
         val said = normName(m.groupValues[1])
-        return names.firstOrNull { it == said }
+        return find(said, names)
+    }
+
+    /** His saved name for what he said; spaces don't matter ("work out" finds "workout"). */
+    fun find(said0: String, names: Collection<String>): String? {
+        val said = normName(said0)
+        return names.firstOrNull { it == said } ?: names.firstOrNull { it.replace(" ", "") == said.replace(" ", "") }
     }
 
     /** A few spoken words describing a step, for "Gym protocol saved: quiet, music, lights off." */
@@ -105,7 +111,7 @@ object ProtocolRules {
     }
 
     /** Whether a tool's reply means the step failed. */
-    fun failed(result: String) = Regex("couldn't|can't|cannot|didn't|wouldn't|isn't|needs to|failed|unknown|no lights|no flashlight|no \\w+ app|not (allowed|set up|found|available|connected|granted)|only \\d+ of", RegexOption.IGNORE_CASE).containsMatchIn(result)
+    fun failed(result: String) = Regex("couldn't|can't|cannot|didn't|wouldn't|isn't|needs to|failed|unknown|no lights|no flashlight|no \\w+ app|not (allowed|set up|found|available|connected|granted)|no (app|light) called|^need an? |only \\d+ of", RegexOption.IGNORE_CASE).containsMatchIn(result)
 
     fun listLine(custom: List<String>): String =
         if (custom.isEmpty()) "Built in: dash, baby, home and goodnight. None of your own yet."

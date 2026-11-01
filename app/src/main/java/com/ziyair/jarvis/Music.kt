@@ -137,7 +137,7 @@ object Music {
         Trace.log(context, "music", "gave up: player says \"${title(Apps.player(context, pkg))}\", playing=${playing(Apps.player(context, pkg))}")
         // what's playing isn't his song (the old queue): pause it instead of claiming success
         Apps.player(context, pkg)?.let { c -> if (playing(c) && title(c) == before && !looksLike(nowSong(c), query)) try { c.transportControls.pause() } catch (_: Exception) {} }
-        if (!taps) return "Opened $query in $name."
+        if (!taps) return "Couldn't start $query; it's open in $name."
         if (!access) return "Opened $query in $name, but I can't press play without screen control. Tell him: open the Jarvis app, tap Allow screen control, and it'll press play for him from then on."
         if (!seen) return "Opened $query in $name."
         return "Opened $query in $name but it wouldn't start, even after I pressed play. Tell him plainly he'll need to tap it this once."
