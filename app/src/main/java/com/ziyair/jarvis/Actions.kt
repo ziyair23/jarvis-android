@@ -93,8 +93,7 @@ class Actions(private val context: Context) {
         put(tool("journal_read", "Read back baby journal moments, optionally about something.", props("about" to str("Optional word to search")), listOf()))
         put(tool("answer_call", "Answer the phone call that's ringing right now.", props(), listOf()))
         put(tool("decline_call", "Decline the phone call that's ringing right now.", props(), listOf()))
-        put(tool("offer_rule", "Change DoorDash order judging: minimum dollars per mile, minimum dollars per hour, or turn it on/off.", props("per_mile" to num("Minimum $ per mile"), "per_hour" to num("Minimum $ per hour"), "on" to bool("Judge offers or not")), listOf()))
-        put(tool("offer_insights", "His offer diary (every DoorDash offer Jarvis has judged, kept on the phone): his best and weakest hours of the day for offers, or clear the diary.", props("action" to str("summary (default) or clear")), listOf()))
+        put(tool("offer_rule", "Change DoorDash order judging: minimum dollars per mile, or turn it on/off.", props("per_mile" to num("Minimum $ per mile"), "on" to bool("Judge offers or not")), listOf()))
         put(tool("driving_mode", "Turn driving mode on or off (short answers, messages read aloud).", props("on" to bool("true for on")), listOf("on")))
     }
 
@@ -215,8 +214,7 @@ class Actions(private val context: Context) {
             "journal_read" -> Journal.read(context, input.optString("about"))
             "answer_call" -> CallControl.answer(context)
             "decline_call" -> CallControl.decline(context)
-            "offer_rule" -> OfferJudge.setRule(context, if (input.has("per_mile")) input.optDouble("per_mile") else null, if (input.has("on")) input.optBoolean("on") else null, if (input.has("per_hour")) input.optDouble("per_hour") else null)
-            "offer_insights" -> OfferJudge.insights(context, input.optString("action").ifBlank { null })
+            "offer_rule" -> OfferJudge.setRule(context, if (input.has("per_mile")) input.optDouble("per_mile") else null, if (input.has("on")) input.optBoolean("on") else null)
             "house_speaker" -> {
                 val p = prefs
                 input.optString("mode").takeIf { it in setOf("announcements", "everything", "off") }?.let { Cast.setMode(p, it) }

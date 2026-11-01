@@ -2,7 +2,6 @@ package com.ziyair.jarvis
 
 import android.app.Notification
 import android.content.Context
-import java.util.Calendar
 import android.content.Intent
 import org.json.JSONArray
 import org.json.JSONObject
@@ -80,20 +79,15 @@ object CallControl {
 object OfferJudge {
     const val DASHER = "com.doordash.driverapp"
     private var lastSig = ""; private var lastAt = 0L; private var lastCheck = 0L
-    private const val KEEP = 1500
 
     fun minPerMile(p: Prefs) = p.sp.getFloat("min_per_mile", 2f).toDouble()
-    fun minPerHour(p: Prefs) = p.sp.getFloat("min_per_hour", 20f).toDouble()
     fun on(p: Prefs) = p.sp.getBoolean("judge_offers", true)
 
-    fun setRule(context: Context, perMile: Double?, on: Boolean?, perHour: Double? = null): String {
-        if (perHour != null && perHour !in 5.0..100.0) return "That hourly minimum sounds off, sir. Somewhere between five and a hundred?"
+    fun setRule(context: Context, perMile: Double?, on: Boolean?): String {
         val p = Prefs(context)
         perMile?.let { p.sp.edit().putFloat("min_per_mile", it.toFloat()).apply() }
-        perHour?.let { p.sp.edit().putFloat("min_per_hour", it.toFloat()).apply() }
         on?.let { p.sp.edit().putBoolean("judge_offers", it).apply() }
-        return if (!on(p)) "Order judging is off."
-        else "Judging offers at ${Earnings.money(minPerMile(p))} a mile and ${Earnings.money(minPerHour(p))} an hour."
+        return if (!on(p)) "Order judging is off." else "Judging offers at ${Earnings.money(minPerMile(p))} a mile."
     }
 
     /** Called with all the text on the Dasher screen. */
@@ -103,44 +97,26 @@ object OfferJudge {
         lastCheck = now
         val p = Prefs(context)
         if (!on(p) || !p.running || Stealth.on(p)) return
-        val cal = Calendar.getInstance()
-        val o = OfferMath.parse(texts.joinToString(" | "), cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)) ?: return
-        val sig = "${o.pay}|${o.miles}"
+        val all = texts.joinToString(" | ")
+        if (!Regex("\\baccept\\b", RegexOption.IGNORE_CASE).containsMatchIn(all)) return
+        val pay = Regex("\\$\\s?(\\d{1,3}(?:\\.\\d{2})?)").findAll(all).mapNotNull { it.groupValues[1].toDoubleOrNull() }.filter { it in 1.0..200.0 }.maxOrNull() ?: return
+        val miles = Regex("(\\d{1,3}(?:\\.\\d)?)\\s?mi\\b", RegexOption.IGNORE_CASE).findAll(all).mapNotNull { it.groupValues[1].toDoubleOrNull() }.filter { it > 0 }.maxOrNull() ?: return
+        val sig = "$pay|$miles"
         if (sig == lastSig && now - lastAt < 120_000) return
         lastSig = sig; lastAt = now
-        try {
-            context.startService(Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY)
-                .putExtra("text", OfferMath.line(o, minPerMile(p), minPerHour(p))))
-        } catch (_: Exception) {}
-        // save to the diary after speaking, off the main thread, so the call-out is never late
-        val hour = cal.get(Calendar.HOUR_OF_DAY)
-        Thread { try { remember(p, hour, o) } catch (e: Exception) { Problems.log(context, "offer diary: ${e.message}") } }.start()
-    }
-
-    // ---- offer diary (lab L1): every judged offer, kept only on the phone ----
-    fun diary(p: Prefs): JSONArray = try { JSONArray(p.sp.getString("offer_log", "[]")) } catch (_: Exception) { JSONArray() }
-
-    @Synchronized private fun clear(p: Prefs) {
-        // keep the last diary as a backup in case it was cleared by mistake
-        p.sp.edit().putString("offer_log_prev", p.sp.getString("offer_log", "[]")).putString("offer_log", "[]").apply()
-    }
-
-    @Synchronized private fun remember(p: Prefs, hour: Int, o: OfferMath.Offer) {
-        val a = diary(p)
-        val e = JSONObject().put("at", System.currentTimeMillis()).put("h", hour).put("pay", o.pay).put("mi", o.miles)
-        o.minutes?.let { e.put("min", it) }
-        a.put(e)
-        val keep = JSONArray(); for (i in maxOf(0, a.length() - KEEP) until a.length()) keep.put(a.get(i))
-        p.sp.edit().putString("offer_log", keep.toString()).apply()
-    }
-
-    fun insights(context: Context, action: String?): String {
-        val p = Prefs(context)
-        if (action == "clear") { clear(p); return "Offer diary cleared." }
-        val a = diary(p)
-        val seen = (0 until a.length()).map { a.getJSONObject(it) }.map {
-            OfferMath.Seen(it.optInt("h"), it.optDouble("pay"), it.optDouble("mi"), if (it.has("min")) it.optInt("min") else null)
+        val rate = pay / miles
+        val min = minPerMile(p)
+        val payWords = if (pay == Math.floor(pay)) "${pay.toInt()} dollars" else String.format(Locale.US, "%.2f dollars", pay)
+        val milesWords = if (miles == Math.floor(miles)) "${miles.toInt()} miles" else "$miles miles"
+        val rateWords = String.format(Locale.US, "%.2f", rate).let { if (rate < 1) "${Math.round(rate * 100)} cents" else "$it dollars" }
+        val verdict = when {
+            rate >= min * 1.25 -> "That's $rateWords a mile. Good one, sir, take it."
+            rate >= min -> "$rateWords a mile. Worth taking."
+            rate >= min * 0.85 -> "$rateWords a mile. Borderline, your call."
+            else -> "Only $rateWords a mile. I'd pass."
         }
-        return OfferMath.bestHours(seen, minPerMile(p), minPerHour(p))
+        try {
+            context.startService(Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", "$payWords for $milesWords. $verdict"))
+        } catch (_: Exception) {}
     }
 }
