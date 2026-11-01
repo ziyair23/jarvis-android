@@ -103,5 +103,7 @@
   ],
   "agents": true,
   "agent_model": "claude-haiku-5-5",
-  "builder_model": "claude-sonnet-5-5"
+  "builder_model": "claude-sonnet-5-5",
+  "research_model": "claude-sonnet-5-5",
+  "research_max_searches": 4
 }

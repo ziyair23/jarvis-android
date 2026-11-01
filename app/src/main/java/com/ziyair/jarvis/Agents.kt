@@ -19,13 +19,13 @@ object Agents {
     class Def(val id: String, val name: String, val blurb: String, val tools: Set<String>, val style: String)
 
     /** Skills Jarvis keeps himself: the quick, everyday ones where an extra hop would only slow him down. */
-    val CORE = setOf("set_timer", "remind_me", "list_reminders", "cancel_reminders", "get_weather", "remember", "forget",
-        "calendar_events", "add_event", "quiet_mode", "set_voice", "briefing", "status_report", "look", "list_add",
-        "list_check", "list_read", "list_clear", "run_protocol", "driving_mode", "media_control", "answer_call", "decline_call")
+    val CORE = setOf("set_timer", "remind_me", "get_weather", "remember", "forget",
+        "quiet_mode", "set_voice", "status_report", "look", "list_add",
+        "list_check", "list_read", "list_clear", "driving_mode", "media_control", "answer_call", "decline_call")
 
     val PHONE = Def("phone", "Phone", "Runs his phone: calls, texts, DMs, apps, music, directions, the screen.",
         setOf("call", "send_text", "read_messages", "reply_message", "navigate", "stop_navigation", "play_music", "open_app",
-            "media_control", "phone_task", "screen_read", "phone_control", "set_alarm", "find_phone", "answer_call", "decline_call"),
+            "media_control", "phone_task", "screen_read", "phone_control", "find_phone", "answer_call", "decline_call"),
         "Do the job on his phone with the fewest steps. For anything inside an app, use phone_task with the whole job in one sentence. " +
             "Texts, DMs, replies and calls only go out when the task says he confirmed; otherwise get it ready and say it's waiting for his yes.")
 
@@ -38,10 +38,24 @@ object Agents {
             "house_speaker", "set_home_wifi"),
         "Log baby events the moment he mentions them. Speech-to-text often mangles the baby's name: it's always Ziyair.")
 
+    val PLANNER = Def("planner", "Planner", "Owns his time: calendar, reminders, alarms, the morning briefing and his protocols.",
+        setOf("calendar_events", "add_event", "remind_me", "list_reminders", "cancel_reminders", "set_alarm", "briefing", "run_protocol", "set_timer"),
+        "Think about his whole day before answering: his dashes run 7 to 11 and 5 to 9, and there's a newborn at home. Check the calendar before adding things, " +
+            "and say plainly if something clashes. Times you pass to tools are 24-hour local time.")
+
+    val RESEARCH = Def("research", "Research", "Digs into questions that need more than one search: comparisons, how-tos, prices, plans.",
+        setOf(), "Search several times from different angles, read what comes back, and answer with the bottom line in two to four plain sentences: " +
+            "the answer first, then the one or two facts that matter (numbers, names, dates). No links or source names unless asked. Say so if sources disagree.")
+
+    val PURSUIT = Def("pursuit", "Pursuit", "His business partner for the Pursuit clothing brand: ideas, the shoot list, launch to-dos and orders.",
+        setOf("pursuit_add", "pursuit_list", "pursuit_done"),
+        "Save ideas the moment he says them, tagged (design, drop, post, collab or the product). When he asks what's left or what ideas he has, read back " +
+            "the best few, newest first. Talk like a sharp co-founder: practical, no hype. Never post, message or buy anything.")
+
     val BUILDER = Def("builder", "Builder", "Works on Jarvis himself: changes how he talks and behaves, and builds new versions for Marcus to approve.",
         Builder.TOOL_NAMES, Builder.STYLE)
 
-    val ALL = listOf(PHONE, MONEY, FAMILY, BUILDER)
+    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, BUILDER)
     fun def(id: String) = ALL.firstOrNull { it.id == id }
 
     // ---------------- switches, notebooks, stats ----------------
@@ -113,6 +127,7 @@ object Agents {
 
     /** Skills that need a look at the result before the agent is done (everything else returns straight away). */
     private val LOOK_AGAIN = setOf("screen_read", "read_messages", "earnings_summary", "expenses_summary", "baby_status", "journal_read",
+        "calendar_events", "list_reminders", "briefing", "pursuit_list",
         "read_file", "list_files", "build_status", "read_build_errors")
 
     /** Runs one job on an agent (blocking, background thread). Returns what happened, for Jarvis to say. */
@@ -128,11 +143,18 @@ object Agents {
         var result = ""
         try {
             val cfg = Brain(c).config()
-            val model = cfg.optString(if (id == "builder") "builder_model" else "agent_model", if (id == "builder") "claude-sonnet-5-5" else "claude-haiku-5-5")
+            val model = when (id) {
+                "builder" -> cfg.optString("builder_model", "claude-sonnet-5-5")
+                "research" -> cfg.optString("research_model", "claude-sonnet-5-5")
+                else -> cfg.optString("agent_model", "claude-haiku-5-5")
+            }
             val actions = Actions(c)
             val tools = JSONArray()
             if (id == "builder") { val b = Builder.tools(); for (i in 0 until b.length()) tools.put(b.get(i)) }
             else { val all = actions.tools(); for (i in 0 until all.length()) { val t = all.getJSONObject(i); if (t.optString("name") in d.tools) tools.put(t) } }
+            // the research agent searches the web itself (Claude's search tool, a few searches per job)
+            if (id == "research") tools.put(JSONObject().put("type", "web_search_20250305").put("name", "web_search").put("max_uses", cfg.optInt("research_max_searches", 4))
+                .put("user_location", JSONObject().put("type", "approximate").put("city", Prefs(c).city.ifBlank { "Spokane" }).put("region", "Washington").put("country", "US")))
             tools.put(JSONObject().put("name", "note_to_self").put("description", "Save one short thing you've learned about how he likes this done (a habit, a preference, a correction), so you do it better next time. Not for one-off details.")
                 .put("input_schema", JSONObject().put("type", "object").put("properties", JSONObject().put("note", JSONObject().put("type", "string"))).put("required", JSONArray().put("note"))))
             tools.getJSONObject(tools.length() - 1).put("cache_control", JSONObject().put("type", "ephemeral"))
@@ -145,7 +167,7 @@ object Agents {
                 "Right now it is " + java.text.SimpleDateFormat("EEEE h:mm a", java.util.Locale.US).format(java.util.Date()) + "."
             val msgs = JSONArray().put(JSONObject().put("role", "user").put("content", task))
             for (round in 1..(if (id == "builder") 14 else 6)) {
-                val body = JSONObject().put("model", model).put("max_tokens", if (id == "builder") 4000 else 500).put("system", system)
+                val body = JSONObject().put("model", model).put("max_tokens", when (id) { "builder" -> 4000; "research" -> 900; else -> 500 }).put("system", system)
                     .put("tools", tools).put("messages", msgs)
                 val resp = post(key, body) ?: run { result = "The ${d.name} agent couldn't reach Claude."; return result }
                 Spend.record(c, cfg, model, resp.optJSONObject("usage"))
@@ -173,6 +195,8 @@ object Agents {
                         }
                     }
                 }
+                // a long web search can pause mid-way: hand it back so it finishes
+                if (resp.optString("stop_reason") == "pause_turn") { msgs.put(JSONObject().put("role", "assistant").put("content", content)); continue }
                 if (results.length() == 0) { result = text.toString().trim().ifBlank { "Done." }; break }
                 // one quick step done and nothing to read back: hand the result straight to Jarvis (saves a whole round)
                 if (!lookAgain && id != "builder" && outs.isNotEmpty()) { result = outs.joinToString(" "); break }

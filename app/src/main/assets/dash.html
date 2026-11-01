@@ -166,7 +166,7 @@ section.on{display:block}
 
 <section id="s-brain">
   <div style="position:relative;margin:0 -18px">
-    <canvas id="brain" width="800" height="680" style="width:100%;height:auto;display:block;touch-action:none"></canvas>
+    <canvas id="brain" width="800" height="720" style="width:100%;height:auto;display:block;touch-action:none"></canvas>
     <div id="brain-hint" class="faint" style="position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Drag to turn · tap an agent</div>
   </div>
   <div class="card" id="ag-card">
@@ -388,28 +388,59 @@ requestAnimationFrame(orbFrame);
   const cv = document.getElementById('brain'); if (!cv) return;
   const g = cv.getContext('2d');
   let A = [], sel = 'jarvis', yaw = 0.6, pitch = -0.22, vy = 0.12, vp = 0, drag = null, lastT = 0, pulses = [], lastActive = {};
-  const POS = {phone:[0,0.22,1.02], money:[0.64,0.6,-0.1], family:[-0.92,-0.18,0.25], builder:[-0.1,0.62,-0.9]};
-  // a seeded point cloud shaped like a brain: two hemispheres with folds
-  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const P = [];
-  for (let i = 0; i < 620; i++) {
-    const side = i % 2 ? 1 : -1, u = rnd() * Math.PI * 2, v = Math.acos(2 * rnd() - 1);
-    let x = Math.sin(v) * Math.cos(u), y = Math.cos(v), z = Math.sin(v) * Math.sin(u);
-    const fold = 1 + 0.07 * Math.sin(u * 6 + v * 5) * Math.sin(v * 7);
-    x = Math.abs(x) * 0.52 * fold * side + side * 0.06; y = y * 0.72 * fold; z = z * 1.0 * fold;
-    if (y < -0.45) y = -0.45 + (y + 0.45) * 0.3;
-    P.push([x, y, z]);
+  // where each agent lives in the brain, roughly where that kind of thinking happens
+  const POS = {phone:[0.05,0.28,0.98], planner:[-0.42,0.52,0.55], research:[0.44,0.5,0.52], money:[0.5,0.62,-0.18],
+    family:[-0.74,-0.16,0.2], pursuit:[0.74,-0.14,0.16], builder:[-0.1,0.4,-0.96]};
+  // ---- the brain itself: a folded cortex (two hemispheres), cerebellum and brain stem, as points and fibres ----
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const P = [], KIND = [];
+  function cortex(dx, dy, dz) {
+    const a = 0.66, bb = 0.7, c = 1.0;
+    let R = 1 / Math.sqrt((dx/a)**2 + (dy/bb)**2 + (dz/c)**2);
+    // gyri and sulci: layered folds over the surface
+    R *= 1 + 0.05 * Math.sin(11*dx + 4*dz) * Math.sin(9*dy + 3*dx) + 0.035 * Math.sin(17*dz - 6*dy + 2*dx) + 0.02 * Math.sin(23*dx + 19*dy);
+    let x = dx * R, y = dy * R, z = dz * R;
+    if (y < -0.18) y = -0.18 + (y + 0.18) * 0.55;                         // flatter underside
+    if (y < 0.05 && y > -0.45 && Math.abs(x) > 0.35) { x *= 1.08; y -= 0.06; } // temporal lobes
+    x += Math.sign(x || 1) * 0.05;                                         // the gap between hemispheres
+    return [x, y, z];
   }
+  for (let i = 0; i < 1500; i++) {
+    const u = rnd() * Math.PI * 2, v = Math.acos(2 * rnd() - 1);
+    P.push(cortex(Math.sin(v) * Math.cos(u), Math.cos(v), Math.sin(v) * Math.sin(u))); KIND.push(0);
+  }
+  for (let i = 0; i < 260; i++) {                                          // cerebellum: tucked under the back, finely striped
+    const u = rnd() * Math.PI * 2, v = Math.acos(2 * rnd() - 1);
+    let x = Math.sin(v) * Math.cos(u) * 0.46, y = Math.cos(v) * 0.2, z = Math.sin(v) * Math.sin(u) * 0.27;
+    const st = 1 + 0.06 * Math.sin(y * 70); x *= st; z *= st;
+    P.push([x, y - 0.5, z - 0.68]); KIND.push(1);
+  }
+  for (let i = 0; i < 90; i++) {                                           // brain stem
+    const t = rnd(), u = rnd() * Math.PI * 2, r = 0.1 - t * 0.025;
+    P.push([Math.cos(u) * r, -0.4 - t * 0.55, -0.3 - t * 0.12 + Math.sin(u) * r * 0.8]); KIND.push(2);
+  }
+  for (let i = 0; i < 160; i++) {                                          // deep tissue, faint, for depth
+    const u = rnd() * Math.PI * 2, v = Math.acos(2 * rnd() - 1), k = 0.35 + 0.45 * rnd();
+    const q = cortex(Math.sin(v) * Math.cos(u), Math.cos(v), Math.sin(v) * Math.sin(u)); P.push([q[0]*k, q[1]*k, q[2]*k]); KIND.push(3);
+  }
+  // fibres: each point wired to its nearest neighbours
   const E = [];
   for (let i = 0; i < P.length; i++) {
-    const d = P.map((q, j) => [j, (q[0]-P[i][0])**2 + (q[1]-P[i][1])**2 + (q[2]-P[i][2])**2]).sort((a, b) => a[1] - b[1]);
-    for (let k = 1; k <= 2; k++) if (d[k][1] < 0.06 && i < d[k][0]) E.push([i, d[k][0]]);
+    const near = [];
+    for (let j = 0; j < P.length; j++) { if (j === i) continue; const d = (P[j][0]-P[i][0])**2 + (P[j][1]-P[i][1])**2 + (P[j][2]-P[i][2])**2; if (d < 0.012) near.push([j, d]); }
+    near.sort((x, y) => x[1] - y[1]);
+    for (let k = 0; k < Math.min(3, near.length); k++) if (i < near[k][0]) E.push([i, near[k][0]]);
   }
+  // sparks: a fibre lights up for a moment (more of them near an agent that's working)
+  let sparks = [];
+  const nearEdges = {};
+  Object.keys(POS).forEach(id => { const p = POS[id]; nearEdges[id] = E.map((e, n) => [n, (P[e[0]][0]-p[0])**2 + (P[e[0]][1]-p[1])**2 + (P[e[0]][2]-p[2])**2]).filter(x => x[1] < 0.12).map(x => x[0]); });
+  const dust = Array.from({length: 70}, () => ({a: rnd() * 6.3, r: 1.25 + rnd() * 0.5, y: (rnd() - 0.5) * 1.4, s: 0.05 + rnd() * 0.1}));
   function proj(p) {
     const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
     let x = p[0] * cy + p[2] * sy, z = -p[0] * sy + p[2] * cy;
     let y = p[1] * cp - z * sp; z = p[1] * sp + z * cp;
-    const f = 3.2 / (3.2 - z), S = cv.width * 0.4;
+    const f = 3.2 / (3.2 - z), S = cv.width * 0.37;
     return [cv.width / 2 + x * S * f, cv.height / 2 - y * S * f, z, f];
   }
   const visible = () => document.getElementById('s-brain').classList.contains('on');
@@ -425,9 +456,27 @@ requestAnimationFrame(orbFrame);
     if (!drag) { yaw += vy * dt; vy += (0.12 - vy) * 0.02; pitch += vp * dt; vp *= 0.92; pitch += (-0.22 - pitch) * 0.01; }
     const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
     const pp = P.map(proj);
+    // sparks
+    const actives = A.filter(a => a.active).map(a => a.id);
+    if (rnd() < 0.5) sparks.push({e: Math.floor(rnd() * E.length), t});
+    for (const id of actives) for (let k = 0; k < 2; k++) { const ne = nearEdges[id]; if (ne && ne.length) sparks.push({e: ne[Math.floor(rnd() * ne.length)], t}); }
+    sparks = sparks.filter(sp => t - sp.t < 0.7);
+    // fibres, faint at the back, warmer at the front
     g.lineWidth = 1;
-    for (const [i, j] of E) { const a = pp[i], b = pp[j], d = (a[2] + b[2]) / 2; g.strokeStyle = `rgba(201,102,92,${0.05 + 0.13 * (d + 1) / 2})`; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
-    for (const q of pp) { g.fillStyle = `rgba(239,235,228,${0.12 + 0.35 * (q[2] + 1) / 2})`; g.beginPath(); g.arc(q[0], q[1], 1.3 * q[3], 0, 7); g.fill(); }
+    for (let n = 0; n < E.length; n++) { const [i, j] = E[n], a = pp[i], b = pp[j], d = (a[2] + b[2]) / 2, deep = KIND[i] === 3;
+      g.strokeStyle = `rgba(201,102,92,${(deep ? 0.03 : 0.05) + (deep ? 0.05 : 0.16) * (d + 1) / 2})`; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
+    g.globalCompositeOperation = 'lighter';
+    for (const sp of sparks) { const [i, j] = E[sp.e], a = pp[i], b = pp[j], k = 1 - (t - sp.t) / 0.7;
+      g.strokeStyle = `rgba(232,140,125,${0.6 * k})`; g.lineWidth = 1.5; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+      g.fillStyle = `rgba(250,205,192,${0.55 * k})`; g.beginPath(); g.arc((a[0]+b[0])/2, (a[1]+b[1])/2, 1.8, 0, 7); g.fill(); }
+    g.globalCompositeOperation = 'source-over';
+    // neurons
+    for (let i = 0; i < pp.length; i++) { const q = pp[i], depth = (q[2] + 1) / 2, k = KIND[i];
+      g.fillStyle = k === 3 ? `rgba(201,102,92,${0.08 + 0.12 * depth})` : k === 1 ? `rgba(226,180,170,${0.15 + 0.45 * depth})` : `rgba(239,235,228,${0.1 + 0.5 * depth})`;
+      g.beginPath(); g.arc(q[0], q[1], (k === 3 ? 1 : 1.25) * q[3], 0, 7); g.fill(); }
+    // dust drifting around the brain
+    for (const d of dust) { d.a += d.s * dt; const q = proj([Math.cos(d.a) * d.r, d.y, Math.sin(d.a) * d.r]);
+      g.fillStyle = `rgba(201,102,92,${0.1 + 0.25 * (q[2] + 1) / 2})`; g.beginPath(); g.arc(q[0], q[1], 1.6 * q[3], 0, 7); g.fill(); }
     const c = proj([0, 0, 0]);
     // threads to each agent, and pulses travelling to the centre
     const nodes = A.filter(a => a.id !== 'jarvis').map(a => ({a, p: proj(POS[a.id] || [0, 0, 1])}));

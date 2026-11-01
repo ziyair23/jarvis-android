@@ -81,6 +81,12 @@ class Actions(private val context: Context) {
         put(tool("spending", "How much Jarvis has cost on his Claude account this month, against his budget.", props(), listOf()))
         put(tool("set_budget", "Set his monthly Claude budget in dollars (he gets a warning near it).", props("dollars" to num("Monthly budget")), listOf("dollars")))
         put(tool("briefing", "His morning briefing: weather and roads, next shift, calendar, the baby overnight, money and the Macan goal, lists, reminders. Use for 'brief me', 'morning briefing', 'what's my day look like', 'what's the plan today'. Only when he asks.", props(), listOf()))
+        put(tool("pursuit_add", "Pursuit (his clothing brand): save an idea (kind idea, tag design/drop/post/collab), a shot for the shoot list (kind shot), a launch to-do (kind task, who = him or his partner) or an order (kind order). Never sends anything.",
+            props("kind" to JSONObject().put("type", "string").put("enum", JSONArray(listOf("idea", "shot", "task", "order"))), "text" to str("The thing itself, in his words"),
+                "tag" to str("design, drop, post, collab, or a product like hoodie"), "who" to str("For tasks: who's doing it")), listOf("kind", "text")))
+        put(tool("pursuit_list", "Pursuit: read back open ideas, shots, launch to-dos or orders, optionally matching words (e.g. hoodie).",
+            props("kind" to JSONObject().put("type", "string").put("enum", JSONArray(listOf("idea", "shot", "task", "order"))), "query" to str("Words to match, optional")), listOf()))
+        put(tool("pursuit_done", "Pursuit: tick off a to-do, shot or order (or retire an idea) by a few words of it.", props("text" to str("Words from the item")), listOf("text")))
         put(tool("status_report", "Status report: battery, weather and roads, earnings today, the baby, next shift, next reminder. Use for 'status report', 'how are we looking', 'catch me up'.", props(), listOf()))
         put(tool("run_protocol", "Run one of his named protocols: 'dash' (heading out to DoorDash: driving mode, opens Dasher, starts music, weather), 'baby' (night feed: quiet phone, dim warm lights, low volume, baby status), 'home' (done for the night: driving off, lights on, earnings and baby recap), 'goodnight' (lights off, phone quiet until before his next shift with starred contacts still ringing, next shift time).",
             props("name" to str("dash, baby, home or goodnight")), listOf("name")))
@@ -245,6 +251,9 @@ class Actions(private val context: Context) {
             "set_budget" -> Spend.setBudget(context, input.getDouble("dollars"))
             "status_report" -> Status.report(context)
             "briefing" -> Briefing.build(context)
+            "pursuit_add" -> Pursuit.add(context, input.optString("kind", "idea"), input.getString("text"), input.optString("tag").ifBlank { null }, input.optString("who").ifBlank { null })
+            "pursuit_list" -> Pursuit.list(context, input.optString("kind").ifBlank { null }, input.optString("query").ifBlank { null })
+            "pursuit_done" -> Pursuit.done(context, input.getString("text"))
             "run_protocol" -> Protocols.run(context, input.getString("name"))
             "lights" -> Lights.set(context, input.optString("which", "all"), if (input.has("on")) input.optBoolean("on") else null,
                 if (input.has("brightness")) input.optInt("brightness") else null, input.optString("color").ifBlank { null })
