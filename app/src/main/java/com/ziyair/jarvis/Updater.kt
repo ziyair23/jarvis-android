@@ -97,6 +97,9 @@ object Updater {
 
     fun done() { installing = false }
 
+    /** Install a specific app file (the Builder's test versions). Blocking; background thread. */
+    fun installFrom(context: Context, apkUrl: String): Boolean = install(context, Release(0, apkUrl, ""))
+
     fun notifyReady(context: Context, r: Release) {
         val nm = context.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel("updates") == null)

@@ -164,21 +164,40 @@ section.on{display:block}
   <div class="card"><div class="label">Days</div><ul class="list" id="m-days"></ul></div>
 </section>
 
-<section id="s-mem">
-  <div class="card">
-    <div class="label">Teach Jarvis something</div>
-    <div class="grid2"><input id="mem-in" placeholder="e.g. Ziyair takes 3 oz"><button class="primary" onclick="addMem()">Remember</button></div>
+<section id="s-brain">
+  <div style="position:relative;margin:0 -18px">
+    <canvas id="brain" width="800" height="680" style="width:100%;height:auto;display:block;touch-action:none"></canvas>
+    <div id="brain-hint" class="faint" style="position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:11px;letter-spacing:.12em;text-transform:uppercase">Drag to turn · tap an agent</div>
   </div>
-  <div class="card"><div class="label">What Jarvis remembers</div><ul class="list" id="mem-list"></ul></div>
+  <div class="card" id="ag-card">
+    <div class="row" style="align-items:flex-start"><div style="flex:1"><div class="label" id="ag-state">Agent</div><div class="mid" id="ag-name">Jarvis</div></div>
+      <button id="ag-toggle" style="min-width:76px;display:none" onclick="agToggle()">On</button></div>
+    <p class="dim" id="ag-blurb" style="margin:8px 0 4px"></p>
+    <p class="faint" id="ag-needs" style="margin:0 0 4px;color:var(--accent-soft)"></p>
+    <div class="label" style="margin-top:14px">Skills</div>
+    <div id="ag-skills" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    <div class="label" style="margin-top:18px">Recent jobs</div>
+    <ul class="list" id="ag-runs"></ul>
+    <div class="label" style="margin-top:18px" id="ag-notes-l">What it's learned</div>
+    <ul class="list" id="ag-notes"></ul>
+    <div class="grid2" style="margin-top:10px"><input id="ag-in" placeholder="Teach it something"><button class="primary" onclick="agTeach()">Teach</button></div>
+  </div>
+  <div id="jarvis-mem" style="display:none">
+    <div class="card">
+      <div class="label">Teach Jarvis something</div>
+      <div class="grid2"><input id="mem-in" placeholder="Ziyair takes 3 oz"><button class="primary" onclick="addMem()">Remember</button></div>
+    </div>
+    <div class="card"><div class="label">What Jarvis remembers</div><ul class="list" id="mem-list"></ul></div>
+  </div>
 </section>
 
 <section id="s-chat"><div class="card" id="health"><div class="label">Health check</div><ul class="list" id="health-list"></ul></div><div class="card"><div class="label">Flight recorder</div><p class="dim" id="ears-line" style="margin:4px 0 12px">Every turn Jarvis takes, with timings, so glitches can be fixed.</p><button style="width:100%" onclick="J.shareLog()">Send log to Claude</button></div><div class="card" id="probs" style="display:none"><div class="label">Recent problems <button class="x" style="float:right;margin-top:-10px" onclick="J.clearProblems()">clear</button></div><ul class="list" id="prob-list"></ul></div><div class="card chat" id="chat"></div></section>
 
 <nav>
   <button class="on" data-s="today">Today</button>
+  <button data-s="brain">Brain</button>
   <button data-s="baby">Baby</button>
   <button data-s="money">Money</button>
-  <button data-s="mem">Memory</button>
   <button data-s="chat">Chat</button>
 </nav>
 
@@ -362,6 +381,123 @@ function orbFrame(ts){
   requestAnimationFrame(orbFrame);
 }
 requestAnimationFrame(orbFrame);
+</script>
+<script>
+// ---- Jarvis's brain: a 3D nexus. Jarvis at the centre, each agent a lobe, every job a pulse along its thread ----
+(function(){
+  const cv = document.getElementById('brain'); if (!cv) return;
+  const g = cv.getContext('2d');
+  let A = [], sel = 'jarvis', yaw = 0.6, pitch = -0.22, vy = 0.12, vp = 0, drag = null, lastT = 0, pulses = [], lastActive = {};
+  const POS = {phone:[0,0.22,1.02], money:[0.64,0.6,-0.1], family:[-0.92,-0.18,0.25], builder:[-0.1,0.62,-0.9]};
+  // a seeded point cloud shaped like a brain: two hemispheres with folds
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const P = [];
+  for (let i = 0; i < 620; i++) {
+    const side = i % 2 ? 1 : -1, u = rnd() * Math.PI * 2, v = Math.acos(2 * rnd() - 1);
+    let x = Math.sin(v) * Math.cos(u), y = Math.cos(v), z = Math.sin(v) * Math.sin(u);
+    const fold = 1 + 0.07 * Math.sin(u * 6 + v * 5) * Math.sin(v * 7);
+    x = Math.abs(x) * 0.52 * fold * side + side * 0.06; y = y * 0.72 * fold; z = z * 1.0 * fold;
+    if (y < -0.45) y = -0.45 + (y + 0.45) * 0.3;
+    P.push([x, y, z]);
+  }
+  const E = [];
+  for (let i = 0; i < P.length; i++) {
+    const d = P.map((q, j) => [j, (q[0]-P[i][0])**2 + (q[1]-P[i][1])**2 + (q[2]-P[i][2])**2]).sort((a, b) => a[1] - b[1]);
+    for (let k = 1; k <= 2; k++) if (d[k][1] < 0.06 && i < d[k][0]) E.push([i, d[k][0]]);
+  }
+  function proj(p) {
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    let x = p[0] * cy + p[2] * sy, z = -p[0] * sy + p[2] * cy;
+    let y = p[1] * cp - z * sp; z = p[1] * sp + z * cp;
+    const f = 3.2 / (3.2 - z), S = cv.width * 0.4;
+    return [cv.width / 2 + x * S * f, cv.height / 2 - y * S * f, z, f];
+  }
+  const visible = () => document.getElementById('s-brain').classList.contains('on');
+  function refresh() { if (A.length && !visible()) return; try { A = JSON.parse(J.agents()); } catch (e) { A = []; }
+    A.forEach(a => { if (a.active && !lastActive[a.id]) for (let i = 0; i < 3; i++) pulses.push({id: a.id, t: performance.now() / 1000 + i * 0.25}); lastActive[a.id] = a.active; });
+    if (document.getElementById('s-brain').classList.contains('on')) panel(); }
+  refresh(); setInterval(refresh, 1000);
+  setInterval(() => { const on = A.filter(a => a.on && a.id !== 'jarvis'); if (on.length) pulses.push({id: on[Math.floor(Math.random() * on.length)].id, t: performance.now() / 1000, soft: true}); }, 2600);
+
+  function frame(ts) {
+    if (!visible()) { requestAnimationFrame(frame); lastT = ts / 1000; return; }
+    const t = ts / 1000, dt = Math.min(0.1, t - lastT); lastT = t;
+    if (!drag) { yaw += vy * dt; vy += (0.12 - vy) * 0.02; pitch += vp * dt; vp *= 0.92; pitch += (-0.22 - pitch) * 0.01; }
+    const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
+    const pp = P.map(proj);
+    g.lineWidth = 1;
+    for (const [i, j] of E) { const a = pp[i], b = pp[j], d = (a[2] + b[2]) / 2; g.strokeStyle = `rgba(201,102,92,${0.05 + 0.13 * (d + 1) / 2})`; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
+    for (const q of pp) { g.fillStyle = `rgba(239,235,228,${0.12 + 0.35 * (q[2] + 1) / 2})`; g.beginPath(); g.arc(q[0], q[1], 1.3 * q[3], 0, 7); g.fill(); }
+    const c = proj([0, 0, 0]);
+    // threads to each agent, and pulses travelling to the centre
+    const nodes = A.filter(a => a.id !== 'jarvis').map(a => ({a, p: proj(POS[a.id] || [0, 0, 1])}));
+    for (const n of nodes) {
+      const mx = (n.p[0] + c[0]) / 2, my = (n.p[1] + c[1]) / 2 - 30;
+      g.strokeStyle = n.a.on ? (n.a.active ? 'rgba(236,170,160,.9)' : 'rgba(201,102,92,.45)') : 'rgba(125,120,114,.25)';
+      g.lineWidth = n.a.active ? 2.4 : 1.4; g.beginPath(); g.moveTo(n.p[0], n.p[1]); g.quadraticCurveTo(mx, my, c[0], c[1]); g.stroke();
+    }
+    pulses = pulses.filter(pu => t - pu.t < 1.4);
+    for (const pu of pulses) { const n = nodes.find(x => x.a.id === pu.id); if (!n || t < pu.t) continue; const k = (t - pu.t) / 1.4;
+      const mx = (n.p[0] + c[0]) / 2, my = (n.p[1] + c[1]) / 2 - 30, x = (1-k)*(1-k)*n.p[0] + 2*(1-k)*k*mx + k*k*c[0], y = (1-k)*(1-k)*n.p[1] + 2*(1-k)*k*my + k*k*c[1];
+      g.fillStyle = pu.soft ? 'rgba(236,170,160,.45)' : 'rgba(255,230,222,.95)'; g.beginPath(); g.arc(x, y, pu.soft ? 3 : 5, 0, 7); g.fill(); }
+    // Jarvis: the halo at the centre
+    const br = 0.5 + 0.5 * Math.sin(t * 1.2), R = 34 * c[3];
+    let gr = g.createRadialGradient(c[0], c[1], 0, c[0], c[1], R * 2.4); gr.addColorStop(0.35, 'rgba(176,82,74,0)'); gr.addColorStop(0.5, `rgba(176,82,74,${0.25 + 0.2 * br})`); gr.addColorStop(1, 'rgba(176,82,74,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(c[0], c[1], R * 2.4, 0, 7); g.fill();
+    g.fillStyle = '#151517'; g.beginPath(); g.arc(c[0], c[1], R, 0, 7); g.fill();
+    g.strokeStyle = sel === 'jarvis' ? 'rgba(236,170,160,1)' : 'rgba(201,102,92,.9)'; g.lineWidth = 2.5; g.beginPath(); g.arc(c[0], c[1], R, 0, 7); g.stroke();
+    // the agents
+    nodes.sort((x, y) => x.p[2] - y.p[2]).forEach(n => {
+      const r = (n.a.id === sel ? 15 : 11) * n.p[3], on = n.a.on;
+      gr = g.createRadialGradient(n.p[0], n.p[1], 0, n.p[0], n.p[1], r * 3); gr.addColorStop(0, on ? `rgba(201,102,92,${n.a.active ? 0.6 : 0.3})` : 'rgba(125,120,114,.15)'); gr.addColorStop(1, 'rgba(201,102,92,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(n.p[0], n.p[1], r * 3, 0, 7); g.fill();
+      g.fillStyle = on ? (n.a.active ? '#f0c3ba' : '#c9665c') : '#4a4744'; g.beginPath(); g.arc(n.p[0], n.p[1], r, 0, 7); g.fill();
+      if (n.a.id === sel) { g.strokeStyle = '#efebe4'; g.lineWidth = 2; g.beginPath(); g.arc(n.p[0], n.p[1], r + 6, 0, 7); g.stroke(); }
+      // names on the far side fade back so they never sit on top of the front ones
+      const front = Math.max(0, Math.min(1, (n.p[2] + 0.6) / 1.2));
+      g.globalAlpha = n.a.id === sel ? 1 : 0.25 + 0.75 * front;
+      g.fillStyle = on ? '#efebe4' : '#7d7872'; g.font = `500 ${Math.round((16 + 7 * front) * Math.min(1.15, n.p[3]))}px Inter, system-ui, sans-serif`; g.textAlign = 'center';
+      g.fillText(n.a.name, n.p[0], n.p[1] - r - 12);
+      g.globalAlpha = 1;
+    });
+    g.fillStyle = '#efebe4'; g.font = '300 26px Fraunces, Georgia, serif'; g.textAlign = 'center'; g.fillText('Jarvis', c[0], c[1] + R + 34);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  const pt = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) * cv.width / b.width, (e.clientY - b.top) * cv.height / b.height]; };
+  cv.addEventListener('pointerdown', e => { drag = {x: e.clientX, y: e.clientY, moved: 0, at: pt(e)}; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved += Math.abs(dx) + Math.abs(dy);
+    yaw += dx * 0.01; pitch = Math.max(-1.1, Math.min(1.1, pitch + dy * 0.01)); vy = dx * 0.6; vp = dy * 0.6; drag.x = e.clientX; drag.y = e.clientY; });
+  cv.addEventListener('pointerup', e => { const d = drag; drag = null; if (!d || d.moved > 8) return;
+    const [x, y] = d.at; let best = 'jarvis', bd = 1e9; const c = proj([0, 0, 0]); bd = Math.hypot(x - c[0], y - c[1]) - 40;
+    A.forEach(a => { if (a.id === 'jarvis') return; const p = proj(POS[a.id] || [0, 0, 1]); const dd = Math.hypot(x - p[0], y - p[1]) - 30; if (dd < bd) { bd = dd; best = a.id; } });
+    if (bd < 40) { sel = best; panel(); } });
+
+  const nice = s => s.replace(/_/g, ' ');
+  const tm = ms => new Date(ms).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
+  function panel() {
+    const a = A.find(x => x.id === sel) || A[0]; if (!a) return;
+    const E2 = s => String(s ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+    document.getElementById('ag-name').textContent = a.name;
+    document.getElementById('ag-state').textContent = a.id === 'jarvis' ? 'The centre' : (a.active ? 'Working now' : a.on ? `Agent · ${a.count} job${a.count === 1 ? '' : 's'}` : 'Agent · switched off');
+    document.getElementById('ag-blurb').textContent = a.blurb;
+    document.getElementById('ag-needs').textContent = a.needs || '';
+    const tg = document.getElementById('ag-toggle'); tg.style.display = a.id === 'jarvis' ? 'none' : 'block'; tg.textContent = a.on ? 'On' : 'Off';
+    tg.className = a.on ? 'primary' : '';
+    document.getElementById('ag-skills').innerHTML = a.skills.map(k => `<span class="chip">${E2(nice(k))}</span>`).join('');
+    const runs = []; for (let i = 0; i < a.runs.length; i++) runs.push(a.runs[i]); runs.reverse();
+    document.getElementById('ag-runs').innerHTML = a.id === 'jarvis' ? '<li class="empty">Jarvis talks; the agents do the jobs.</li>' : runs.length ? runs.slice(0, 6).map(r => `<li style="display:block"><div class="faint">${tm(r.at)} · ${(r.ms / 1000).toFixed(1)}s</div><div>${E2(r.task)}</div><div class="dim" style="font-size:13px">${E2(r.result)}</div></li>`).join('') : '<li class="empty">No jobs yet.</li>';
+    const notes = []; for (let i = 0; i < a.notes.length; i++) notes.push(a.notes[i]);
+    document.getElementById('ag-notes-l').style.display = a.id === 'jarvis' ? 'none' : 'block';
+    document.getElementById('ag-notes').innerHTML = a.id === 'jarvis' ? '' : notes.length ? notes.slice().reverse().map(n => `<li><span>${E2(n.t)}</span><button class="x" aria-label="Forget" onclick="J.agentForget('${a.id}','${n.at}')">×</button></li>`).join('') : '<li class="empty">Nothing yet. It learns as it works.</li>';
+    document.getElementById('ag-in').parentElement.style.display = a.id === 'jarvis' ? 'none' : 'grid';
+    document.getElementById('jarvis-mem').style.display = a.id === 'jarvis' ? 'block' : 'none';
+  }
+  window.agToggle = () => { const a = A.find(x => x.id === sel); if (a) { J.agentToggle(sel, !a.on); setTimeout(refresh, 100); } };
+  window.agTeach = () => { const v = document.getElementById('ag-in').value.trim(); if (!v) return; J.agentTeach(sel, v); document.getElementById('ag-in').value = ''; setTimeout(refresh, 100); };
+  document.querySelector('nav button[data-s=brain]').addEventListener('click', () => setTimeout(panel, 30));
+})();
 </script>
 </body>
 </html>

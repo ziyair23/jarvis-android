@@ -98,6 +98,7 @@ class Actions(private val context: Context) {
     }
 
     fun run(name: String, input: JSONObject): String { return try {
+        if (name.startsWith("agent_")) return Agents.run(context, name.removePrefix("agent_"), input.optString("task"), input.optBoolean("confirmed"))
         when (name) {
             "set_timer" -> {
                 val mins = input.optDouble("minutes", 0.0)

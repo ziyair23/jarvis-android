@@ -34,6 +34,7 @@ object Health {
             Item("listener", "Read notifications", listener, "Needed to announce callers and read messages, and to control music."),
             Item("dnd", "Do Not Disturb access", nm.isNotificationPolicyAccessGranted, "Needed for quiet mode and goodnight."),
             Item("live", "Live talking key", p.geminiKey.isNotBlank(), "Free Gemini key from aistudio.google.com, pasted in Jarvis setup: makes talking feel like a real call."),
+            Item("github", "Builder can write code (optional)", Builder.codeAllowed(c), "Optional GitHub token in setup, so the Builder agent can make and test new versions of Jarvis. Small changes work without it."),
             Item("ears", "Phone ears downloaded", Ear.ready(c), "One-time 104 MB download on Wi-Fi; Google listening covers until then."),
             Item("voice", "Voice downloaded", Piper.pickReady(c), "His chosen voice downloads on Wi-Fi."),
         )
@@ -44,7 +45,7 @@ object Health {
     }
 
     fun summary(c: Context): String {
-        val bad = items(c).filter { !it.ok }
+        val bad = items(c).filter { !it.ok && it.key != "github" }
         return if (bad.isEmpty()) "all good" else "NOT SET: " + bad.joinToString(", ") { it.name }
     }
 

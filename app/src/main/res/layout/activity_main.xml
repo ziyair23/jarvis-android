@@ -79,6 +79,9 @@
             <TextView style="@style/Hint" android:text="Gemini key for live talking (free, from aistudio.google.com)" />
             <EditText android:id="@+id/geminiKey" style="@style/Field" android:inputType="textPassword" android:hint="Starts with AIza" />
 
+            <TextView style="@style/Hint" android:text="GitHub token for the Builder agent (optional, lets Jarvis build new versions of himself)" />
+            <EditText android:id="@+id/githubToken" style="@style/Field" android:inputType="textPassword" android:hint="github_pat_..." />
+
             <EditText android:id="@+id/picoKey" style="@style/Field" android:inputType="textPassword" android:visibility="gone" />
 
             <TextView style="@style/Hint" android:text="Google voice key (optional, for the realistic voice)" />

@@ -33,8 +33,9 @@ class DashActivity : Activity() {
         web.loadUrl("file:///android_asset/dash.html")
     }
 
-    override fun onResume() { super.onResume(); Orb.inApp = true; if (::web.isInitialized) { LogBus.listen(refresh); refresh() } }
-    override fun onPause() { Orb.inApp = false; LogBus.unlisten(refresh); super.onPause() }
+    override fun onResume() { super.onResume(); Orb.inApp = true; if (::web.isInitialized) { web.onResume(); web.resumeTimers(); LogBus.listen(refresh); refresh() } }
+    // the page's timers and animation stop while the app isn't on screen (battery)
+    override fun onPause() { Orb.inApp = false; LogBus.unlisten(refresh); if (::web.isInitialized) { web.onPause(); web.pauseTimers() }; super.onPause() }
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() { if (::web.isInitialized && web.canGoBack()) web.goBack() else super.onBackPressed() }
@@ -94,6 +95,10 @@ class DashActivity : Activity() {
         /** "state,level" for the big orb on the dashboard (0 idle, 1 listening, 2 thinking, 3 speaking). */
         @JavascriptInterface fun orb(): String = Orb.now().let { "${it.first},${it.second}" }
         @JavascriptInterface fun hush() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_HUSH)) }
+        @JavascriptInterface fun agents(): String = Agents.json(ctx).toString()
+        @JavascriptInterface fun agentToggle(id: String, on: Boolean) { Agents.setEnabled(ctx, id, on); LogBus.changed() }
+        @JavascriptInterface fun agentTeach(id: String, text: String) { if (id == "jarvis") Memory.add(ctx, text) else Agents.addNote(ctx, id, text); LogBus.changed() }
+        @JavascriptInterface fun agentForget(id: String, at: String) { Agents.removeNote(ctx, id, at.toLongOrNull() ?: 0L); LogBus.changed() }
         @JavascriptInterface fun fix(key: String) = runOnUiThread { Health.fix(ctx, key) }
         @JavascriptInterface fun shareLog() = runOnUiThread { Trace.share(ctx) }
         @JavascriptInterface fun quietStart() { Stealth.start(ctx, null); LogBus.changed() }
