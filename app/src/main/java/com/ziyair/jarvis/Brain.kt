@@ -219,7 +219,7 @@ class Brain(private val context: Context) {
         private fun abbrev(b: StringBuilder, dot: Int): Boolean {
             val start = maxOf(0, dot - 4)
             val w = b.substring(start, dot + 1).lowercase()
-            return Regex("(mr|mrs|ms|dr|st|vs|jr|sr|no|e\\.g|i\\.e)\\.$").containsMatchIn(w)
+            return Regex("(mr|mrs|ms|dr|st|vs|jr|sr|e\\.g|i\\.e)\\.$").containsMatchIn(w)
         }
 
         fun flush() { if (out != null && !ignored && buf.isNotBlank()) emit(buf.toString()); buf.setLength(0) }

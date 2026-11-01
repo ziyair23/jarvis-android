@@ -11,7 +11,6 @@ import android.content.pm.ServiceInfo
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -39,7 +38,6 @@ class JarvisService : Service() {
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
-    private var tone: ToneGenerator? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var busy = false
     private var followUps = 0
@@ -56,7 +54,6 @@ class JarvisService : Service() {
         brain = Brain(this)
         musicFocus = { on: Boolean -> val l = java.util.concurrent.CountDownLatch(1); main.post { holdFocus(on); l.countDown() }; l.await(500, java.util.concurrent.TimeUnit.MILLISECONDS) }
         restoreSound()
-        tone = try { ToneGenerator(AudioManager.STREAM_MUSIC, 60) } catch (_: Exception) { null }
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 ttsReady = true
@@ -410,12 +407,10 @@ class JarvisService : Service() {
     private var inConvo = false
     private var ignoredInRow = 0
     private var speechTok = 0
-    private var barge: BargeIn? = null
 
     /** Stop whatever Jarvis is saying right now. */
     private fun hush() {
         speechTok++
-        barge?.stop(); barge = null
         stream?.cancel(); stream = null
         try { track?.stop() } catch (_: Exception) {}
         try { player?.stop() } catch (_: Exception) {}
@@ -423,22 +418,8 @@ class JarvisService : Service() {
         acking = false
     }
 
-    /** While he talks: if Marcus starts speaking over him, Jarvis stops and listens. */
-    private fun listenForInterruptions() {
-        if (!inConvo || !brain.config().optBoolean("barge_in", true) || Stealth.on(prefs)) return
-        barge?.stop()
-        barge = BargeIn(this, main) {
-            if (!busy) return@BargeIn
-            hush()
-            thinking = false
-            openWindow(convoSeconds())
-            listen(firstTurn = false)
-        }.also { it.start() }
-    }
-
     /** Next turn of the conversation, or back to waiting for "Hey Jarvis". */
     private fun nextTurn(keepGoing: Boolean) {
-        barge?.stop(); barge = null
         thinking = false
         if (keepGoing && prefs.running) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
         else finishTurn()
@@ -747,7 +728,6 @@ class JarvisService : Service() {
         speaking = false
         thinking = false
         inConvo = false
-        barge?.stop(); barge = null
         if (pending.isNotEmpty() && prefs.running) {
             val (line, listenAfter) = pending.removeAt(0)
             busy = false
@@ -769,7 +749,6 @@ class JarvisService : Service() {
     private var acking = false
     private var stream: SpeechStream? = null
     private var casting = false
-    private val ACKS = listOf("On it, sir.", "Right away, sir.", "One moment, sir.", "On it.")
     /** A soft pulse while he's working on a longer answer, instead of dead air. Stops the moment he speaks. */
     private fun thinkingSound(turn: Int) {
         if (!brain.config().optBoolean("thinking_sound", false) || Stealth.on(prefs)) return
@@ -906,11 +885,6 @@ class JarvisService : Service() {
         } catch (_: Exception) { t.language = Locale.UK }
     }
 
-    private fun pick(key: String, fallback: String): String {
-        val arr = brain.config().optJSONArray(key) ?: return fallback
-        return if (arr.length() == 0) fallback else arr.optString((0 until arr.length()).random(), fallback)
-    }
-
     private fun note(msg: String) {
         prefs.addTurn("assistant", msg)
         LogBus.changed()
@@ -961,7 +935,6 @@ class JarvisService : Service() {
         recognizer?.destroy()
         tts?.shutdown()
         player?.release()
-        tone?.release()
         release()
         super.onDestroy()
     }

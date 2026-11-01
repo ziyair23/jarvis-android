@@ -54,7 +54,7 @@ object Updater {
     /** Runs on a background thread. Checks at most once an hour unless forced. */
     fun check(context: Context, force: Boolean = false, busy: Boolean = false): Release? {
         val prefs = Prefs(context)
-        if (!force && System.currentTimeMillis() - prefs.lastUpdateCheck < 3600_000L) return null
+        if (!force && System.currentTimeMillis() - prefs.lastUpdateCheck < 10 * 60_000L) return null
         prefs.lastUpdateCheck = System.currentTimeMillis()
         val r = latest() ?: return null
         if (r.build <= BuildConfig.VERSION_CODE || r.apkUrl.isBlank()) return null
