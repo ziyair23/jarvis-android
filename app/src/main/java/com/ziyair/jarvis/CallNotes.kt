@@ -75,8 +75,14 @@ object CallNotes {
         if (k.isEmpty()) return null
         val names = known(b)
         return names.firstOrNull { key(it) == k } ?: names.firstOrNull { key(it).split(" ").first() == k }
-            ?: names.firstOrNull { sound(key(it)) == sound(k) } ?: names.firstOrNull { sound(key(it).split(" ").first()) == sound(k) }
+            ?: names.firstOrNull { soundOK(k, key(it)) && sound(key(it)) == sound(k) }
+            ?: names.firstOrNull { soundOK(k, key(it).split(" ").first()) && sound(key(it).split(" ").first()) == sound(k) }
     }
+
+    /** Everyday words that can sound like a short name ("me" ~ Mom, "the" ~ Tia) never count as a sound-alike. */
+    private val NOT_NAMES = setOf("me", "my", "myself", "the", "a", "an", "it", "this", "that", "him", "her", "them", "us", "you",
+        "today", "tomorrow", "tonight", "later")
+    private fun soundOK(spoken: String, name: String) = spoken.split(" ").first() !in NOT_NAMES && sound(name).replace(" ", "").length >= 2
 
     /** A rough sound-alike key, so a misheard "Abby" still finds "Abbey" and "Jess" finds "Jesse": first letter, then consonants, no doubles. */
     fun sound(name: String): String = name.split(" ").filter { it.isNotEmpty() }.joinToString(" ") { w ->
@@ -93,10 +99,10 @@ object CallNotes {
         val words = r.split(" ")
         val hit = cands.firstOrNull { r == it.first || r.startsWith(it.first + " ") }
             // misheard name: compare by sound, same number of words
-            ?: cands.firstOrNull { c -> val n = c.first.split(" ").size; words.size >= n && sound(words.take(n).joinToString(" ")) == sound(c.first) }
+            ?: cands.firstOrNull { c -> val n = c.first.split(" ").size; words.size >= n && soundOK(words.take(n).joinToString(" "), c.first) && sound(words.take(n).joinToString(" ")) == sound(c.first) }
         // only people Jarvis knows (callers or earlier notes); anything else goes to Claude as usual
             ?: return null
-        val after = rest.trim().split(Regex("\\s+")).drop(hit.first.split(" ").size).joinToString(" ")
+        val after = rest.trim().split(Regex("\\s+")).drop(hit.first.split(" ").size).joinToString(" ").trimStart(',', ':', ';', '-', ' ')
         return hit.second to after.replace(Regex("^(that|saying|says)\\s+", RegexOption.IGNORE_CASE), "").trim()
     }
 
@@ -104,13 +110,31 @@ object CallNotes {
 
     private val P = "(?:my |the |all |all my |all the )?(?:call )?notes? (?:on|for|about) (.+)"
 
-    /** What he said (already lower-cased, punctuation stripped) as a call-note command, or null. */
-    fun parse(t: String): Cmd? {
-        Regex("^(?:what are|what're|read|read me|any|tell me|what's in|do i have any|have i got any|got any) $P$").find(t)?.let { return Cmd.Read(it.groupValues[1].trim()) }
-        Regex("^what did i note (?:on|for|about) (.+)$").find(t)?.let { return Cmd.Read(it.groupValues[1].trim()) }
-        Regex("^(?:delete|clear|forget|remove|wipe) $P$").find(t)?.let { return Cmd.Clear(it.groupValues[1].trim()) }
-        Regex("^(?:note|add a note|make a note|save a note|call note) (?:for|about|on) (.+)$").find(t)?.let { return Cmd.AddFor(it.groupValues[1].trim()) }
-        Regex("^(?:note that|make a note that|add a note that|call note|note down that) (.+)$").find(t)?.let { return Cmd.Add(it.groupValues[1].trim()) }
+    private val LEAD = Regex("^\\s*((hey|ok|okay|yo)\\s+)?(jarvis\\s+)?((can you|could you|would you|will you|please|go ahead and|just)\\s+)*")
+    private val TAIL = Regex("[\\s,.!?]+(sir|jarvis|please)?[\\s,.!?]*$", RegexOption.IGNORE_CASE)
+    private fun rx(p: String) = Regex("^" + p.replace(" ", "\\s+") + "$")
+    private val READ = listOf(rx("(?:what are|what're|read|read me|any|tell me|what's in|do i have any|have i got any|got any) $P"),
+        rx("what did i note (?:on|for|about) (.+)"))
+    private val CLEAR = rx("(?:delete|clear|forget|remove|wipe) $P")
+    private val ADD_FOR = rx("(?:note|add a note|make a note|save a note|call note) (?:for|about|on) (.+)")
+    private val ADD = rx("(?:note that|make a note that|add a note that|call note|note down that) (.+)")
+
+    /**
+     * What he said as a call-note command, or null. Matching ignores case and punctuation, but the note itself
+     * is taken from his own words, so "$20" and capitals survive.
+     */
+    fun parse(said: String): Cmd? {
+        val low = said.lowercase(Locale.US)
+        // same length as what he said, so a match can be cut straight out of his words
+        val src = if (low.length == said.length) said else low
+        val m = low.replace(Regex("[^a-z0-9'\\s]"), " ")
+        val off = LEAD.find(m)?.range?.let { it.last + 1 } ?: 0
+        val ms = m.substring(off); val ss = src.substring(off)
+        fun body(r: MatchResult) = r.groups[1]!!.range.let { ss.substring(it.first, it.last + 1) }.replace(TAIL, "").trim()
+        READ.forEach { re -> re.find(ms)?.let { return Cmd.Read(body(it)) } }
+        CLEAR.find(ms)?.let { return Cmd.Clear(body(it)) }
+        ADD_FOR.find(ms)?.let { return Cmd.AddFor(body(it)) }
+        ADD.find(ms)?.let { r -> val b = body(r); return if (b.isEmpty()) null else Cmd.Add(b) }
         return null
     }
 
@@ -155,7 +179,7 @@ object CallNotes {
             val who = findWho(b, cmd.name)
             val list = who?.let { notesFor(b, it) }.orEmpty()
             if (who == null || list.isEmpty()) "No notes on ${who ?: titled(cmd.name)}, sir."
-            else "$who, sir: " + list.take(3).joinToString(" ") { spoken(it.text) + "." }
+            else markPrivate("$who, sir: " + list.take(3).joinToString(" ") { spoken(it.text) + "." })
         }
         is Cmd.Clear -> {
             val who = findWho(b, cmd.name)
@@ -190,6 +214,17 @@ object CallNotes {
     fun ringLine(base: String, note: String): String {
         if (note.isEmpty()) return base
         val q = " Answer it?"
-        return if (base.endsWith(q)) base.removeSuffix(q) + note + q else base + note
+        return markPrivate(if (base.endsWith(q)) base.removeSuffix(q) + note + q else base + note)
     }
+
+    // ---------- privacy ----------
+    // Lines that carry a note are spoken on the phone only (Piper or the phone voice), never sent to a cloud voice.
+    private val priv = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+
+    fun markPrivate(s: String): String {
+        synchronized(priv) { priv.add(s); while (priv.size > 20) priv.remove(priv.first()) }
+        return s
+    }
+
+    fun isPrivate(s: String) = priv.contains(s)
 }

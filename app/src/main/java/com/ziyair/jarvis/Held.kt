@@ -18,6 +18,12 @@ object Held {
     /** Called whenever something is held (the service uses it to wait for a real comeback). */
     @Volatile var onHold: (() -> Unit)? = null
 
+    /** What Brain.ask returns for a held request Claude decided wasn't meant for Jarvis: skipped at catch-up, no reminder. */
+    const val IGNORED = "\u0000ignored"
+
+    /** Offline, a one- or two-word follow-up fragment ("yeah", "here you go") is chatter: ignored, not held. */
+    fun chatter(text: String, followUp: Boolean) = followUp && text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.size < 3
+
     const val HELD_LINE = "No signal, sir. I'll come back to that when it's back."
 
     /** Hold a request. Duplicates are dropped and only the newest three are kept. Returns the spoken line. */

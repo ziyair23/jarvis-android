@@ -150,6 +150,7 @@ class JarvisService : Service() {
             val answered = mutableListOf<String>(); val missed = mutableListOf<Held.Item>()
             for (it in due) {
                 val r = brain.ask(Held.prompt(it, System.currentTimeMillis()), followUp = true, held = it.text)
+                if (r == Held.IGNORED) continue   // Claude says it wasn't meant for Jarvis: no reminder
                 if (r.isBlank()) missed.add(it) else answered.add(r)
             }
             val line = Held.combine(answered, missed)
@@ -885,7 +886,7 @@ class JarvisService : Service() {
     /** Speak with the realistic Google voice when a key is set, otherwise the phone's own voice. */
     /** At home with a Nest Hub: say it through the speaker (blocks until done), else on the phone. */
     private fun speakHouse(text: String, then: () -> Unit) {
-        if (Cast.target(prefs) == null || !Piper.installed(this) || prefs.ttsKey.isNotBlank()) { speak(text, then); return }
+        if (Cast.target(prefs) == null || !Piper.installed(this) || prefs.ttsKey.isNotBlank() || CallNotes.isPrivate(text)) { speak(text, then); return }
         if (acking) { main.postDelayed({ speakHouse(text, then) }, 150); return }
         quiet(false)
         LockView.showIfLocked(this, text)
@@ -901,7 +902,8 @@ class JarvisService : Service() {
         if (Cast.mode(prefs) == "everything" && Cast.target(prefs) != null && !casting) { casting = true; speakHouse(text) { casting = false; then() }; return }
         quiet(false)
         LockView.showIfLocked(this, text)
-        val key = prefs.ttsKey
+        // a line carrying a call note stays on the phone (lab L17); with no working network don't wait on the cloud voice (lab L8)
+        val key = if (CallNotes.isPrivate(text) || !brain.isValidated()) "" else prefs.ttsKey
         if (key.isBlank()) {
             if (!Piper.installed(this)) { phoneSpeak(text, then); return }
             thread {

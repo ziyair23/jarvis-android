@@ -121,4 +121,22 @@ class HeldSpecTest {
         assertEquals(0, Held.pending(t0 + Held.EXPIRE_MS + 1))
         assertEquals(1, Held.count())
     }
+
+    // independent-test fixes: offline chatter isn't held, [ignore] at catch-up isn't read back
+    @Test fun offlineChatterIsNotHeld() {
+        assertTrue(Held.chatter("yeah", true))
+        assertTrue(Held.chatter(" here you ", true))
+        assertFalse(Held.chatter("what time does costco close", true))
+        assertFalse(Held.chatter("weather", false))
+    }
+
+    @Test fun ignoredMarkerIsNeverSpoken() {
+        assertTrue(Held.IGNORED.isNotBlank())
+        assertFalse(Held.IGNORED.contains(' '))
+        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "app/src/main/java/com/ziyair/jarvis/Brain.kt").exists() }
+        val brain = File(root, "app/src/main/java/com/ziyair/jarvis/Brain.kt").readText()
+        assertTrue(brain.contains("return if (held != null) Held.IGNORED else \"\""))
+        val svc = File(root, "app/src/main/java/com/ziyair/jarvis/JarvisService.kt").readText()
+        assertTrue(svc.contains("if (r == Held.IGNORED) continue"))
+    }
 }

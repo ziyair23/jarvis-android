@@ -35,9 +35,9 @@ object Reflex {
     fun handle(c: Context, text: String): Hit? {
         if (!Brain(c).config().optBoolean("reflexes", true)) return null
         val t = norm(text)
-        // call notes (lab L17): kept on the phone only, so not added to the conversation Claude sees
+        // call notes (lab L17): matched loosely, but the note is kept in his own words; kept on the phone only, so not added to the conversation Claude sees
         if (t.isNotEmpty()) {
-            val note = try { CallNotesStore.handle(c, t) } catch (e: Exception) { Problems.log(c, "call notes: ${e.message}"); null }
+            val note = try { CallNotesStore.handle(c, text) } catch (e: Exception) { Problems.log(c, "call notes: ${e.message}"); null }
             if (note != null) return Hit(note)
         }
         if (t.isEmpty() || t.split(" ").size > 9) return null

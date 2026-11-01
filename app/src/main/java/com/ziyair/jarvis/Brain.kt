@@ -102,13 +102,17 @@ class Brain(private val context: Context) {
         c.responseCode; c.disconnect(); true
     } catch (_: Exception) { false }
 
+    /** Hold a request made with no signal (lab L8); offline chatter in the follow-up window is just ignored (""). */
+    private fun hold(text: String, followUp: Boolean): String =
+        if (Held.chatter(text, followUp)) "" else Held.add(text, System.currentTimeMillis())
+
     /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. [held] = his words for a request held with no signal (lab L8); failures then return "". */
     fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, held: String? = null, onAck: (() -> Unit)? = null): String {
         val voice = Sentences(onSentence)
         val key = prefs.claudeKey
         if (key.isBlank()) return if (held != null) "" else "I need my Claude key first, sir. Open the Jarvis app and add it."
         // no-signal mode (lab L8): no network at all, so don't sit through a timeout; hold it and come back to it
-        if (held == null && !isOnline()) { Trace.log(context, "held", "no network: \"$text\""); return Held.add(text, System.currentTimeMillis()) }
+        if (held == null && !isOnline()) { Trace.log(context, "held", "no network: \"$text\""); return hold(text, followUp) }
         val cfg = config()
         val msgs = JSONArray()
         val h = prefs.history()
@@ -173,15 +177,15 @@ class Brain(private val context: Context) {
                 val dead = e is java.net.UnknownHostException || e is java.net.ConnectException || e is java.net.SocketTimeoutException
                 if (dead && !didSomething && !isValidated()) {
                     reportBad()
-                    Trace.log(context, "held", "network dead: \"$text\""); return Held.add(text, System.currentTimeMillis())
+                    Trace.log(context, "held", "network dead: \"$text\""); return hold(text, followUp)
                 }
                 // a read timeout on a "working" network: don't sit through a second 30 seconds, hold it now
                 if (e is java.net.SocketTimeoutException && retried == 0 && !didSomething && !reachable()) {
-                    reportBad(); Trace.log(context, "held", "timed out: \"$text\""); return Held.add(text, System.currentTimeMillis())
+                    reportBad(); Trace.log(context, "held", "timed out: \"$text\""); return hold(text, followUp)
                 }
                 if (retried < 1) { retried++; Thread.sleep(800); continue }
                 reportBad()
-                if (held == null && !didSomething) { Trace.log(context, "held", "network failed: \"$text\""); return Held.add(text, System.currentTimeMillis()) }
+                if (held == null && !didSomething) { Trace.log(context, "held", "network failed: \"$text\""); return hold(text, followUp) }
                 return "I can't reach the network right now, sir."
             }
             // web search not turned on for his Claude account: carry on without it
@@ -240,7 +244,7 @@ class Brain(private val context: Context) {
             val reply = sb.toString().trim().ifBlank { earlierText.ifBlank { "Done, sir." } }
                 .replace(Regex("^(correction|actually|apologies|my apologies|sorry)[,.:!]?\\s*(sir[,.]?\\s*)?", RegexOption.IGNORE_CASE), "")
                 .replaceFirstChar { it.uppercase() }
-            if (reply.contains("[ignore]", true)) return ""
+            if (reply.contains("[ignore]", true)) return if (held != null) Held.IGNORED else ""
             prefs.addTurn("user", held ?: text)   // a held request is saved in his own words, not the catch-up note
             prefs.addTurn("assistant", reply)
             return reply

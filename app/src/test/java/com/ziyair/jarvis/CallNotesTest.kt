@@ -1,6 +1,7 @@
 package com.ziyair.jarvis
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -100,5 +101,29 @@ class CallNotesTest {
         assertEquals("Noted for Jesse Ruiz, sir.", say(b, "note for jess bring the samples", t0 + 3 * min))
         assertEquals("Abbey, sir: she owes you twenty.", say(b, "do i have any notes on abby", t0 + 4 * min))
         assertNull(say(b, "note for mark he called", t0 + 5 * min))
+    }
+
+    // independent-test fixes: his own words kept, note lines kept off the cloud voice
+    @Test fun noteKeptInHisOwnWords() {
+        val b = CallNotes.Book()
+        CallNotes.called(b, "Abbey", t0)
+        assertEquals("Noted for Abbey, sir.", say(b, "Jarvis, note that she owes me $20 now, sir.", t0 + min))
+        assertEquals("she owes me $20 now", CallNotes.notesFor(b, "Abbey").single().text)
+        assertEquals("Noted for Abbey, sir.", say(b, "Please make a note for Abbey: Black hoodie, size L.", t0 + 2 * min))
+        assertEquals("Black hoodie, size L", CallNotes.notesFor(b, "Abbey").first().text)
+        assertEquals("Cleared 2 notes on Abbey, sir.", say(b, "Delete my notes on Abbey, sir.", t0 + 3 * min))
+    }
+
+    @Test fun noteLinesArePrivate() {
+        val b = CallNotes.Book()
+        CallNotes.called(b, "Abbey", t0)
+        say(b, "note that she owes me twenty", t0 + min)
+        val ring = CallNotes.ringLine("Abbey is calling, sir. Answer it?", CallNotes.ringNote(b, "Abbey"))
+        assertTrue(CallNotes.isPrivate(ring))
+        val read = say(b, "what are my notes on abbey", t0 + 2 * min)!!
+        assertTrue(CallNotes.isPrivate(read))
+        // lines without a note still use his chosen voice
+        assertFalse(CallNotes.isPrivate(CallNotes.ringLine("Jess is calling, sir.", "")))
+        assertFalse(CallNotes.isPrivate("Noted for Abbey, sir."))
     }
 }

@@ -3,7 +3,6 @@ package com.ziyair.jarvis
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 
 /** Independent tester, L17, against lab/specs/L17.md only. */
@@ -79,7 +78,6 @@ class CallNotesIndepTest {
     // Spec: a misheard name is found only "if it sounds the same". Ordinary words are not names: "make a note for me to
     // pick up diapers" must go to Claude, not be filed as a call note on Mom (or Mia, May, Mo...).
     // IGNORED so the lab branch CI still builds; FAILS today (see lab/reports/L17-2026-11-01-indep.md). Un-ignore with the fix.
-    @Ignore("L17 bug: plain words sound-match short names; un-ignore with the fix")
     @Test fun ordinaryWordsAreNotNames() {
         for ((caller, line) in listOf("Mom" to "make a note for me to pick up diapers", "Mia" to "note for me to grab gas",
             "Tia" to "make a note about the oil change", "Mo" to "note on my mileage")) {
