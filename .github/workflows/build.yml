@@ -2,7 +2,7 @@ name: Build Jarvis
 
 on:
   push:
-    branches: [main]
+    branches: [main, agents]
     paths-ignore: ["config/**", "README.md"]
   workflow_dispatch:
 
@@ -77,10 +77,15 @@ jobs:
             echo "No HOME_SDK_KEY secret: building without Google Home"
           fi
 
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          gradle :app:testReleaseUnitTest --no-daemon --stacktrace 2>&1 | tee build.log
+
       - name: Build the app
         run: |
           set -o pipefail
-          gradle :app:assembleRelease -PversionCode=${{ github.run_number }} --no-daemon --stacktrace 2>&1 | tee build.log
+          gradle :app:assembleRelease -PversionCode=${{ github.run_number }} --no-daemon --stacktrace 2>&1 | tee -a build.log
 
       - name: Save the error log where Claude can read it
         if: failure()
@@ -100,8 +105,10 @@ jobs:
       - name: Publish as a release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
-          name: Jarvis build ${{ github.run_number }}
-          body: Install this on your phone to update Jarvis. Your keys and settings stay.
+          # main = the real Jarvis; any other branch = a TEST version that never installs on its own
+          tag_name: ${{ github.ref_name == 'main' && format('v{0}', github.run_number) || format('test-{0}', github.run_number) }}
+          name: ${{ github.ref_name == 'main' && format('Jarvis build {0}', github.run_number) || format('Jarvis TEST build {0} ({1})', github.run_number, github.ref_name) }}
+          body: ${{ github.ref_name == 'main' && 'Install this on your phone to update Jarvis. Your keys and settings stay.' || 'Test version. Only installs when Marcus says yes.' }}
           files: jarvis-${{ github.run_number }}.apk
-          make_latest: true
+          prerelease: ${{ github.ref_name != 'main' }}
+          make_latest: ${{ github.ref_name == 'main' }}

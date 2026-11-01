@@ -72,6 +72,10 @@ class Prefs(context: Context) {
     var readMessages: String
         get() = sp.getString("read_messages", "driving") ?: "driving"
         set(v) = sp.edit().putString("read_messages", v).apply()
+    /** GitHub token (fine-grained, this repo only) so the Builder agent can change and test Jarvis's code. */
+    var githubToken: String
+        get() = sp.getString("github_token", "") ?: ""
+        set(v) = sp.edit().putString("github_token", v.trim()).apply()
     /** Google Gemini key (free from aistudio.google.com) for live, natural back-and-forth talking. */
     var geminiKey: String
         get() = sp.getString("gemini_key", "") ?: ""

@@ -114,7 +114,7 @@ class Live(
         val voice = cfg.optString("live_voice", "Algenib")
         val sys = Brain(context).livePrompt(cfg)
         val decls = JSONArray()
-        val claudeTools = Actions(context).tools()
+        val claudeTools = Agents.jarvisTools(context, Actions(context).tools())
         val skip = setOf("look")
         for (i in 0 until claudeTools.length()) {
             val t = claudeTools.getJSONObject(i)
@@ -216,6 +216,7 @@ class Live(
                 thread {
                     val out = try { Actions(context).run(name, args) } catch (e: Exception) { "That didn't work: ${e.message}" } finally { toolsRunning-- }
                     Trace.log(context, "tool", "$name -> ${out.take(160)}")
+                    if (Agents.usedRecently("play_music", 60_000)) endAfterTurn = true
                     send(JSONObject().put("toolResponse", JSONObject().put("functionResponses", JSONArray().put(
                         JSONObject().put("id", id).put("name", name).put("response", JSONObject().put("result", out))))))
                 }
