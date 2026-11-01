@@ -52,6 +52,11 @@ object Reflex {
             val r = try { recap(c) } catch (e: Exception) { Problems.log(c, "recap: ${e.message}"); null }
             if (r != null) return Hit(r)
         }
+        // Pursuit idea vault (lab L12): saved in his own words, on the phone
+        if (t.isNotEmpty()) {
+            val idea = try { IdeaStore.handle(c, text) } catch (e: Exception) { Problems.log(c, "ideas: ${e.message}"); null }
+            if (idea != null) { val p = Prefs(c); p.addTurn("user", text, quick = true); p.addTurn("assistant", idea, quick = true); return Hit(idea) }
+        }
         // YouTube pulse (lab L13): read-only numbers from his channel; kept in the conversation so he can ask more
         if (t.isNotEmpty() && YouTubePulse.isAsk(text)) {
             val yt = YouTube.pulse(c)

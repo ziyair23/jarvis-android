@@ -53,6 +53,35 @@ object HomeReminders {
     }
 }
 
+/** Pursuit idea vault on the phone (lab L12): load, change and save in one go. */
+object IdeaStore {
+    private fun <T> edit(c: Context, f: (MutableList<IdeaVault.Idea>) -> T): T = synchronized(IdeaVault) {
+        val p = Prefs(c)
+        val l = IdeaVault.load(p.sp.getString("pursuit_ideas", ""))
+        val r = f(l)
+        p.sp.edit().putString("pursuit_ideas", IdeaVault.dump(l)).apply()
+        r
+    }
+
+    /** What Jarvis says if [said] is an idea-vault command, else null. */
+    fun handle(c: Context, said: String): String? {
+        val cmd = IdeaVault.parse(said) ?: return null
+        return edit(c) { IdeaVault.handle(it, cmd, System.currentTimeMillis()) }
+    }
+
+    /** For Claude's tools. */
+    fun save(c: Context, text: String, kind: String?): String {
+        if (text.isBlank()) return "Nothing to save."
+        val k = kind?.trim()?.lowercase()?.takeIf { it in IdeaVault.KINDS || it == "idea" }
+        return edit(c) { IdeaVault.handle(it, IdeaVault.Cmd.Add(text.trim(), k), System.currentTimeMillis()) }
+    }
+
+    fun search(c: Context, about: String?, kind: String?): String {
+        val f = SimpleDateFormat("MMM d", Locale.US)
+        return edit(c) { IdeaVault.forClaude(it, about, kind?.trim()?.lowercase()) { at -> f.format(Date(at)) } }
+    }
+}
+
 /** Car reminders on the phone (lab L26): load, change and save in one go. */
 object CarRemindersStore {
     private fun <T> edit(c: Context, f: (MutableList<CarReminders.Item>) -> T): T = synchronized(CarReminders) {
