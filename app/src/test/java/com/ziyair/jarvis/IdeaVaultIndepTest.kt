@@ -27,7 +27,6 @@ class IdeaVaultIndepTest {
     }
 
     // Asking Jarvis to come up with ideas is the same as "any ideas for the caption": it goes to Claude, not the vault.
-    // IGNORED only so lab-branch CI still builds; FAILS today (lab/reports/L12-2026-11-01.md). Un-ignore with the fix.
     @Test fun brainstormAsksGoToClaude() {
         for (s in listOf("any video ideas for the drop", "give me video ideas for the hoodie", "any caption ideas", "list collab ideas"))
             assertNull(s, IdeaVault.parse(s))
