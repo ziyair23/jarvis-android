@@ -126,4 +126,16 @@ class CallNotesTest {
         assertFalse(CallNotes.isPrivate(CallNotes.ringLine("Jess is calling, sir.", "")))
         assertFalse(CallNotes.isPrivate("Noted for Abbey, sir."))
     }
+
+    @Test fun noteThatSirIsNotANote() {
+        val b = CallNotes.Book()
+        CallNotes.called(b, "Abbey", t0)
+        assertNull(CallNotes.parse("Jarvis, note that, sir."))
+        assertNull(CallNotes.parse("note that please"))
+        assertNull(CallNotes.parse("note for, sir."))
+        assertNull(say(b, "Jarvis, note that, sir.", t0 + min))
+        assertTrue(b.notes.isEmpty())
+        assertEquals("Noted for Abbey, sir.", say(b, "Jarvis, note that she owes me twenty, sir.", t0 + min))
+        assertEquals("she owes me twenty", CallNotes.notesFor(b, "Abbey").single().text)
+    }
 }

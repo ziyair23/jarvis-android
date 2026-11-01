@@ -111,7 +111,7 @@ object CallNotes {
     private val P = "(?:my |the |all |all my |all the )?(?:call )?notes? (?:on|for|about) (.+)"
 
     private val LEAD = Regex("^\\s*((hey|ok|okay|yo)\\s+)?(jarvis\\s+)?((can you|could you|would you|will you|please|go ahead and|just)\\s+)*")
-    private val TAIL = Regex("[\\s,.!?]+(sir|jarvis|please)?[\\s,.!?]*$", RegexOption.IGNORE_CASE)
+    private val TAIL = Regex("(?:^|[\\s,.!?]+)(?:sir|jarvis|please)?[\\s,.!?]*$", RegexOption.IGNORE_CASE)
     private fun rx(p: String) = Regex("^" + p.replace(" ", "\\s+") + "$")
     private val READ = listOf(rx("(?:what are|what're|read|read me|any|tell me|what's in|do i have any|have i got any|got any) $P"),
         rx("what did i note (?:on|for|about) (.+)"))
@@ -133,7 +133,7 @@ object CallNotes {
         fun body(r: MatchResult) = r.groups[1]!!.range.let { ss.substring(it.first, it.last + 1) }.replace(TAIL, "").trim()
         READ.forEach { re -> re.find(ms)?.let { return Cmd.Read(body(it)) } }
         CLEAR.find(ms)?.let { return Cmd.Clear(body(it)) }
-        ADD_FOR.find(ms)?.let { return Cmd.AddFor(body(it)) }
+        ADD_FOR.find(ms)?.let { r -> val b = body(r); return if (b.isEmpty()) null else Cmd.AddFor(b) }
         ADD.find(ms)?.let { r -> val b = body(r); return if (b.isEmpty()) null else Cmd.Add(b) }
         return null
     }
