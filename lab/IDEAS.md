@@ -14,7 +14,7 @@ Marcus (2026-11-01): no more DoorDash features from the lab. Pitch other areas.
 | L5 | Shift wrap line | Running his day | One sentence when he goes offline: earned, per hour, days left to the Macan. Risky for taste (he dropped the spoken brief). | 29 | rejected (Marcus: no more DoorDash) |
 | L6 | Pursuit idea vault | Business partner | "Jarvis, Pursuit idea: …" saves design and drop ideas with dates; "read my Pursuit ideas about hoodies" brings them back. | 32 | new |
 | L7 | Social pulse | Business partner | "How's my YouTube doing?" pulls views and subs; Instagram/TikTok later (they need business accounts and tokens). | 28 | new |
-| L8 | No-signal mode in the car | Speed and reliability | With no signal, reflexes still work and anything that needs Claude is held and answered when signal comes back, instead of failing. | 34 | failed |
+| L8 | No-signal mode in the car | Speed and reliability | With no signal, reflexes still work and anything that needs Claude is held and answered when signal comes back, instead of failing. | 34 | failed after 3 rounds; final fix applied, needs one more test |
 | L9 | Home-after-dash scene | Running his day | After the evening shift, his Google Home lights go warm when he gets home (Home Automation API). | 28 | new |
 | L10 | Slow-restaurant memory | Business partner | Say "this place is slow" at a pickup; next time an offer comes from that restaurant, Jarvis warns him in the call-out. | 36 | rejected (Marcus: no more DoorDash) |
 | B1 | Big bet: a judge that learns him | Big bet | Builds on L1: once Jarvis knows which offers he accepts at which hours, the verdict adapts to him instead of fixed rules. | — | rejected (Marcus: no more DoorDash) |

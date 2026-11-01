@@ -176,7 +176,7 @@ class Brain(private val context: Context) {
                     Trace.log(context, "held", "network dead: \"$text\""); return Held.add(text, System.currentTimeMillis())
                 }
                 // a read timeout on a "working" network: don't sit through a second 30 seconds, hold it now
-                if (e is java.net.SocketTimeoutException && retried == 0 && !didSomething) {
+                if (e is java.net.SocketTimeoutException && retried == 0 && !didSomething && !reachable()) {
                     reportBad(); Trace.log(context, "held", "timed out: \"$text\""); return Held.add(text, System.currentTimeMillis())
                 }
                 if (retried < 1) { retried++; Thread.sleep(800); continue }
@@ -402,7 +402,7 @@ class Brain(private val context: Context) {
     private fun post(key: String, body: JSONObject): Pair<Int, String> {
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
         c.requestMethod = "POST"
-        c.connectTimeout = 6000; c.readTimeout = 20000
+        c.connectTimeout = 6000; c.readTimeout = 30000
         c.doOutput = true
         c.setRequestProperty("content-type", "application/json")
         c.setRequestProperty("x-api-key", key)

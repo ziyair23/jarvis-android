@@ -126,7 +126,7 @@ class JarvisService : Service() {
         override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) {
             if (!caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)) { netDown = true; main.removeCallbacks(signalBack); return }
             // only a real comeback counts: the network was down (or something was held), and now it's validated again
-            if (!netDown || Held.count() == 0) return
+            if (!netDown || Held.pending(System.currentTimeMillis()) == 0) return
             netDown = false
             main.removeCallbacks(signalBack); main.postDelayed(signalBack, 2500)
         }
@@ -140,7 +140,7 @@ class JarvisService : Service() {
             // make sure the signal is really back before saying so; if not, try again in 30 seconds
             if (!brain.isValidated() || !brain.reachable()) {
                 netDown = true
-                if (Held.count() > 0) main.postDelayed(signalBack, 30_000)
+                if (Held.pending(System.currentTimeMillis()) > 0) main.postDelayed(signalBack, 30_000)
                 return@thread
             }
             val due = Held.takeDue(System.currentTimeMillis())

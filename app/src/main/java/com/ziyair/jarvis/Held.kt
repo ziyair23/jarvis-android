@@ -39,6 +39,8 @@ object Held {
     }
 
     @Synchronized fun count() = items.size
+    /** Held requests still young enough to come back to. */
+    @Synchronized fun pending(now: Long) = items.count { now - it.at <= EXPIRE_MS }
     @Synchronized fun clear() = items.clear()
 
     /** What Claude is asked when signal is back. Tools are switched off for these, so nothing can be done late. */
