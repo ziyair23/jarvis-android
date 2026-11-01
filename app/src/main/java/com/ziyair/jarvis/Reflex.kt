@@ -40,6 +40,8 @@ object Reflex {
             val note = try { CallNotesStore.handle(c, text) } catch (e: Exception) { Problems.log(c, "call notes: ${e.message}"); null }
             if (note != null) return Hit(note)
         }
+        // "say that again" (lab L20): replays his last spoken line; kept out of the conversation Claude sees (it may carry a call note)
+        if (t.isNotEmpty()) Again.ask(text, System.currentTimeMillis())?.let { return Hit(it) }
         if (t.isEmpty() || t.split(" ").size > 9) return null
         val hit = try { match(c, t) } catch (e: Exception) { Problems.log(c, "reflex: ${e.message}"); null } ?: return null
         // Claude still sees it in the conversation, so "and turn it up a bit" afterwards makes sense to him
@@ -57,6 +59,7 @@ object Reflex {
             m(t, "drop it|let it go|change the subject|new topic|stop (talking|bringing) (about |up )?(it|that|this)( up)?|stop talking about (it|that|this)|clear (the |our )?(chat|conversation)|start fresh|forget (about )?(it|that)") -> {
                 Prefs(c).clearHistory()
                 Inbox.lastAnnounced = null
+                Again.forget()
                 Memory.purgeSensitive(c)
                 return Hit("Dropped, sir.", true)
             }

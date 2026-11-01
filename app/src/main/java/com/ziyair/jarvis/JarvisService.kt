@@ -684,6 +684,7 @@ class JarvisService : Service() {
                 // in quiet mode his answers arrive as a silent notification instead of out loud
                 if (wasQuiet && Stealth.on(prefs)) { live?.cancel(); Stealth.silentNote(this, reply); LogBus.changed(); finishTurn(); return@post }
                 LogBus.changed()
+                Again.said(reply, System.currentTimeMillis())   // lab L20: "say that again"
                 // keep the conversation going (he can talk over Jarvis to cut in); a question from Jarvis always waits for an answer
                 val keep = inConvo || reply.trimEnd().endsWith("?")
                 val tok = ++speechTok
@@ -767,6 +768,7 @@ class JarvisService : Service() {
             // his voice goes out on the alarm channel (Android silences assistant audio while it rings), ringtone hushed for a moment
             overRing = true
             val hushed = ringHush(true)
+            Again.said(line, System.currentTimeMillis())
             speak(line) {
                 overRing = false
                 if (hushed) ringHush(false)
@@ -780,6 +782,7 @@ class JarvisService : Service() {
         // mid-conversation: hold it and say it right after
         if (busy) { if (pending.size < 5) pending.add(line to thenListen); return }
         note(line)
+        Again.said(line, System.currentTimeMillis())
         busy = true
         followUps = 1
         acquire()
