@@ -87,4 +87,9 @@ class YouTubePulseTest {
         assertEquals("forHandle=@marcus27", YouTubePulse.channelQuery("marcus27"))
         assertNull(YouTubePulse.channelQuery("https://www.youtube.com/watch"))
     }
+
+    @Test fun oldCustomLinksAreNotUsable() {
+        assertNull(YouTubePulse.channelQuery("https://www.youtube.com/c/PursuitOfficial"))
+        assertEquals("Put your @handle in Jarvis settings, sir.", YouTubePulse.BAD_LINK)
+    }
 }

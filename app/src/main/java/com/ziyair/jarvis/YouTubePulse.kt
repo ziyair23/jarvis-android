@@ -146,6 +146,7 @@ object YouTubePulse {
     // ---------- errors, for the ear ----------
 
     const val NO_KEY = "I need a YouTube key and your channel handle in Jarvis settings first, sir."
+    const val BAD_LINK = "Put your @handle in Jarvis settings, sir."
     const val BAD_CHANNEL = "I can't find that channel, sir. Check the handle in Jarvis settings."
     const val NOT_ALLOWED = "YouTube won't take the key, sir. Turn on the YouTube Data API for it in Google Cloud."
     const val NO_SIGNAL = "Can't reach YouTube right now, sir."

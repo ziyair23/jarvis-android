@@ -34,6 +34,7 @@ object YouTube {
         val p = Prefs(context)
         val keys = listOf(p.youtubeKey, p.ttsKey, p.geminiKey).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         val q = YouTubePulse.channelQuery(p.youtubeChannel)
+        if (keys.isNotEmpty() && q == null && p.youtubeChannel.isNotBlank()) return YouTubePulse.BAD_LINK   // an old /c/Name link or similar
         if (keys.isEmpty() || q == null) return YouTubePulse.NO_KEY
         if (!Brain(context).isOnline()) return YouTubePulse.NO_SIGNAL
         // a key restricted to something else (the voice) gets one retry with the next key he has
