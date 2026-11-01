@@ -116,4 +116,19 @@ class OfferLabTest {
         assertTrue(r, words(r) < 40)
         assertFalse(r, r.contains("\n") || r.contains("•"))
     }
+
+    // ---------- round 2 ----------
+    @Test fun l2_r2_outOfRangeMinutesFallBackToDeliverBy() {
+        assertEquals(40, OfferMath.minutes("Pickup in 2 min | Deliver by 7:40 PM", sevenPm))
+    }
+
+    @Test fun l1_r2_bestUsesPerHourWhenKnown() {
+        // evenings pay more per mile but take 54 minutes: about 10 an hour, so mornings are better
+        val s = List(8) { Seen(7 + it % 2, 7.0, 3.0, 20) } + List(8) { Seen(17 + it % 2, 9.0, 2.0, 54) }
+        assertTrue(OfferMath.bestHours(s, 2.0, 20.0).startsWith("Your best stretch is 7 AM to 9 AM"))
+    }
+
+    @Test fun l2_r2_moneyIsSpokenForm() {
+        assertEquals("\$8.50", OfferMath.money(8.5)); assertEquals("\$12", OfferMath.money(12.0)); assertEquals("\$2", OfferMath.money(1.999))
+    }
 }
