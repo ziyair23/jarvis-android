@@ -56,9 +56,7 @@ class BrainWallpaper : WallpaperService() {
         private val dotBuf = Array(3 * B) { FloatArray(n * 2) }
         private val dotN = IntArray(3 * B)
 
-        private class Spark(val e: Int, val t: Float)
         private val sparks = ArrayList<Spark>()
-        private class Pulse(val id: String, val t: Float)
         private val pulses = ArrayList<Pulse>()
         private val wasActive = HashSet<String>()
         private var agents: List<String> = emptyList()
@@ -229,6 +227,9 @@ class BrainWallpaper : WallpaperService() {
         }
     }
 }
+
+private class Spark(val e: Int, val t: Float)
+private class Pulse(val id: String, val t: Float)
 
 /** The brain's shape: built once (same recipe as the Brain tab) and shared. */
 class BrainModel private constructor() {
