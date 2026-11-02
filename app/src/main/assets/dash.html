@@ -208,6 +208,10 @@ input::placeholder{color:#5f5b56}
     <ul class="list" id="t-rem"></ul>
   </div>
   <div class="card">
+    <div class="label">Bills and appointments</div>
+    <ul class="list" id="life-list"></ul>
+  </div>
+  <div class="card">
     <div class="label">List</div>
     <div class="grid2"><input id="l-in" placeholder="Diapers, wipes"><button class="primary" onclick="addL()">Add</button></div>
     <ul class="list" id="l-list" style="margin-top:8px"></ul>
@@ -383,8 +387,17 @@ function load() {
   $('t-mini').innerHTML = mini;
   const remN = []; for (let i = 0; i < D.reminders.length; i++) remN.push(D.reminders[i]); remN.sort((a, b) => a.at - b.at);
   const Lc = (D.lists && D.lists.list) ? Array.from({length: D.lists.list.length}, (_, i) => D.lists.list[i]).filter(x => !x.done).length : 0;
+  // bills and appointments, kept by their agents
+  const life = [];
+  for (let i = 0; i < (D.bills || []).length; i++) { const b = D.bills[i]; if (!b.paid && b.due > Date.now() - 864e5) life.push({at: b.due, t: b.name + ' bill' + (b.amount ? ' · ' + money(b.amount) : ''), bill: true}); }
+  for (let i = 0; i < (D.appts || []).length; i++) { const a = D.appts[i]; if (a.at > Date.now() - 36e5) life.push({at: a.at, t: a.what + (a.where ? ' · ' + a.where : ''), time: a.time}); }
+  life.sort((a, b) => a.at - b.at);
+  const dayLbl = ms => new Date(ms).toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'});
+  $('life-list').innerHTML = life.length ? life.slice(0, 10).map(x => `<li><span class="t">${dayLbl(x.at)}</span><span>${esc(x.t)}${x.time ? ' <span class="faint">' + clock(x.at) + '</span>' : ''}</span></li>`).join('')
+    : '<li class="empty">Nothing yet. Bills and Appointments find these in your texts on their own.</li>';
+  const soon = life.find(x => x.at < Date.now() + 3 * 864e5);
   $('t-next').textContent = remN.length ? clock(remN[0].at) : 'Clear';
-  $('t-next-sub').textContent = (remN.length ? remN[0].label : 'Nothing scheduled') + (Lc ? ` · ${Lc} on the list` : '');
+  $('t-next-sub').textContent = (remN.length ? remN[0].label : 'Nothing scheduled') + (Lc ? ` · ${Lc} on the list` : '') + (soon ? ` · ${soon.t.split(' · ')[0]} ${dayLbl(soon.at).split(',')[0]}` : '');
   let lastJ = ''; for (let i = D.history.length - 1; i >= 0; i--) if (D.history[i].role !== 'user') { lastJ = D.history[i].content; break; }
   $('t-last').textContent = lastJ || 'Say his name and he\'s here.';
 
@@ -436,7 +449,7 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   let A = [], sel = 'jarvis', yaw = 0.6, pitch = -0.22, vy = 0.12, vp = 0, drag = null, lastT = 0, pulses = [], lastActive = {};
   // where each agent lives in the brain, roughly where that kind of thinking happens
   const POS = {memory:[0.3,-0.32,-0.12], phone:[0.05,0.28,0.98], planner:[-0.42,0.52,0.55], research:[0.44,0.5,0.52], money:[0.5,0.62,-0.18],
-    family:[-0.74,-0.16,0.2], pursuit:[0.74,-0.14,0.16], builder:[-0.1,0.4,-0.96], coach:[-0.36,-0.3,-0.62]};
+    family:[-0.74,-0.16,0.2], pursuit:[0.74,-0.14,0.16], builder:[-0.1,0.4,-0.96], coach:[-0.36,-0.3,-0.62], bills:[0.62,0.18,-0.55], appts:[-0.62,0.34,-0.22]};
   // ---- the brain itself: a folded cortex (two hemispheres), cerebellum and brain stem, as points and fibres ----
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const P = [], KIND = [];

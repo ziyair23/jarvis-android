@@ -67,6 +67,8 @@ class DashActivity : Activity() {
                 .put("target", p.sp.getFloat("daily_target", 120f).toDouble())
                 .put("spend", Spend.thisMonth(p)).put("budget", Spend.budget(p))
                 .put("reminders", p.reminders())
+                .put("bills", Bills.json(ctx))
+                .put("appts", Appts.json(ctx))
                 .put("history", p.history())
                 .toString()
         }

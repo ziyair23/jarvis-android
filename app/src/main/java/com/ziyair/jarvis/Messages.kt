@@ -71,6 +71,9 @@ class MessageListener : NotificationListenerService() {
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         if (n.category == Notification.CATEGORY_CALL || (sbn.packageName in DIALERS && n.fullScreenIntent != null)) { announceCall(n); return }
+        // bills and appointments: keep the ones that look like one, for the Bills and Appointments agents
+        try { n.extras?.let { e -> LifeWatch.capture(this, appName(sbn.packageName), e.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(),
+            (e.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: e.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()) } } catch (_: Exception) {}
         val isMsg = n.category == Notification.CATEGORY_MESSAGE || sbn.packageName in MESSAGING_APPS
         if (!isMsg) return
         val ex = n.extras ?: return
