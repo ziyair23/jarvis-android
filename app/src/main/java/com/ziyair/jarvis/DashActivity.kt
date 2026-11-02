@@ -97,8 +97,8 @@ class DashActivity : Activity() {
         @JavascriptInterface fun hush() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_HUSH)) }
         @JavascriptInterface fun agents(): String = Agents.json(ctx).toString()
         @JavascriptInterface fun agentToggle(id: String, on: Boolean) { Agents.setEnabled(ctx, id, on); LogBus.changed() }
-        @JavascriptInterface fun agentTeach(id: String, text: String) { if (id == "jarvis") Memory.add(ctx, text) else Agents.addNote(ctx, id, text); LogBus.changed() }
-        @JavascriptInterface fun agentForget(id: String, at: String) { Agents.removeNote(ctx, id, at.toLongOrNull() ?: 0L); LogBus.changed() }
+        @JavascriptInterface fun agentTeach(id: String, text: String) { if (id == "jarvis") Memory.add(ctx, text) else if (id == "coach") Coach.addLesson(ctx, text, "marcus") else Agents.addNote(ctx, id, text); LogBus.changed() }
+        @JavascriptInterface fun agentForget(id: String, at: String) { if (id == "coach") Coach.removeAt(ctx, at.toLongOrNull() ?: 0L) else Agents.removeNote(ctx, id, at.toLongOrNull() ?: 0L); LogBus.changed() }
         @JavascriptInterface fun fix(key: String) = runOnUiThread { Health.fix(ctx, key) }
         @JavascriptInterface fun shareLog() = runOnUiThread { Trace.share(ctx) }
         @JavascriptInterface fun quietStart() { Stealth.start(ctx, null); LogBus.changed() }

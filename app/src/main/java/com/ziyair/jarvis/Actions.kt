@@ -54,6 +54,8 @@ class Actions(private val context: Context) {
             props("fact" to str("One short sentence in third person, e.g. 'His girlfriend's name is Bri.'")), listOf("fact")))
         put(tool("forget", "Delete remembered facts about something he wants forgotten.", props("about" to str("Words that identify what to forget")), listOf("about")))
         put(tool("memory_list", "Everything Jarvis remembers about him, numbered, oldest first, with when each was saved.", props(), listOf()))
+        put(tool("learn_lesson", "Save a lesson from a mistake he just corrected, so you never repeat it (e.g. 'When he says Jessie he means Jesse, his boss'). One short, specific sentence.",
+            props("lesson" to str("What to do differently next time")), listOf("lesson")))
         put(tool("memory_fix", "Replace one remembered fact with a corrected or merged version (by its number from memory_list), or drop it with an empty new_fact.",
             props("number" to num("Fact number from memory_list"), "new_fact" to str("The corrected fact, or empty to drop it")), listOf("number")))
         put(tool("log_earnings", "Log money he made DoorDashing. Amounts for the same day add up (two shifts) unless replace is true (he's correcting the day's total). Reply with the result's totals in one or two short sentences.",
@@ -210,6 +212,7 @@ class Actions(private val context: Context) {
             }
             "remember" -> if (Memory.add(context, input.getString("fact"))) "Saved to memory." else "Already remembered."
             "memory_list" -> Memory.listNumbered(context)
+            "learn_lesson" -> Coach.addLesson(context, input.optString("lesson"), "correction")
             "memory_fix" -> Memory.fix(context, input.optInt("number"), input.optString("new_fact"))
             "forget" -> { val n = Memory.forget(context, input.getString("about")); if (n > 0) "Forgot $n thing${if (n > 1) "s" else ""}." else "Nothing matched to forget." }
             "log_earnings" -> Earnings.log(context, input.getDouble("amount"), input.optString("day", "today"), input.optBoolean("replace"))

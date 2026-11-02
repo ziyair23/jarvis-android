@@ -201,6 +201,22 @@ object Piper {
         } catch (e: Throwable) { Problems.log(c, "voice: ${e.message}"); null }
     }
 
+    /**
+     * Speaks a whole stretch of text in one go, so it flows like one person talking (no reset between sentences),
+     * handing over the audio piece by piece as it's made so playback never waits for the end. False = no voice.
+     */
+    @Synchronized fun synthFlow(c: Context, text0: String, speed: Float, keepGoing: () -> Boolean, out: (FloatArray, Int) -> Unit): Boolean {
+        val (m, sid) = current(c) ?: return false
+        val text = speakable(text0).ifBlank { return true }
+        if (Voicebank.fits(text)) { val a = synth(c, text, speed) ?: return false; out(a.first, a.second); return true }
+        return try {
+            val e = engine(c, m) ?: return false
+            val rate = e.sampleRate()
+            e.generateWithCallback(text, sid, speed) { s -> if (s.isNotEmpty()) out(s.copyOf(), rate); if (keepGoing()) 1 else 0 }
+            true
+        } catch (e: Throwable) { Problems.log(c, "voice: ${e.message}"); false }
+    }
+
     /** Only if it's already in the phrasebook (never makes him wait). */
     fun cached(c: Context, text0: String, speed: Float): Pair<FloatArray, Int>? {
         val (m, sid) = current(c) ?: return null

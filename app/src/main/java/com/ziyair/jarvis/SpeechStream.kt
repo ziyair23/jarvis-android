@@ -10,9 +10,10 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 /**
- * Speaks a reply sentence by sentence as it streams in: one thread turns sentences into audio (Piper),
- * another plays them back to back, so he starts talking after the first sentence and the next one is
- * ready by the time he finishes the last.
+ * Speaks a reply as it streams in, fluently: the first sentence is voiced on its own so he starts talking straight
+ * away, then everything that follows is voiced as ONE flowing piece (the voice engine carries his tone from sentence
+ * to sentence, the way a person talks) and played as it's made. No glued-together sentences, no stop-start pauses.
+ * Set "voice_fluent": false in config to go back to sentence by sentence.
  */
 class SpeechStream(
     private val context: Context,
@@ -21,12 +22,16 @@ class SpeechStream(
     private val gapMs: Int = 160,
     private val waitWhile: () -> Boolean,
 ) {
+    private class Chunk(val pcm: FloatArray, val rate: Int, val newPiece: Boolean)
+
     private val texts = LinkedBlockingQueue<String>()
-    private val audio = LinkedBlockingQueue<Pair<FloatArray, Int>>()
+    private val audio = LinkedBlockingQueue<Chunk>()
     @Volatile var started = false; private set
     @Volatile private var cancelled = false
     @Volatile private var onDone: (() -> Unit)? = null
     @Volatile private var track: AudioTrack? = null
+    private val fluent = try { Brain(context).config().optBoolean("voice_fluent", true) } catch (_: Exception) { true }
+    private val gatherMs = try { Brain(context).config().optLong("voice_gather_ms", 450L) } catch (_: Exception) { 450L }
 
     fun add(sentence: String) {
         if (cancelled) return
@@ -49,10 +54,29 @@ class SpeechStream(
 
     private fun start() {
         thread(name = "jarvis-voice-synth") {
-            while (!cancelled) {
+            var first = true
+            var ended = false
+            while (!cancelled && !ended) {
                 val t = texts.poll(60, TimeUnit.SECONDS) ?: break
                 if (t === END) break
-                Piper.synth(context, t, speed)?.let { audio.put(it) }
+                var piece = t
+                if (fluent && !first) {
+                    // gather what's arrived (and whatever lands in the next moment) into one stretch of speech
+                    val sb = StringBuilder(t)
+                    val until = System.currentTimeMillis() + gatherMs
+                    while (!cancelled) {
+                        val left = until - System.currentTimeMillis()
+                        val n = (if (left > 0) texts.poll(left, TimeUnit.MILLISECONDS) else texts.poll()) ?: break
+                        if (n === END) { ended = true; break }
+                        sb.append(' ').append(n)
+                        if (sb.length > 600) break
+                    }
+                    piece = sb.toString()
+                }
+                var newPiece = true
+                val ok = Piper.synthFlow(context, piece, speed, { !cancelled }) { s, r -> audio.put(Chunk(s, r, newPiece)); newPiece = false }
+                if (!ok) break
+                first = false
             }
             audio.put(DONE)
         }
@@ -66,10 +90,13 @@ class SpeechStream(
                 while (waitWhile() && !cancelled) Thread.sleep(40)
                 if (cancelled) break
                 try {
-                    // ONE continuous audio stream for the whole reply: no restart (and no click) between sentences
-                    if (t == null) { val tr = open(a.second); t = tr; track = tr; Orb.voiceStart(a.second) { tr.playbackHeadPosition.toLong() }; tr.play() }
-                    val pcm = trim(a.first, a.second)
-                    if (!first) written += pause(t, a.second)          // a natural breath between sentences
+                    // ONE continuous audio stream for the whole reply: no restart (and no click) anywhere
+                    if (t == null) { val tr = open(a.rate); t = tr; track = tr; Orb.voiceStart(a.rate) { tr.playbackHeadPosition.toLong() }; tr.play() }
+                    val pcm = when {
+                        first -> trimHead(a.pcm, a.rate)                              // start talking without dead air
+                        !fluent && a.newPiece -> { written += pause(t, a.rate); trimHead(a.pcm, a.rate) }
+                        else -> a.pcm                                                  // keep the voice's own natural spacing
+                    }
                     Orb.voiceAdd(pcm)
                     first = false
                     var off = 0
@@ -81,7 +108,7 @@ class SpeechStream(
                     written += pcm.size
                 } catch (_: Exception) {}
             }
-            // let the last sentence finish playing
+            // let the last words finish playing
             t?.let { tr ->
                 val until = System.currentTimeMillis() + 15_000
                 while (!cancelled && tr.playbackHeadPosition < written - 1 && System.currentTimeMillis() < until) Thread.sleep(20)
@@ -104,17 +131,14 @@ class SpeechStream(
             .setBufferSizeInBytes(maxOf(min, rate * 4 / 2)).build()   // half a second of buffer
     }
 
-    /** Cut the dead air the voice engine leaves at the start and end of each sentence, with a soft fade so nothing clicks. */
-    private fun trim(s: FloatArray, rate: Int): FloatArray {
-        val th = 0.012f
-        var a = 0; while (a < s.size && kotlin.math.abs(s[a]) < th) a++
-        var b = s.size - 1; while (b > a && kotlin.math.abs(s[b]) < th) b--
+    /** Cut the dead air before the first sound, with a soft fade-in so nothing clicks. */
+    private fun trimHead(s: FloatArray, rate: Int): FloatArray {
+        var a = 0; while (a < s.size && kotlin.math.abs(s[a]) < 0.012f) a++
         a = maxOf(0, a - rate * 3 / 100)              // keep 30 ms before the first sound (soft "s" and "f" starts)
-        b = minOf(s.size - 1, b + rate / 25)           // and 40 ms after the last
-        if (b <= a) return s
-        val out = s.copyOfRange(a, b + 1)
-        val fade = minOf(out.size / 4, rate / 200)     // 5 ms fades
-        for (i in 0 until fade) { val g = i.toFloat() / fade; out[i] *= g; out[out.size - 1 - i] *= g }
+        if (a >= s.size - 1) return s
+        val out = s.copyOfRange(a, s.size)
+        val fade = minOf(out.size / 4, rate / 200)
+        for (i in 0 until fade) out[i] *= i.toFloat() / fade
         return out
     }
 
@@ -128,6 +152,6 @@ class SpeechStream(
 
     companion object {
         private val END = String(charArrayOf('\u0000'))
-        private val DONE = FloatArray(0) to 0
+        private val DONE = Chunk(FloatArray(0), 0, false)
     }
 }

@@ -30,9 +30,10 @@ object Builder {
         "wake_seconds" to (3.0 to 15.0), "conversation_seconds" to (4.0 to 30.0), "ear_silence_ms" to (500.0 to 2500.0),
         "done_talking_ms" to (700.0 to 3000.0), "piper_speed" to (0.7 to 1.4), "live_idle_seconds" to (5.0 to 60.0),
         "sentence_gap_ms" to (0.0 to 600.0), "smart_max_tokens" to (200.0 to 1500.0), "max_tokens" to (150.0 to 800.0),
-        "wake_threshold" to (0.3 to 0.8), "music_wake_factor" to (0.5 to 1.0), "still_working_ms" to (3000.0 to 20000.0))
+        "wake_threshold" to (0.3 to 0.8), "music_wake_factor" to (0.5 to 1.0), "still_working_ms" to (3000.0 to 20000.0),
+        "voice_gather_ms" to (0.0 to 1500.0))
     private val LISTS = setOf("greetings", "morning_greetings", "late_greetings", "acks", "goodbyes", "still_working")
-    private val BOOLS = setOf("thinking_sound", "reflexes", "smart_answers", "web_search", "orb", "battery_saver", "live")
+    private val BOOLS = setOf("thinking_sound", "reflexes", "smart_answers", "web_search", "orb", "battery_saver", "live", "voice_fluent", "coach")
     private val TEXTS = setOf("live_voice", "live_style", "wake_reply")
     private val CODE_TOOLS = setOf("list_files", "read_file", "edit_file", "create_file", "start_test_build", "build_status",
         "read_build_errors", "install_test_build", "keep_test_build", "roll_back")

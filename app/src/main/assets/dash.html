@@ -390,7 +390,7 @@ requestAnimationFrame(orbFrame);
   let A = [], sel = 'jarvis', yaw = 0.6, pitch = -0.22, vy = 0.12, vp = 0, drag = null, lastT = 0, pulses = [], lastActive = {};
   // where each agent lives in the brain, roughly where that kind of thinking happens
   const POS = {memory:[0.3,-0.32,-0.12], phone:[0.05,0.28,0.98], planner:[-0.42,0.52,0.55], research:[0.44,0.5,0.52], money:[0.5,0.62,-0.18],
-    family:[-0.74,-0.16,0.2], pursuit:[0.74,-0.14,0.16], builder:[-0.1,0.4,-0.96]};
+    family:[-0.74,-0.16,0.2], pursuit:[0.74,-0.14,0.16], builder:[-0.1,0.4,-0.96], coach:[-0.36,-0.3,-0.62]};
   // ---- the brain itself: a folded cortex (two hemispheres), cerebellum and brain stem, as points and fibres ----
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const P = [], KIND = [];
@@ -539,6 +539,7 @@ requestAnimationFrame(orbFrame);
     document.getElementById('ag-runs').innerHTML = a.id === 'jarvis' ? '<li class="empty">Jarvis talks; the agents do the jobs.</li>' : runs.length ? runs.slice(0, 6).map(r => `<li style="display:block"><div class="faint">${tm(r.at)} · ${(r.ms / 1000).toFixed(1)}s</div><div>${E2(r.task)}</div><div class="dim" style="font-size:13px">${E2(r.result)}</div></li>`).join('') : '<li class="empty">No jobs yet.</li>';
     const notes = []; for (let i = 0; i < a.notes.length; i++) notes.push(a.notes[i]);
     document.getElementById('ag-notes-l').style.display = a.id === 'jarvis' ? 'none' : 'block';
+    document.getElementById('ag-notes-l').textContent = a.id === 'coach' ? 'Lessons Jarvis follows' : "What it's learned";
     document.getElementById('ag-notes').innerHTML = a.id === 'jarvis' ? '' : notes.length ? notes.slice().reverse().map(n => `<li><span>${E2(n.t)}</span><button class="x" aria-label="Forget" onclick="J.agentForget('${a.id}','${n.at}')">×</button></li>`).join('') : '<li class="empty">Nothing yet. It learns as it works.</li>';
     document.getElementById('ag-in').parentElement.style.display = a.id === 'jarvis' ? 'none' : 'grid';
     document.getElementById('jarvis-mem').style.display = a.id === 'jarvis' ? 'block' : 'none';
