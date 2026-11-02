@@ -67,7 +67,7 @@ class Brain(private val context: Context) {
             "\nQuiet mode: when he says he's going somewhere he can't have you talking (work, a meeting, class, church, a movie, 'go quiet', 'stealth mode'), call quiet_mode on, with minutes if he gives a time, and confirm in three or four words. When he says he's out, back, or done ('I'm out', 'quiet mode off', 'catch me up'), call quiet_mode off and turn what it returns into a short spoken catch-up starting 'Welcome back, sir.'" +
             "\nOne reply per request: when you use one of his phone tools, don't write any words alongside the tool call, wait for the result and then answer once. After a web_search, always say the actual answer (scores, times, facts); never reply with just 'Done'. Tool results that say Logged, Set, Opened, Sent, Done and the like mean it worked: say so plainly and never follow up with a 'correction', a second answer or an apology. Only answer what he just asked; don't add notes about earlier conversation, the dashboard numbers or older messages unless he asks." +
             "\nWhen he asks what something is, to read something, or anything that needs eyes ('what's this', 'read this', 'what does this say'), use look, then answer from the photo in a sentence or two. For anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks." +
-            (if (Agents.on(context)) "\nYour agents: some skills named above now live with your specialist agents. Hand the job over with one sentence holding every detail he gave: agent_phone (calls, texts, DMs, apps, music, directions, anything on screen), agent_money (earnings, expenses, the Macan goal, his budget), agent_family (Ziyair's feeds, diapers and sleep, the baby journal, lights and the house), agent_planner (his calendar, reminder lists, alarms, the morning briefing, protocols, planning his day or week), agent_research (questions that need real digging: comparisons, how-tos, prices, plans; quick facts you can still search yourself), agent_pursuit (his clothing brand: ideas, the shoot list, launch to-dos, orders), agent_memory (what you know about him: 'what do you know about me', corrections, tidying, forgetting; quick saves you can still do yourself with remember), agent_builder (when he wants you to change how you work or build something new into yourself). Then say what they did, in your own words, in one line. The confirm-before-sending rule still applies: pass confirmed=true only after his clear yes." else "")
+            (if (Agents.on(context)) "\nSpeed matters: do quick one-step jobs yourself with your own skills (logging feeds, diapers, earnings and expenses, lists, music, directions, lights, alarms, timers; calls and texts always go through agent_phone). Hand a job to an agent only when it needs several steps or their judgment.\nYour agents: some skills named above now live with your specialist agents. Hand the job over with one sentence holding every detail he gave: agent_phone (calls, texts, DMs, apps, music, directions, anything on screen), agent_money (earnings, expenses, the Macan goal, his budget), agent_family (Ziyair's feeds, diapers and sleep, the baby journal, lights and the house), agent_planner (his calendar, reminder lists, alarms, the morning briefing, protocols, planning his day or week), agent_research (questions that need real digging: comparisons, how-tos, prices, plans; quick facts you can still search yourself), agent_pursuit (his clothing brand: ideas, the shoot list, launch to-dos, orders), agent_memory (what you know about him: 'what do you know about me', corrections, tidying, forgetting; quick saves you can still do yourself with remember), agent_builder (when he wants you to change how you work or build something new into yourself). Then say what they did, in your own words, in one line. The confirm-before-sending rule still applies: pass confirmed=true only after his clear yes." else "")
     }
 
     /** The personality for live talking: the same Jarvis, plus how to sound on a live call, plus the recent conversation. */
@@ -192,6 +192,8 @@ class Brain(private val context: Context) {
             }
             val sb = StringBuilder()
             val results = JSONArray()
+            val fastLines = ArrayList<String?>()
+            val fastOn = cfg.optBoolean("fast_actions", true)
             for (i in 0 until content.length()) {
                 val part = content.getJSONObject(i)
                 when (part.optString("type")) {
@@ -199,11 +201,23 @@ class Brain(private val context: Context) {
                     "tool_use" -> {
                         lastTools.add(part.getString("name"))
                         didSomething = true
-                        val out: Any = if (part.getString("name") == "look") look() else actions.run(part.getString("name"), part.optJSONObject("input") ?: JSONObject())
+                        val name = part.getString("name")
+                        val out: Any = if (name == "look") look() else actions.run(name, part.optJSONObject("input") ?: JSONObject())
                         lastTools.addAll(Agents.drainInner())   // skills an agent used count as used (music, texts...)
+                        if (Agents.on(context) && !name.startsWith("agent_")) Agents.owner(name)?.let { Agents.flash(it) }
+                        fastLines.add(if (fastOn && name in Fast.FAST && out is String) Fast.line(name, out) else null)
                         results.put(JSONObject().put("type", "tool_result").put("tool_use_id", part.getString("id")).put("content", out))
                     }
                 }
+            }
+            // a quick action that clearly worked: say so straight away, no extra trip to Claude to phrase "done"
+            if (results.length() > 0 && sb.isBlank() && fastLines.isNotEmpty() && fastLines.all { it != null }) {
+                val reply = fastLines.filterNotNull().joinToString(" ")
+                voice.feed("$reply "); voice.flush()
+                prefs.addTurn("user", text)
+                prefs.addTurn("assistant", reply)
+                Coach.morningSaid(context)
+                return reply
             }
             if (results.length() > 0) voice.drop() else if (sb.isNotBlank()) voice.flush()
             if (results.length() > 0 && rounds < 10) {

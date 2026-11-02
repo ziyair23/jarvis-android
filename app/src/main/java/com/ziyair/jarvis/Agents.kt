@@ -21,7 +21,15 @@ object Agents {
     /** Skills Jarvis keeps himself: the quick, everyday ones where an extra hop would only slow him down. */
     val CORE = setOf("set_timer", "remind_me", "get_weather", "remember", "forget", "learn_lesson",
         "quiet_mode", "set_voice", "status_report", "look", "list_add",
-        "list_check", "list_read", "list_clear", "driving_mode", "media_control", "answer_call", "decline_call")
+        "list_check", "list_read", "list_clear", "driving_mode", "media_control", "answer_call", "decline_call",
+        // quick one-step jobs he does himself (an extra hop to an agent costs a whole second); agents keep the bigger jobs
+        "log_baby", "baby_status", "log_earnings", "earnings_summary", "log_expense", "play_music", "navigate",
+        "lights", "open_app", "set_alarm", "journal_add", "pursuit_add")
+
+    /** Lights an agent up in the brain for a moment when its skill was used directly. */
+    fun flash(id: String, ms: Long = 1600) { val t = System.currentTimeMillis(); active[id] = t; Thread { try { Thread.sleep(ms) } catch (_: Exception) {}; active.remove(id, t) }.start() }
+    /** Which agent a skill belongs to (for lighting it up). */
+    fun owner(tool: String): String? = ALL.firstOrNull { it.id != "builder" && tool in it.tools }?.id
 
     val PHONE = Def("phone", "Phone", "Runs his phone: calls, texts, DMs, apps, music, directions, the screen.",
         setOf("call", "send_text", "read_messages", "reply_message", "navigate", "stop_navigation", "play_music", "open_app",

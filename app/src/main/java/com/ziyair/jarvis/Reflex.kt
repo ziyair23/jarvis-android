@@ -47,6 +47,15 @@ object Reflex {
 
     private fun match(c: Context, t: String): Hit? {
         val now = Date()
+        // everyday logging, done right here: no trip to Claude at all
+        if (Brain(c).config().optBoolean("fast_actions", true)) Fast.parse(t, Prefs(c).babyName.lowercase())?.let { q ->
+            return when (q) {
+                is Fast.Quick.Baby -> { val out = Baby.log(c, q.kind, 0.0, ""); Agents.flash("family"); Hit(Fast.babyLine(q.kind, out)) }
+                is Fast.Quick.Earn -> { Earnings.log(c, q.amount, "today", false); Agents.flash("money")
+                    Hit("Logged ${Earnings.money(q.amount)}. You're at ${Earnings.money(Earnings.today(c))} today.") }
+                is Fast.Quick.ListAdd -> { val out = Lists.add(c, q.items, null); Hit(Fast.line("list_add", out) ?: out) }
+            }
+        }
         when {
             // "drop it": wipe the running conversation so he stops circling back to something
             m(t, "drop it|let it go|change the subject|new topic|stop (talking|bringing) (about |up )?(it|that|this)( up)?|stop talking about (it|that|this)|clear (the |our )?(chat|conversation)|start fresh|forget (about )?(it|that)") -> {
