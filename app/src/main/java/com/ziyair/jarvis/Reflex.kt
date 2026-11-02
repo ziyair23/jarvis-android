@@ -47,6 +47,24 @@ object Reflex {
 
     private fun match(c: Context, t: String): Hit? {
         val now = Date()
+        // everyday actions, done right here: opening apps, calls, directions, music, and "yes" to a text he just heard
+        if (Brain(c).config().optBoolean("fast_actions", true)) Fast.direct(t)?.let { d ->
+            val a = Actions(c)
+            when (d) {
+                is Fast.Direct.Open -> { val out = Apps.open(c, d.app)
+                    if (out.startsWith("Opened") || out.endsWith("camera open.") || out == "Camera open.") { Agents.flash("phone"); return Hit(out.replace(" He'll need to unlock to see it.", " Unlock to see it.")) } }
+                is Fast.Direct.Call -> a.callExact(d.who)?.let { Agents.flash("phone"); return Hit(it, true) }
+                is Fast.Direct.Nav -> { val out = a.run("navigate", org.json.JSONObject().put("destination", d.to))
+                    if (out.startsWith("Directions")) { Agents.flash("phone"); return Hit("Directions to ${d.to} are up.", true) } }
+                is Fast.Direct.Play -> { val out = a.run("play_music", org.json.JSONObject().put("query", d.what))
+                    if (!Regex("(?i)no music app|couldn't|can't").containsMatchIn(out)) { Agents.flash("phone"); return Hit(out, true) } }
+                Fast.Direct.Yes -> {
+                    val h = Prefs(c).history()
+                    val last = (h.length() - 1 downTo 0).map { h.getJSONObject(it) }.firstOrNull { it.optString("role") == "assistant" }?.optString("content").orEmpty()
+                    a.sendDraft(last)?.let { Agents.flash("phone"); return Hit(it) }
+                }
+            }
+        }
         // everyday logging, done right here: no trip to Claude at all
         if (Brain(c).config().optBoolean("fast_actions", true)) Fast.parse(t, Prefs(c).babyName.lowercase())?.let { q ->
             return when (q) {

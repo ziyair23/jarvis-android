@@ -36,6 +36,37 @@ object Fast {
         return null
     }
 
+    // ---------------- actions done right on the phone, no trip to Claude ----------------
+    sealed class Direct {
+        data class Open(val app: String) : Direct()
+        data class Call(val who: String) : Direct()
+        data class Nav(val to: String) : Direct()
+        data class Play(val what: String) : Direct()
+        object Yes : Direct()
+    }
+    private val VAGUE = Regex("^(it|that|this|them|him|her|me|something|anything|some music|music|my music|the music|again|it again|that again|back|later|the next song|next|a song|some songs|songs)$")
+
+    /** Everyday actions that need no thinking. [t] is normalised text. Pure, unit-tested. */
+    fun direct(t: String): Direct? {
+        Regex("^(open|launch|pull up|bring up)( up)? (the )?(.+?)( app)?$").find(t)?.let { m ->
+            val a = m.groupValues[4].trim()
+            if (a.split(" ").size <= 3 && !VAGUE.matches(a) && !Regex("\\b(door|window|garage|gate|trunk|link|file|tab)\\b").containsMatchIn(a)) return Direct.Open(a)
+        }
+        Regex("^(call|ring|dial|phone|facetime)( up)? (.+)$").find(t)?.let { m ->
+            val w = m.groupValues[3].trim().removePrefix("my ")
+            if (w.split(" ").size <= 3 && !VAGUE.matches(w) && !Regex("\\b(me|back|later|an uber|a lyft|a cab|an ambulance|911)\\b").containsMatchIn(w)) return Direct.Call(w)
+        }
+        Regex("^(navigate|take me|directions|get me directions|give me directions|drive me|navigate me)( to)? (.+)$").find(t)?.let { m ->
+            val d = m.groupValues[3].trim(); if (d.length >= 3 && !VAGUE.matches(d)) return Direct.Nav(d)
+        }
+        Regex("^(play|put on)( me)? (.+?)( on (youtube music|spotify))?$").find(t)?.let { m ->
+            val q = m.groupValues[3].trim()
+            if (q.length >= 3 && !VAGUE.matches(q) && !Regex("\\b(video|youtube video|tiktok|game|movie|show|episode|podcast)\\b").containsMatchIn(q)) return Direct.Play(q)
+        }
+        if (Regex("^(yes|yeah|yep|yup|sure|do it|send it|go ahead|send|ok send it|okay send it|yes send it|yeah send it|yes please|yeah go ahead)( please| it)?$").matches(t)) return Direct.Yes
+        return null
+    }
+
     // ---------------- "On it." the moment he asks for something ----------------
     val ACKS = listOf("On it, sir.", "Right away, sir.", "Sending it, sir.")
     private val ACTION = Regex("^(open|launch|start|play|put on|pause|resume|skip|turn (on|off|up|down)|turn the|set|start a|remind|add|log|navigate|take me|get me directions|directions|call|dial|ring|facetime|show me|switch|lock|unlock|dim|brighten|go to)\\b")

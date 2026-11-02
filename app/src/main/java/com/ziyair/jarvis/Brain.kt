@@ -83,7 +83,7 @@ class Brain(private val context: Context) {
             "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. When he mentions something to buy or do later ('we need wipes', 'add milk'), put it on a list; when he mentions paying for gas, food or car stuff, log it with log_expense (his Jarvis spending on Claude is 'spending', not an expense). If he asked you something and a tool can do it, do it rather than telling him how." +
             "\nYou can drive his phone: open_app for any app, media_control for play/pause/skip, stop_navigation to cancel directions, and phone_task for anything inside an app (it looks at the screen and taps through it like a person: DMs on Snapchat or Instagram, searching and playing a video, settings). Give phone_task the whole job in one sentence, then confirm in a few words what it did. Never post, send, buy or delete anything without his clear yes, and pass confirmed=true only after that yes." +
             "\nQuiet mode: when he says he's going somewhere he can't have you talking (work, a meeting, class, church, a movie, 'go quiet', 'stealth mode'), call quiet_mode on, with minutes if he gives a time, and confirm in three or four words. When he says he's out, back, or done ('I'm out', 'quiet mode off', 'catch me up'), call quiet_mode off and turn what it returns into a short spoken catch-up starting 'Welcome back, sir.'" +
-            "\nWhen you read a message or reply back before sending, put the exact words in double quotes, and send exactly those words. One yes sends one message: never send or reply to anyone else in the same go. A command like 'call X', 'text X' or 'open X' is always meant for you, even if the name sounds odd: try it." +
+            "\nTo get a text or reply ready, call draft_text first, then read the exact words back in double quotes and ask; when he says yes it's sent straight away by the phone. When you read a message or reply back before sending, put the exact words in double quotes, and send exactly those words. One yes sends one message: never send or reply to anyone else in the same go. A command like 'call X', 'text X' or 'open X' is always meant for you, even if the name sounds odd: try it." +
             "\nStay on what he just said. Never tack unrelated things onto an answer (his battery, an earlier text, other topics) unless he asks. If you offered to send something and he didn't say yes within a couple of minutes, that offer is dropped: don't bring it up again unless he does. Never say something was or wasn't sent, logged or done unless the list of what your actions actually did says so; if he asks and it isn't there, say you're not sure and offer to check." +
             "\nOne reply per request: when you use one of his phone tools, don't write any words alongside the tool call, wait for the result and then answer once. After a web_search, always say the actual answer (scores, times, facts); never reply with just 'Done'. Tool results that say Logged, Set, Opened, Sent, Done and the like mean it worked: say so plainly and never follow up with a 'correction', a second answer or an apology. Only answer what he just asked; don't add notes about earlier conversation, the dashboard numbers or older messages unless he asks." +
             "\nWhen he asks what something is, to read something, or anything that needs eyes ('what's this', 'read this', 'what does this say'), use look, then answer from the photo in a sentence or two. For anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, open the best pages with web_fetch, then answer in a sentence or two out loud. " + Web.GUIDE +
@@ -181,7 +181,7 @@ class Brain(private val context: Context) {
             body
                 .put("system", JSONArray()
                     .put(JSONObject().put("type", "text").put("text", stablePrompt(cfg)).put("cache_control", JSONObject().put("type", "ephemeral")))
-                    .put(JSONObject().put("type", "text").put("text", livePart() + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can occasionally misfire on the TV. Only if what you heard is obviously not meant for you (TV dialogue, song lyrics, or a meaningless one or two word fragment) reply with exactly [ignore]. Anything that could be a request or a question, even garbled, is for you: work out what he meant and answer it." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. Only if it is obviously not meant for you (clearly him talking to someone else, the TV, song lyrics), reply with exactly [ignore]. When in doubt, it's for you: answer it." else "")))
+                    .put(JSONObject().put("type", "text").put("text", livePart() + (if (deep) "\nThis is a real question: talk it through with him the way a sharp friend who knows the subject would, out loud: four to eight natural sentences with the actual details (names, numbers, prices, reasons). If he asks what you think, whether something would be better, or for advice, give your honest opinion and why, then the main trade-off; never dodge with 'that's your call' or a one-liner. End with a short follow-up question only if it would genuinely help. No lists or headings." else "") + (if (!followUp) "\nThe wake word can occasionally misfire on the TV. Only if what you heard is obviously not meant for you (TV dialogue, song lyrics, or a meaningless one or two word fragment) reply with exactly [ignore]. Anything that could be a request or a question, even garbled, is for you: work out what he meant and answer it." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. Only if it is obviously not meant for you (clearly him talking to someone else, the TV, song lyrics), reply with exactly [ignore]. When in doubt, it's for you: answer it." else "")))
                 .put("tools", tools)
                 .put("messages", clean)
             val (code, resp) = try {
@@ -438,12 +438,7 @@ class Brain(private val context: Context) {
     }
 
     /** A genuine question (scores, how/why, advice), as opposed to a quick command for the phone. */
-    private fun realQuestion(t: String): Boolean {
-        val s = t.lowercase().trim()
-        if (Regex("^(log|set|remind|start|stop|cancel|turn|call|text|send|open|play|pause|skip|resume|navigate|take me|lights?|fed|he (just )?(ate|pooped)|changed|made|note|remember|forget|run|dash|goodnight|good night|status report|answer|decline|volume|flashlight)\\b").containsMatchIn(s)) return false
-        if (Regex("^(what('?s| is) the time|what time is it|what day is it)").containsMatchIn(s)) return false
-        return s.endsWith("?") || Regex("^(what|who|whose|when|where|why|how|which|is|are|was|were|do|does|did|can|could|should|would|will|tell me|explain|give me|any |did the|who won|what about)\\b").containsMatchIn(s)
-    }
+    private fun realQuestion(t: String): Boolean = Brain.isRealQuestion(t)
 
     /** Tools used while answering the last question. */
     val lastTools = java.util.concurrent.CopyOnWriteArrayList<String>()
@@ -482,6 +477,21 @@ class Brain(private val context: Context) {
     }
 
     companion object {
+        /** A real question that deserves a proper answer, or an everyday command? Pure, unit-tested. */
+        fun isRealQuestion(t0: String): Boolean {
+            var s = t0.lowercase().trim().replace(Regex("[^a-z0-9'? ]"), " ").replace(Regex("\\s+"), " ").trim()
+            // fillers at the start don't decide anything: "so", "okay", "hey jarvis", "um"
+            repeat(3) { s = s.replace(Regex("^(hey |ok |okay |so |alright |um |uh |and |but |well |yo |jarvis |jervis )"), "") }
+            var cmd = s
+            // the way he really talks: "can you, uh, can you put down...", "can you a log..."
+            repeat(5) { cmd = cmd.replace(Regex("^(can you |could you |would you |will you |please |i need you to |i want you to |go ahead and |can u |uh |um |a |like |just |you )"), "") }
+            if (Regex("^(log|put down|write down|note|set|remind|start|stop|cancel|turn|call|text|send|reply|open|launch|play|pause|skip|resume|navigate|take me|directions|lights?|fed|we fed|we just|he (just )?(ate|pooped)|changed|made|remember|forget|add|run|dash|goodnight|good night|status report|answer|decline|volume|flashlight|mark|track|watch|book)\\b").containsMatchIn(cmd)) return false
+            if (Regex("^(what('?s| is) the time|what time is it|what day is it)").containsMatchIn(s)) return false
+            if (s.contains("?")) return true
+            if (Regex("^(what|who|whose|when|where|why|how|which|is|are|was|were|do|does|did|can|could|should|would|will|tell me|explain|give me|any |did the|who won|what about|help me|i need help|i'm thinking|i was thinking|thoughts on)\\b").containsMatchIn(s)) return true
+            if (Regex("\\b(what if|should i|would it|would that|would you|do you think|what do you think|your opinion|help me|how (do|can|should|would|much|many)|why|explain|advice|better|best|worth it|compare|versus|vs|plan|idea|recommend|suggest)\\b").containsMatchIn(s)) return true
+            return s.split(" ").size >= 12
+        }
         const val REPO = "ziyair23/jarvis-android"
         const val CONFIG_URL = "https://raw.githubusercontent.com/$REPO/main/config/persona.json"
     }

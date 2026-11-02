@@ -24,7 +24,7 @@ object Agents {
         "list_check", "list_read", "list_clear", "driving_mode", "media_control", "answer_call", "decline_call",
         // quick one-step jobs he does himself (an extra hop to an agent costs a whole second); agents keep the bigger jobs
         "log_baby", "baby_status", "log_earnings", "earnings_summary", "log_expense", "play_music", "navigate",
-        "lights", "open_app", "set_alarm", "journal_add", "pursuit_add", "judge_offer")
+        "lights", "open_app", "set_alarm", "journal_add", "pursuit_add", "judge_offer", "draft_text")
 
     /** Lights an agent up in the brain for a moment when its skill was used directly. */
     fun flash(id: String, ms: Long = 1600) { val t = System.currentTimeMillis(); active[id] = t; Thread { try { Thread.sleep(ms) } catch (_: Exception) {}; active.remove(id, t) }.start() }
