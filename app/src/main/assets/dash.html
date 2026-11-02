@@ -494,6 +494,7 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
     const u = rnd() * Math.PI * 2, v = Math.acos(2 * rnd() - 1), k = 0.35 + 0.45 * rnd();
     const q = cortex(Math.sin(v) * Math.cos(u), Math.cos(v), Math.sin(v) * Math.sin(u)); P.push([q[0]*k, q[1]*k, q[2]*k]); KIND.push(3);
   }
+  const NP = P.length, PX = new Float32Array(NP), PY = new Float32Array(NP), PZ = new Float32Array(NP), PF = new Float32Array(NP);
   // fibres: each point wired to its nearest neighbours
   const E = [];
   for (let i = 0; i < P.length; i++) {
@@ -514,7 +515,7 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
     const f = 3.2 / (3.2 - z), S = cv.width * 0.37;
     return [cv.width / 2 + x * S * f, cv.height / 2 - y * S * f, z, f];
   }
-  const visible = () => !document.hidden;
+  const visible = () => !document.hidden && !openId;
   function refresh() { if (A.length && !visible()) return; try { A = JSON.parse(J.agents()); } catch (e) { A = []; }
     A.forEach(a => { if (a.active && !lastActive[a.id]) for (let i = 0; i < 3; i++) pulses.push({id: a.id, t: performance.now() / 1000 + i * 0.25}); lastActive[a.id] = a.active; });
     if (openId === 'agent') panel(); }
@@ -529,25 +530,39 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
     live += (tgt - live) * (tgt > live ? 0.35 : 0.08);
     if (!drag) { yaw += vy * dt * (1 + 1.5 * live); vy += (0.12 - vy) * 0.02; pitch += vp * dt; vp *= 0.92; pitch += (-0.22 - pitch) * 0.01; }
     const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
-    const pp = P.map(proj);
+    // project every point into flat arrays (no new objects each frame: no stutter from cleanup)
+    { const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), S = cv.width * 0.37, hw = cv.width / 2, hh = cv.height / 2;
+      for (let i = 0; i < NP; i++) { const p = P[i]; const x = p[0] * cy + p[2] * sy; let z = -p[0] * sy + p[2] * cy; const y = p[1] * cp - z * sp; z = p[1] * sp + z * cp;
+        const f = 3.2 / (3.2 - z); PX[i] = hw + x * S * f; PY[i] = hh - y * S * f; PZ[i] = z; PF[i] = f; } }
     // sparks
     const actives = A.filter(a => a.active).map(a => a.id);
     for (let k = 0; k < 1 + Math.floor(live * 5); k++) if (rnd() < 0.6) sparks.push({e: Math.floor(rnd() * E.length), t});
     for (const id of actives) for (let k = 0; k < 2; k++) { const ne = nearEdges[id]; if (ne && ne.length) sparks.push({e: ne[Math.floor(rnd() * ne.length)], t}); }
     sparks = sparks.filter(sp => t - sp.t < 0.7);
     // fibres, faint at the back, warmer at the front
+    // drawn in a few batches by depth (one stroke each) instead of thousands of separate lines
     g.lineWidth = 1;
-    for (let n = 0; n < E.length; n++) { const [i, j] = E[n], a = pp[i], b = pp[j], d = (a[2] + b[2]) / 2, deep = KIND[i] === 3;
-      g.strokeStyle = `rgba(201,102,92,${(deep ? 0.03 : 0.05) + (deep ? 0.05 : 0.16) * (d + 1) / 2})`; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
+    for (let b = 0; b < 4; b++) {
+      g.beginPath();
+      for (let n = 0; n < E.length; n++) { const i = E[n][0], j = E[n][1], d = (PZ[i] + PZ[j]) / 2;
+        if (Math.min(3, Math.floor((d + 1) / 2 * 4)) !== b) continue; g.moveTo(PX[i], PY[i]); g.lineTo(PX[j], PY[j]); }
+      g.strokeStyle = `rgba(201,102,92,${0.05 + 0.16 * (b + 0.5) / 4})`; g.stroke();
+    }
     g.globalCompositeOperation = 'lighter';
-    for (const sp of sparks) { const [i, j] = E[sp.e], a = pp[i], b = pp[j], k = 1 - (t - sp.t) / 0.7;
-      g.strokeStyle = `rgba(232,140,125,${0.6 * k})`; g.lineWidth = 1.5; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
-      g.fillStyle = `rgba(250,205,192,${0.55 * k})`; g.beginPath(); g.arc((a[0]+b[0])/2, (a[1]+b[1])/2, 1.8, 0, 7); g.fill(); }
+    for (const sp of sparks) { const i = E[sp.e][0], j = E[sp.e][1], k = 1 - (t - sp.t) / 0.7;
+      g.strokeStyle = `rgba(232,140,125,${0.6 * k})`; g.lineWidth = 1.5; g.beginPath(); g.moveTo(PX[i], PY[i]); g.lineTo(PX[j], PY[j]); g.stroke();
+      g.fillStyle = `rgba(250,205,192,${0.55 * k})`; g.fillRect((PX[i] + PX[j]) / 2 - 1.8, (PY[i] + PY[j]) / 2 - 1.8, 3.6, 3.6); }
     g.globalCompositeOperation = 'source-over';
     // neurons
-    for (let i = 0; i < pp.length; i++) { const q = pp[i], depth = (q[2] + 1) / 2, k = KIND[i];
-      g.fillStyle = k === 3 ? `rgba(201,102,92,${0.08 + 0.12 * depth})` : k === 1 ? `rgba(226,180,170,${0.15 + 0.45 * depth})` : `rgba(239,235,228,${0.1 + 0.5 * depth})`;
-      g.beginPath(); g.arc(q[0], q[1], (k === 3 ? 1 : 1.25) * q[3], 0, 7); g.fill(); }
+    // neurons: batched by kind and depth, small squares (far cheaper than circles and they look the same at this size)
+    for (let grp = 0; grp < 3; grp++) for (let b = 0; b < 4; b++) {
+      const depth = (b + 0.5) / 4;
+      g.fillStyle = grp === 2 ? `rgba(201,102,92,${0.08 + 0.12 * depth})` : grp === 1 ? `rgba(226,180,170,${0.15 + 0.45 * depth})` : `rgba(239,235,228,${0.1 + 0.5 * depth})`;
+      g.beginPath();
+      for (let i = 0; i < NP; i++) { const k = KIND[i], gi = k === 3 ? 2 : k === 1 ? 1 : 0; if (gi !== grp) continue;
+        if (Math.min(3, Math.floor((PZ[i] + 1) / 2 * 4)) !== b) continue; const r = (k === 3 ? 1.1 : 1.35) * PF[i]; g.rect(PX[i] - r, PY[i] - r, r * 2, r * 2); }
+      g.fill();
+    }
     // dust drifting around the brain
     for (const d of dust) { d.a += d.s * dt; const q = proj([Math.cos(d.a) * d.r, d.y, Math.sin(d.a) * d.r]);
       g.fillStyle = `rgba(201,102,92,${0.1 + 0.25 * (q[2] + 1) / 2})`; g.beginPath(); g.arc(q[0], q[1], 1.6 * q[3], 0, 7); g.fill(); }
@@ -598,10 +613,14 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   requestAnimationFrame(frame);
 
   const pt = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) * cv.width / b.width, (e.clientY - b.top) * cv.height / b.height]; };
-  cv.addEventListener('pointerdown', e => { drag = {x: e.clientX, y: e.clientY, moved: 0, at: pt(e)}; cv.setPointerCapture(e.pointerId); });
-  cv.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved += Math.abs(dx) + Math.abs(dy);
+  cv.addEventListener('pointerdown', e => { drag = {x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), turning: false, at: pt(e)}; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
+  cv.addEventListener('pointermove', e => { if (!drag) return;
+    if (!drag.turning && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 14) drag.turning = true;   // only a real drag turns the brain
+    if (!drag.turning) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     yaw += dx * 0.01; pitch = Math.max(-1.1, Math.min(1.1, pitch + dy * 0.01)); vy = dx * 0.6; vp = dy * 0.6; drag.x = e.clientX; drag.y = e.clientY; });
-  cv.addEventListener('pointerup', e => { const d = drag; drag = null; if (!d || d.moved > 8) return;
+  cv.addEventListener('pointercancel', () => { drag = null; });
+  cv.addEventListener('pointerup', e => { const d = drag; drag = null; if (!d || d.turning || performance.now() - d.t0 > 700) return;
     const [x, y] = d.at; let best = 'jarvis', bd = 1e9; const c = proj([0, 0, 0]); bd = Math.hypot(x - c[0], y - c[1]) - 70;
     A.forEach(a => { if (a.id === 'jarvis') return; const p = proj(POS[a.id] || [0, 0, 1]); const dd = Math.hypot(x - p[0], y - p[1]) - 34; if (dd < bd) { bd = dd; best = a.id; } });
     if (bd >= 50) return;
