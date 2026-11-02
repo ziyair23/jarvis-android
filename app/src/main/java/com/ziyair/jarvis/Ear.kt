@@ -91,6 +91,13 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
             var errors = 0
             var last = Mode.MUTE
             var speechAt = 0L
+            // early read: the moment he pauses, start reading what he said; if he was done, the words are ready when the pause is confirmed
+            val earlyMs = cfg.optInt("ear_early_ms", 260)
+            var utt = FloatArray(RATE * 8); var uttN = 0
+            var quietMs = 0; var floor = 0.01f
+            val pre = FloatArray(CHUNK * 8); var preN = 0   // the last ~0.6 s before he started, so the first word is never clipped
+            var spec: java.util.concurrent.Future<String>? = null; var specN = 0
+            fun resetUtt() { uttN = 0; quietMs = 0; spec = null; specN = 0; preN = 0 }
             try {
                 rec.startRecording()
                 if (rec.recordingState != AudioRecord.RECORDSTATE_RECORDING) throw IllegalStateException("mic busy")
@@ -106,7 +113,7 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                     val m = mode
                     if (modeChanged || m != last) {
                         modeChanged = false
-                        if (m == Mode.LISTEN) { vad.reset(); speechAt = 0L }
+                        if (m == Mode.LISTEN) { vad.reset(); speechAt = 0L; resetUtt() }
                         if ((m == Mode.SLEEP || m == Mode.SPEAKING) && last != Mode.SLEEP && last != Mode.SPEAKING) { wake.reset(); wake.gate.reset() }
                         wake.sensitive(m != Mode.SPEAKING)
                         last = m
@@ -114,7 +121,7 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                     when (m) {
                         Mode.SLEEP, Mode.SPEAKING -> if ((if (m == Mode.SLEEP) wake.gate.feed(chunk) else wake.feed(chunk))) {
                             // catch whatever he says straight after "Jarvis", in the same breath
-                            if (m == Mode.SLEEP) { mode = Mode.LISTEN; speechStarted = false; vad.reset(); speechAt = 0L; last = Mode.LISTEN }
+                            if (m == Mode.SLEEP) { mode = Mode.LISTEN; speechStarted = false; vad.reset(); speechAt = 0L; last = Mode.LISTEN; resetUtt() }
                             main.post { events.onWake() }
                         }
                         Mode.LISTEN -> {
@@ -124,16 +131,40 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                             Orb.level(rms * 14f)
                             if (rms > 0.02f) loudAt = System.currentTimeMillis()
                             vad.acceptWaveform(f)
+                            val wasStarted = speechStarted
                             if (!speechStarted && vad.isSpeechDetected()) {
                                 speechStarted = true; speechAt = System.currentTimeMillis()
                                 main.post { events.onSpeechStart() }
+                            }
+                            if (!speechStarted) {
+                                floor = floor * 0.95f + rms * 0.05f
+                                if (preN == pre.size) System.arraycopy(pre, CHUNK, pre, 0, pre.size - CHUNK).also { preN -= CHUNK }
+                                System.arraycopy(f, 0, pre, preN, CHUNK); preN += CHUNK
+                            } else {
+                                if (!wasStarted && preN > 0) { System.arraycopy(pre, 0, utt, 0, preN); uttN = preN; preN = 0 }
+                                if (uttN + CHUNK > utt.size) utt = utt.copyOf(utt.size * 2)
+                                System.arraycopy(f, 0, utt, uttN, CHUNK); uttN += CHUNK
+                                if (EarlyRead.voiced(rms, floor)) { quietMs = 0; spec = null }   // he's still going: drop any early read
+                                else {
+                                    quietMs += CHUNK * 1000 / RATE
+                                    if (spec == null && quietMs >= earlyMs && uttN > RATE * 3 / 10) {
+                                        val snap = utt.copyOf(uttN); specN = uttN
+                                        spec = asr.submit<String> { decode(snap) }
+                                    }
+                                }
                             }
                             if (!vad.empty()) {
                                 val seg = vad.front()
                                 while (!vad.empty()) vad.pop()
                                 mode = Mode.HOLD; last = Mode.HOLD
                                 val samples = seg.samples
-                                asr.execute { transcribe(samples) }
+                                val early = spec
+                                if (early != null && EarlyRead.usable(samples.size, specN, RATE)) {
+                                    val t0 = System.currentTimeMillis()
+                                    asr.execute { val text = try { early.get() } catch (_: Exception) { "" }
+                                        if (text.isBlank()) transcribe(samples) else deliver(text, samples.size * 1000L / RATE, System.currentTimeMillis() - t0, true) }
+                                } else asr.execute { transcribe(samples) }
+                                resetUtt()
                             }
                         }
                         else -> {}
@@ -152,11 +183,10 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
         return true
     }
 
-    private fun transcribe(samples: FloatArray) {
-        val t0 = System.currentTimeMillis()
-        val r = recognizer(context)
-        if (r == null) { main.post { events.onEarFailed("speech model unloaded") }; return }
-        val text = try {
+    /** Speech to text for one stretch of audio (on the decoder thread). */
+    private fun decode(samples: FloatArray): String {
+        val r = recognizer(context) ?: return ""
+        return try {
             val s = r.createStream()
             s.acceptWaveform(samples, RATE)
             r.decode(s)
@@ -164,9 +194,18 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
             s.release()
             out
         } catch (e: Throwable) { Problems.log(context, "speech-to-text: ${e.message}"); "" }
+    }
+
+    private fun transcribe(samples: FloatArray) {
+        val t0 = System.currentTimeMillis()
+        if (recognizer(context) == null) { main.post { events.onEarFailed("speech model unloaded") }; return }
+        val text = decode(samples)
+        deliver(text, samples.size * 1000L / RATE, System.currentTimeMillis() - t0, false)
+    }
+
+    private fun deliver(text: String, speechMs: Long, ms: Long, early: Boolean) {
         val clean = text.trim().replace(Regex("\\s+"), " ")
-        val ms = System.currentTimeMillis() - t0
-        val speechMs = samples.size * 1000L / RATE
+        if (early) Trace.log(context, "ear", "read early: words were ready ${ms}ms after he finished")
         // just a cough, a breath or "um": keep listening
         val junk = clean.isBlank() || Regex("^(uh+|um+|hmm+|mm+|ah+|oh|eh|huh)[.?!]*$", RegexOption.IGNORE_CASE).matches(clean) || clean.count { it.isLetterOrDigit() } < 2
         main.post { if (junk) events.onNoise() else events.onHeard(clean, speechMs, ms) }
@@ -270,4 +309,12 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
             }
         }
     }
+}
+
+/** The early-read rules, kept pure so they're unit-tested. */
+object EarlyRead {
+    /** Is this bit of audio him talking (well above the room's background)? */
+    fun voiced(rms: Float, floor: Float) = rms > maxOf(0.012f, floor * 2.5f)
+    /** Use the early read only if the confirmed stretch isn't meaningfully longer than what was read (no words after the pause). */
+    fun usable(segSamples: Int, readSamples: Int, rate: Int) = readSamples > 0 && segSamples <= readSamples + rate * 35 / 100
 }

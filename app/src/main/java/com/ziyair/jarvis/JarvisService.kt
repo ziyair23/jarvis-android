@@ -143,6 +143,15 @@ class JarvisService : Service() {
         main.post { sayFirst(line, thenListen = ask) }
     }
 
+    /** While he's still talking: open the line to Claude and get the voice ready, so the answer starts sooner. */
+    @Volatile private var warmedAt = 0L
+    private fun prewarm() {
+        val now = System.currentTimeMillis()
+        if (now - warmedAt < 40_000) return
+        warmedAt = now
+        thread(name = "jarvis-prewarm") { brain.warmLine(); Piper.warm(this) }
+    }
+
     private val unlocked = object : android.content.BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy); Coach.maybeReview(this@JarvisService) } }
     }
@@ -281,11 +290,13 @@ class JarvisService : Service() {
         override fun onWake() {
             if (speaking) { interrupt(); return }
             if (busy) return
+            prewarm()
             this@JarvisService.onWake(fromEar = true)
         }
         override fun onSpeechStart() {
             if (!earListening) return
             openWindow(30)   // he's talking: wait for him to finish, however long
+            prewarm()
             Trace.log(this@JarvisService, "speech", "he started talking")
         }
         override fun onHeard(text: String, speechMs: Long, decodeMs: Long) {

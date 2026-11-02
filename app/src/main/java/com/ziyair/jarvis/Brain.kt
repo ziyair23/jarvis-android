@@ -37,8 +37,20 @@ class Brain(private val context: Context) {
         } catch (_: Exception) { }
     }
 
-    private fun systemPrompt(cfg: JSONObject): String {
+    private fun systemPrompt(cfg: JSONObject): String = stablePrompt(cfg) + livePart()
+
+    /** The part of his instructions that changes minute to minute: kept separate so the rest can be cached. */
+    private fun livePart(): String {
         val now = SimpleDateFormat("EEEE, MMMM d, h:mm a", Locale.US).format(Date())
+        return "\nRight now it is " + now + "." +
+            todaySoFar() +
+            (if (DriveMode.on) "\nHE IS DRIVING: one short sentence per reply, never ask him to look at or touch the phone." else "") +
+            (Inbox.lastAnnounced?.let { if (System.currentTimeMillis() - it.at < 180_000) "\nYou just read him a message from ${it.sender} on ${it.app}. If he dictates a reply, read it back and ask to send; reply with reply_message who='last'. Don't comment on the message itself." else "" } ?: "") +
+            (if (Stealth.on(prefs)) "\nQUIET MODE IS ON: your reply will be shown silently as text, so keep it short." else "")
+    }
+
+    /** Everything that stays the same from turn to turn (Claude caches it, so replies start sooner). */
+    private fun stablePrompt(cfg: JSONObject): String {
         val her = prefs.herName
         return cfg.optString("system") +
             (if (prefs.notes.isNotBlank()) "\n\nAbout him and his day: " + prefs.notes else "") +
@@ -47,17 +59,12 @@ class Brain(private val context: Context) {
             "\nHe talks naturally, not in commands, and speech-to-text garbles words. Work out what he means from loose wording and act on it: 'note that we just fed him', 'he ate', 'bottle's done', 'we fed the baby' all mean log_baby feed; 'changed him', 'he pooped' mean a diaper; 'he's down', 'he's out' mean asleep. If the meaning is reasonably clear, do it and confirm in a few words; only ask a short question when it's genuinely ambiguous. Never ask him to rephrase or use specific words." +
             Memory.promptBlock(context) +
             Coach.promptBlock(context) +
-            "\nRight now it is " + now + "." +
-            todaySoFar() +
-            (if (DriveMode.on) "\nHE IS DRIVING: one short sentence per reply, never ask him to look at or touch the phone." else "") +
-            (Inbox.lastAnnounced?.let { if (System.currentTimeMillis() - it.at < 180_000) "\nYou just read him a message from ${it.sender} on ${it.app}. If he dictates a reply, read it back and ask to send; reply with reply_message who='last'. Don't comment on the message itself." else "" } ?: "") +
             "\nMessages you read out are his private business: read them, then drop them. Never bring a message up again, never lecture or check in about it, unless he asks. If something in one genuinely worries you, say so once, in one short sentence, and then leave it completely; jokes between him and the people close to him are theirs." +
             "\nYou are speaking out loud through his phone, so never use lists, markdown, emojis or URLs." +
             "\nYou can act on his phone with your tools (timers, reminders, alarms, calls, texts, directions, music, weather). When he tells you something worth keeping for future days, or asks you to remember something, save it with remember. Use them when he asks, then confirm in one short line. Times you pass to tools are 24-hour local time." +
             "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. When he mentions something to buy or do later ('we need wipes', 'add milk'), put it on a list; when he mentions paying for gas, food or car stuff, log it with log_expense (his Jarvis spending on Claude is 'spending', not an expense). If he asked you something and a tool can do it, do it rather than telling him how." +
             "\nYou can drive his phone: open_app for any app, media_control for play/pause/skip, stop_navigation to cancel directions, and phone_task for anything inside an app (it looks at the screen and taps through it like a person: DMs on Snapchat or Instagram, searching and playing a video, settings). Give phone_task the whole job in one sentence, then confirm in a few words what it did. Never post, send, buy or delete anything without his clear yes, and pass confirmed=true only after that yes." +
             "\nQuiet mode: when he says he's going somewhere he can't have you talking (work, a meeting, class, church, a movie, 'go quiet', 'stealth mode'), call quiet_mode on, with minutes if he gives a time, and confirm in three or four words. When he says he's out, back, or done ('I'm out', 'quiet mode off', 'catch me up'), call quiet_mode off and turn what it returns into a short spoken catch-up starting 'Welcome back, sir.'" +
-            (if (Stealth.on(prefs)) "\nQUIET MODE IS ON: your reply will be shown silently as text, so keep it short." else "") +
             "\nOne reply per request: when you use one of his phone tools, don't write any words alongside the tool call, wait for the result and then answer once. After a web_search, always say the actual answer (scores, times, facts); never reply with just 'Done'. Tool results that say Logged, Set, Opened, Sent, Done and the like mean it worked: say so plainly and never follow up with a 'correction', a second answer or an apology. Only answer what he just asked; don't add notes about earlier conversation, the dashboard numbers or older messages unless he asks." +
             "\nWhen he asks what something is, to read something, or anything that needs eyes ('what's this', 'read this', 'what does this say'), use look, then answer from the photo in a sentence or two. For anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks." +
             (if (Agents.on(context)) "\nYour agents: some skills named above now live with your specialist agents. Hand the job over with one sentence holding every detail he gave: agent_phone (calls, texts, DMs, apps, music, directions, anything on screen), agent_money (earnings, expenses, the Macan goal, his budget), agent_family (Ziyair's feeds, diapers and sleep, the baby journal, lights and the house), agent_planner (his calendar, reminder lists, alarms, the morning briefing, protocols, planning his day or week), agent_research (questions that need real digging: comparisons, how-tos, prices, plans; quick facts you can still search yourself), agent_pursuit (his clothing brand: ideas, the shoot list, launch to-dos, orders), agent_memory (what you know about him: 'what do you know about me', corrections, tidying, forgetting; quick saves you can still do yourself with remember), agent_builder (when he wants you to change how you work or build something new into yourself). Then say what they did, in your own words, in one line. The confirm-before-sending rule still applies: pass confirmed=true only after his clear yes." else "")
@@ -87,7 +94,7 @@ class Brain(private val context: Context) {
 
     /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. */
     fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, onAck: (() -> Unit)? = null): String {
-        val voice = Sentences(onSentence)
+        val voice = Sentences(onSentence, config().optBoolean("speak_early", true))
         val key = prefs.claudeKey
         if (key.isBlank()) return "I need my Claude key first, sir. Open the Jarvis app and add it."
         val cfg = config()
@@ -148,7 +155,9 @@ class Brain(private val context: Context) {
             val body = JSONObject()
                 .put("model", model)
                 .put("max_tokens", maxTokens)
-                .put("system", systemPrompt(cfg) + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can occasionally misfire on the TV. Only if what you heard is obviously not meant for you (TV dialogue, song lyrics, or a meaningless one or two word fragment) reply with exactly [ignore]. Anything that could be a request or a question, even garbled, is for you: work out what he meant and answer it." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. Only if it is obviously not meant for you (clearly him talking to someone else, the TV, song lyrics), reply with exactly [ignore]. When in doubt, it's for you: answer it." else "")
+                .put("system", JSONArray()
+                    .put(JSONObject().put("type", "text").put("text", stablePrompt(cfg)).put("cache_control", JSONObject().put("type", "ephemeral")))
+                    .put(JSONObject().put("type", "text").put("text", livePart() + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can occasionally misfire on the TV. Only if what you heard is obviously not meant for you (TV dialogue, song lyrics, or a meaningless one or two word fragment) reply with exactly [ignore]. Anything that could be a request or a question, even garbled, is for you: work out what he meant and answer it." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. Only if it is obviously not meant for you (clearly him talking to someone else, the TV, song lyrics), reply with exactly [ignore]. When in doubt, it's for you: answer it." else "")))
                 .put("tools", tools)
                 .put("messages", clean)
             val (code, resp) = try {
@@ -228,7 +237,7 @@ class Brain(private val context: Context) {
      * Hands finished sentences to the voice as they stream in, so he starts talking after the first one.
      * Holds back "[ignore]" and strips a leading "correction".
      */
-    private class Sentences(val out: ((String) -> Unit)?) {
+    class Sentences(val out: ((String) -> Unit)?, private val early: Boolean = true) {
         private val buf = StringBuilder()
         private val said = StringBuilder()
         var spoke = false; private set
@@ -239,6 +248,12 @@ class Brain(private val context: Context) {
             buf.append(t)
             if (buf.contains("[ignore]", true)) { ignored = true; buf.setLength(0); return }
             if (buf.startsWith("[") && buf.length < 10) return
+            // start talking at the first natural pause (a comma after a few words), not the end of the first sentence
+            if (!spoke && early) {
+                val c = Regex("[,;:\u2014](\\s)").findAll(buf).firstOrNull { m -> buf.substring(0, m.range.first).trim().split(Regex("\\s+")).size >= 4 && !Regex("\\d$").containsMatchIn(buf.substring(0, m.range.first)) }
+                val dot = Regex("[.!?](\\s)").find(buf)
+                if (c != null && (dot == null || c.range.first < dot.range.first)) { val end = c.range.first + 1; emit(buf.substring(0, end)); buf.delete(0, end) }
+            }
             while (true) {
                 // the first sentence goes out straight away; after that, speak in fuller chunks so it flows
                 val min = if (spoke) 170 else 2
@@ -327,7 +342,7 @@ class Brain(private val context: Context) {
                 }
             }
         }
-        c.disconnect()
+        // no disconnect: closing the stream hands the connection back to the pool, so the next question skips the handshake
         val content = JSONArray()
         blocks.filter { it.length() > 0 && !(it.optString("type") == "text" && it.optString("text").isBlank()) &&
             !(it.optString("type") == "thinking" && it.optString("thinking").isBlank() && it.optString("signature").isBlank()) }.forEach { content.put(it) }
@@ -388,8 +403,23 @@ class Brain(private val context: Context) {
         val code = c.responseCode
         val stream = if (code in 200..299) c.inputStream else c.errorStream
         val resp = stream?.bufferedReader()?.use { it.readText() } ?: ""
-        c.disconnect()
         return code to resp
+    }
+
+    /**
+     * Opens the line to Claude ahead of time (called the moment he says "Jarvis"), so the real question doesn't pay for
+     * the secure handshake. A free call; the connection then waits in the pool for a few minutes.
+     */
+    fun warmLine() {
+        val key = prefs.claudeKey; if (key.isBlank()) return
+        try {
+            val c = URL("https://api.anthropic.com/v1/models?limit=1").openConnection() as HttpURLConnection
+            c.connectTimeout = 6000; c.readTimeout = 6000
+            c.setRequestProperty("x-api-key", key)
+            c.setRequestProperty("anthropic-version", "2023-06-01")
+            val code = c.responseCode
+            (if (code in 200..299) c.inputStream else c.errorStream)?.use { it.readBytes() }
+        } catch (_: Exception) {}
     }
 
     companion object {
