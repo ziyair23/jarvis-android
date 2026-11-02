@@ -159,7 +159,7 @@ input::placeholder{color:#5f5b56}
 </div>
 <div class="foot"><button id="quietBtn" class="ghost" onclick="D && D.stealth ? J.quietEnd() : J.quietStart()">Quiet mode</button></div>
 
-<div id="scrim" onclick="closeSheet()"></div>
+<div id="scrim" onclick="scrimTap()"></div>
 
 <div class="sheet" id="sh-money"><div class="head"><div class="grab"></div><div class="title"><h2>Money</h2><button class="icon" aria-label="Close" onclick="closeSheet()">×</button></div></div><div class="body">
   <div class="card">
@@ -272,9 +272,12 @@ const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return m < 
 const KIND = {feed: 'Fed', diaper: 'Diaper', sleep: 'Asleep', wake: 'Awake'};
 
 // ---- sheets: one page at a time slides up over the brain; back button, the scrim or a swipe down closes it ----
-let openId = null, pushed = false;
+let openId = null, pushed = false, openedAt = 0;
+// a finger tap that opens a page is followed by a "click" a moment later, which would land on the backdrop and close it again
+function scrimTap() { if (performance.now() - openedAt < 600) return; closeSheet(); }
 function openSheet(id) {
   if (openId === id) return;
+  openedAt = performance.now();
   // the back button closes a sheet; Android's WebView refuses history for app files, so never let that stop the sheet opening
   if (openId) $('sh-' + openId).classList.remove('open'); else { try { history.pushState({sheet: id}, ''); pushed = true; } catch (e) { pushed = false; } }
   openId = id;
@@ -539,6 +542,8 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   }
   function openAgent(id) { sel = id; openSheet('agent'); }
   window.openAgent = openAgent;
+  // where an agent's dot is on screen right now (used by the checks)
+  window.agentAt = id => { const b = cv.getBoundingClientRect(), q = proj(POS[id] || [0, 0, 1]); return [b.left + q[0] * b.width / cv.width, b.top + q[1] * b.height / cv.height]; };
   function refresh() { if (A.length && !visible()) return; try { A = JSON.parse(J.agents()); } catch (e) { A = []; } bar();
     A.forEach(a => { if (a.active && !lastActive[a.id]) for (let i = 0; i < 3; i++) pulses.push({id: a.id, t: performance.now() / 1000 + i * 0.25}); lastActive[a.id] = a.active; });
     if (openId === 'agent') panel(); }
@@ -645,7 +650,9 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   cv.addEventListener('pointercancel', () => { drag = null; });
   cv.addEventListener('pointerup', e => { const d = drag; drag = null; if (!d || d.turning || performance.now() - d.t0 > 700) return;
     const [x, y] = d.at; let best = 'jarvis', bd = 1e9; const c = proj([0, 0, 0]); bd = Math.hypot(x - c[0], y - c[1]) - 70;
-    A.forEach(a => { if (a.id === 'jarvis') return; const p = proj(POS[a.id] || [0, 0, 1]); const dd = Math.hypot(x - p[0], y - p[1]) - 34; if (dd < bd) { bd = dd; best = a.id; } });
+    let ab = 1e9, aid = null;
+    A.forEach(a => { if (a.id === 'jarvis') return; const p = proj(POS[a.id] || [0, 0, 1]); const dd = Math.hypot(x - p[0], y - p[1]) - 34; if (dd < ab) { ab = dd; aid = a.id; } });
+    if (aid && (ab < bd || ab < 0)) { bd = ab; best = aid; }   // right on an agent's dot: the agent wins, even next to Jarvis
     if (bd >= 50) return;
     if (best === 'jarvis') { orbTap(); return; }           // the centre is Jarvis: tap to talk (or to stop him)
     tapped = performance.now(); openAgent(best); });
@@ -654,7 +661,7 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   function hitAt(cx0, cy0) {
     const b = cv.getBoundingClientRect(), x = (cx0 - b.left) * cv.width / b.width, y = (cy0 - b.top) * cv.height / b.height;
     const c = proj([0, 0, 0]); let best = 'jarvis', bd = Math.hypot(x - c[0], y - c[1]) - 70;
-    A.forEach(a => { if (a.id === 'jarvis') return; const p = proj(POS[a.id] || [0, 0, 1]); const dd = Math.hypot(x - p[0], y - p[1]) - 34; if (dd < bd) { bd = dd; best = a.id; } });
+    A.forEach(a => { if (a.id === 'jarvis') return; const p = proj(POS[a.id] || [0, 0, 1]); const dd = Math.hypot(x - p[0], y - p[1]) - 34; if (dd < bd || dd < 0) { bd = dd; best = a.id; } });
     return bd < 50 ? best : null;
   }
   cv.addEventListener('click', e => { if (performance.now() - tapped < 600 || openId) return; const id = hitAt(e.clientX, e.clientY); if (id && id !== 'jarvis') openAgent(id); });

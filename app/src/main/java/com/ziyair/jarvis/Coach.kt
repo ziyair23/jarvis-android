@@ -174,7 +174,11 @@ object Coach {
             val tools = tools()
             for (round in 1..4) {
                 val body = JSONObject().put("model", model).put("max_tokens", 900).put("system", system).put("tools", tools).put("messages", msgs)
-                val resp = post(p.claudeKey, body) ?: break
+                val resp = post(p.claudeKey, body) ?: run {
+                    // no signal: don't lose the day; try again on the next unlock
+                    if (round == 1) p.sp.edit().putLong("coach_last_review", last).apply()
+                    null
+                } ?: break
                 Spend.record(c, cfg, model, resp.optJSONObject("usage"))
                 val content = resp.optJSONArray("content") ?: JSONArray()
                 val results = JSONArray()

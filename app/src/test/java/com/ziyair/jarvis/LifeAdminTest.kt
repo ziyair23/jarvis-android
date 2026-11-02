@@ -28,6 +28,11 @@ class LifeAdminTest {
             "Your bill is ready to view")) assertFalse(t, LifeWatch.relevant(t))
     }
 
+    @Test fun hisDrivingAppsArentBills() {
+        for (a in listOf("Dasher", "DoorDash - Dasher", "Uber Driver", "Spark Driver", "Amazon Flex")) assertTrue(a, LifeWatch.workApp(a))
+        for (a in listOf("T-Mobile", "Messages", "Progressive", "Chase")) assertFalse(a, LifeWatch.workApp(a))
+    }
+
     @Test fun businessSendersOnly() {
         assertTrue(LifeWatch.businessSender("72345"))
         assertTrue(LifeWatch.businessSender("T-Mobile"))
@@ -58,6 +63,9 @@ class LifeAdminTest {
     @Test fun onTheDashboardAndInTheBrain() {
         val html = File("src/main/assets/dash.html").readText()
         assertTrue(html.contains("id=\"life-list\""))
+        // a finger tap that opens a page must not close it again a moment later (the backdrop ignores that first click)
+        assertTrue(html.contains("onclick=\"scrimTap()\"") && html.contains("performance.now() - openedAt < 600"))
+        assertTrue("agents are always reachable from buttons under the brain", html.contains("id=\"agbar\""))
         assertTrue(html.contains("bills:[") && html.contains("appts:["))
         assertTrue(File("src/main/AndroidManifest.xml").readText().contains("android.permission.READ_SMS"))
     }
