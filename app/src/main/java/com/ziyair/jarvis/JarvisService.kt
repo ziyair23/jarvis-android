@@ -557,7 +557,7 @@ class JarvisService : Service() {
     private fun isStop(t: String): Boolean {
         val s = t.lowercase(Locale.US).replace(Regex("[^a-z' ]"), " ").replace(Regex("\\b(hey|ok|okay|alright|jarvis|please|sir|yo)\\b"), " ").replace(Regex("\\s+"), " ").trim()
         if (s.isEmpty() || s.split(" ").size > 4) return false
-        return Regex("^(stop( it| listening| talking| now)?|that'?s (all|it|enough)|i'?m done|we'?re done|done|go to sleep|sleep|bye|later|shut up|be quiet|quiet|enough|cancel)$").matches(s)
+        return Regex("^(sto+p+( it| listening| listenin| talking| now)?|that'?s (all|it|enough)|i'?m done|we'?re done|done|go to sleep|sleep|bye|later|shut up|be quiet|quiet|enough|cancel)$").matches(s)
     }
 
     private fun stopListening(text: String) {

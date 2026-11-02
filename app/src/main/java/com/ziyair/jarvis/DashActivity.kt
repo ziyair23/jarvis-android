@@ -103,7 +103,8 @@ class DashActivity : Activity() {
         /** "state,level" for the big orb on the dashboard (0 idle, 1 listening, 2 thinking, 3 speaking). */
         @JavascriptInterface fun orb(): String = Orb.now().let { "${it.first},${it.second}" }
         @JavascriptInterface fun hush() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_HUSH)) }
-        @JavascriptInterface fun agents(): String = Agents.json(ctx).toString()
+        @JavascriptInterface fun agents(): String = try { Agents.json(ctx).toString() } catch (e: Exception) { Trace.log(ctx, "dash", "agents list failed: ${e.message}"); "[]" }
+        @JavascriptInterface fun jsError(msg: String) { Trace.log(ctx, "dash", "screen error: ${msg.take(200)}") }
         @JavascriptInterface fun agentToggle(id: String, on: Boolean) { Agents.setEnabled(ctx, id, on); LogBus.changed() }
         @JavascriptInterface fun agentTeach(id: String, text: String) { if (id == "jarvis") Memory.add(ctx, text) else if (id == "coach") Coach.addLesson(ctx, text, "marcus") else Agents.addNote(ctx, id, text); LogBus.changed() }
         @JavascriptInterface fun agentForget(id: String, at: String) { if (id == "coach") Coach.removeAt(ctx, at.toLongOrNull() ?: 0L) else Agents.removeNote(ctx, id, at.toLongOrNull() ?: 0L); LogBus.changed() }
