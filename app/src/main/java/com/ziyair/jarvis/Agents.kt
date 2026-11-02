@@ -53,7 +53,7 @@ object Agents {
 
     val RESEARCH = Def("research", "Research", "Digs into questions that need more than one search: comparisons, how-tos, prices, plans.",
         setOf(), "Search several times from different angles, read what comes back, and answer with the bottom line in two to four plain sentences: " +
-            "the answer first, then the one or two facts that matter (numbers, names, dates). No links or source names unless asked. Say so if sources disagree.")
+            "the answer first, then the one or two facts that matter (numbers, names, dates, and where it came from for prices and deals). " + Web.GUIDE)
 
     val PURSUIT = Def("pursuit", "Pursuit", "His business partner for the Pursuit clothing brand: ideas, the shoot list, launch to-dos and orders.",
         setOf("pursuit_add", "pursuit_list", "pursuit_done"),
@@ -187,8 +187,8 @@ object Agents {
             else if (id == "coach") { val b = Coach.tools(); for (i in 0 until b.length()) tools.put(b.get(i)) }
             else { val all = actions.tools(); for (i in 0 until all.length()) { val t = all.getJSONObject(i); if (t.optString("name") in d.tools) tools.put(t) } }
             // the research agent searches the web itself (Claude's search tool, a few searches per job)
-            if (id == "research") tools.put(JSONObject().put("type", "web_search_20250305").put("name", "web_search").put("max_uses", cfg.optInt("research_max_searches", 4))
-                .put("user_location", JSONObject().put("type", "approximate").put("city", Prefs(c).city.ifBlank { "Spokane" }).put("region", "Washington").put("country", "US")))
+            // the research agent searches and reads the real pages itself (a few searches and pages per job)
+            if (id == "research") { val w = Web.tools(c, cfg.optInt("research_max_searches", 5), cfg.optInt("research_max_pages", 4)); for (i in 0 until w.length()) tools.put(w.get(i)) }
             tools.put(JSONObject().put("name", "note_to_self").put("description", "Save one short thing you've learned about how he likes this done (a habit, a preference, a correction), so you do it better next time. Not for one-off details.")
                 .put("input_schema", JSONObject().put("type", "object").put("properties", JSONObject().put("note", JSONObject().put("type", "string"))).put("required", JSONArray().put("note"))))
             tools.getJSONObject(tools.length() - 1).put("cache_control", JSONObject().put("type", "ephemeral"))
@@ -203,7 +203,15 @@ object Agents {
             for (round in 1..(if (id == "builder") 14 else 6)) {
                 val body = JSONObject().put("model", model).put("max_tokens", when (id) { "builder" -> 4000; "research" -> 900; else -> 500 }).put("system", system)
                     .put("tools", tools).put("messages", msgs)
-                val resp = post(key, body) ?: run { result = "The ${d.name} agent couldn't reach Claude."; return result }
+                val resp = post(key, body) ?: run {
+                    // the newer web tools turned down: drop back to the basic search once and try again
+                    if (id == "research" && Web.fallBack(c, lastError)) {
+                        for (i in tools.length() - 1 downTo 0) if (Web.isWeb(tools.getJSONObject(i))) tools.remove(i)
+                        val w = Web.tools(c, cfg.optInt("research_max_searches", 5), 0); for (i in 0 until w.length()) tools.put(w.get(i))
+                        return@run null
+                    }
+                    result = "The ${d.name} agent couldn't reach Claude."; return result
+                } ?: continue
                 Spend.record(c, cfg, model, resp.optJSONObject("usage"))
                 val content = resp.optJSONArray("content") ?: JSONArray()
                 val text = StringBuilder(); val results = JSONArray(); val outs = ArrayList<String>()
@@ -252,6 +260,7 @@ object Agents {
         return result
     }
 
+    @Volatile private var lastError = ""
     private fun post(key: String, body: JSONObject): JSONObject? = try {
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
         c.requestMethod = "POST"; c.doOutput = true
@@ -262,6 +271,7 @@ object Agents {
         c.outputStream.use { it.write(body.toString().toByteArray()) }
         val ok = c.responseCode in 200..299
         val text = (if (ok) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+        if (!ok) lastError = text
         if (ok) JSONObject(text) else null
     } catch (_: Exception) { null }
 
