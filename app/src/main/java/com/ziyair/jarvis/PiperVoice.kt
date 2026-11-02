@@ -283,12 +283,31 @@ object Piper {
         val (m, sid) = current(c) ?: return false
         val text = speakable(text0).ifBlank { return true }
         if (Voicebank.fits(text)) { val a = synth(c, text, speed) ?: return false; out(a.first, a.second); return true }
+        // one sentence at a time, each played the moment it's ready, joined with the voice's own natural spacing.
+        // (Not the engine's streaming callback: the app's build tools reshape that callback and the engine then
+        // crashes the whole app looking for it. That was the crash in builds 80 to 116.)
         return try {
-            val e = engine(c, m) ?: return false
-            val rate = e.sampleRate()
-            e.generateWithCallback(text, sid, speed) { s -> if (s.isNotEmpty()) out(s.copyOf(), rate); if (keepGoing()) 1 else 0 }
+            for (part in sentences(text)) {
+                if (!keepGoing()) break
+                val a = synth(c, part, speed) ?: return false
+                out(a.first, a.second)
+            }
             true
         } catch (e: Throwable) { Problems.log(c, "voice: ${e.message}"); false }
+    }
+
+    /** Splits text into sentences the way the voice engine does (keeping "Mr." and "St." together). Pure, unit-tested. */
+    fun sentences(text: String): List<String> {
+        val out = ArrayList<String>(); val sb = StringBuilder()
+        val words = text.trim().split(Regex("\\s+"))
+        for ((i, w) in words.withIndex()) {
+            if (sb.isNotEmpty()) sb.append(' ')
+            sb.append(w)
+            val end = Regex("[.!?][\"')\u201d]*$").containsMatchIn(w) && !Regex("(?i)^(mr|mrs|ms|dr|st|vs|jr|sr|e\\.g|i\\.e)\\.$").matches(w)
+            if (end && i < words.size - 1) { out.add(sb.toString()); sb.setLength(0) }
+        }
+        if (sb.isNotBlank()) out.add(sb.toString())
+        return out
     }
 
     /** Only if it's already in the phrasebook (never makes him wait). */

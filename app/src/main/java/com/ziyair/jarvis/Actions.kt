@@ -158,18 +158,19 @@ class Actions(private val context: Context) {
             "call" -> {
                 if (!has(Manifest.permission.CALL_PHONE)) return "He needs to allow calls: open the Jarvis app and tap Allow calls and texts."
                 if (!canOpenApps()) return NEED_OPEN_APPS
-                val (name, number) = findNumber(input.getString("who")) ?: return "No contact found for that name."
+                val (name, number) = findNumber(input.getString("who")) ?: return closeContact(input.getString("who"))?.let { "No contact called that, but there's $it. Ask him if he meant $it; if he says yes, call $it." } ?: "No contact found for that name."
                 context.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(number))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 "Calling $name."
             }
             "send_text" -> {
                 if (!input.optBoolean("confirmed")) return "Not sent. Read the message back and ask him to confirm first."
                 val msg = input.getString("message")
+                if (!readBackOk(msg)) return NOT_READ_BACK
                 // if they messaged recently, reply right in that chat (no tap needed)
                 Inbox.findByName(partnerAlias(input.getString("who")))?.takeIf { it.reply != null }?.let { m ->
                     if (Inbox.reply(context, m, msg)) return "Sent to ${m.sender} on ${m.app}."
                 }
-                val (name, number) = findNumber(input.getString("who")) ?: return "No contact found for that name."
+                val (name, number) = findNumber(input.getString("who")) ?: return closeContact(input.getString("who"))?.let { "Not sent: no contact called that, but there's $it. Ask him if he meant $it." } ?: "No contact found for that name."
                 // he said yes: send it straight away, no tapping
                 if (has(Manifest.permission.SEND_SMS)) try {
                     val sms = if (android.os.Build.VERSION.SDK_INT >= 31) context.getSystemService(android.telephony.SmsManager::class.java) else @Suppress("DEPRECATION") android.telephony.SmsManager.getDefault()
@@ -224,6 +225,7 @@ class Actions(private val context: Context) {
             }
             "reply_message" -> {
                 if (!input.optBoolean("confirmed")) return "Not sent. Read the reply back and ask him to confirm first."
+                if (!readBackOk(input.optString("message"))) return NOT_READ_BACK
                 val m = Inbox.find(input.optString("who")) ?: return "I can't find a recent message from them to reply to. Use send_text instead if it's a text."
                 if (m.reply == null) return "That app doesn't allow quick replies from notifications."
                 if (Inbox.reply(context, m, input.getString("message"))) "Replied to ${m.sender} on ${m.app}." else "The reply didn't go through."
@@ -319,6 +321,25 @@ class Actions(private val context: Context) {
         return if (Regex("^(her|my girl(friend)?|girlfriend|my partner|partner|wife|bae|my baby mama|baby mama)$", RegexOption.IGNORE_CASE).matches(who) && prefs.herName.isNotBlank()) prefs.herName else who
     }
 
+    /** The confirm rule, in code: a message only goes out if Jarvis read those exact words back in the last few minutes. */
+    private fun readBackOk(message: String): Boolean {
+        val h = Prefs(context).history()
+        val recent = (h.length() - 1 downTo maxOf(0, h.length() - 6)).map { h.getJSONObject(it) }
+            .filter { it.optString("role") == "assistant" && System.currentTimeMillis() - it.optLong("at") < 10 * 60_000L }.take(2).map { it.optString("content") }
+        val ok = Fast.readBack(recent, message)
+        if (!ok) Trace.log(context, "blocked", "not sent, wasn't read back: \"${message.take(80)}\"")
+        return ok
+    }
+
+    /** A misheard name ("Justustice"): the one contact it's clearly meant to be, or null. */
+    private fun closeContact(who: String): String? {
+        if (!has(Manifest.permission.READ_CONTACTS)) return null
+        val names = ArrayList<String>()
+        context.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME), null, null, null)?.use { c ->
+            while (c.moveToNext() && names.size < 3000) c.getString(0)?.let { names.add(it) } }
+        return Fast.closestName(who, names)
+    }
+
     private fun findNumber(whoIn: String): Pair<String, String>? {
         val who = partnerAlias(whoIn)
         if (who.replace(Regex("[^0-9+]"), "").length >= 7) return who to who
@@ -365,6 +386,7 @@ class Actions(private val context: Context) {
     private fun bool(d: String) = JSONObject().put("type", "boolean").put("description", d)
 
     companion object {
+        const val NOT_READ_BACK = "Not sent: those exact words weren't read back to him. Read the exact message back in quotes and ask him first."
         const val YT_MUSIC = "com.google.android.apps.youtube.music"
         const val SPOTIFY = "com.spotify.music"
         const val NEED_OPEN_APPS = "He needs to let Jarvis open apps: open the Jarvis app and tap Allow opening apps."
