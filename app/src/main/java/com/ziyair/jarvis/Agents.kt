@@ -240,7 +240,6 @@ object Agents {
         c.outputStream.use { it.write(body.toString().toByteArray()) }
         val ok = c.responseCode in 200..299
         val text = (if (ok) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-        c.disconnect()
         if (ok) JSONObject(text) else null
     } catch (_: Exception) { null }
 

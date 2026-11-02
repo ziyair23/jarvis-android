@@ -298,6 +298,13 @@ object Piper {
         return Voicebank.get(c, m.dir + "_" + sid + (if (sid == BLEND_SLOT) "_" + blendKey.hashCode().toUInt().toString(16) else ""), text, speed)
     }
 
-    /** Load the voice ahead of time so the first reply isn't slow. */
-    fun warm(c: Context) { try { current(c)?.let { engine(c, it.first) } } catch (_: Throwable) {} }
+    /** Load the voice ahead of time, and run it once, so the first words of a reply come out without a pause. */
+    @Volatile private var primedFor: Any? = null
+    @Synchronized fun warm(c: Context) {
+        try {
+            val (m, sid) = current(c) ?: return
+            val e = engine(c, m) ?: return
+            if (primedFor !== e) { e.generate("Hm.", sid, 1f); primedFor = e }
+        } catch (_: Throwable) {}
+    }
 }
