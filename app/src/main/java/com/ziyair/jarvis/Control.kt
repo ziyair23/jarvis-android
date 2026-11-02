@@ -108,14 +108,30 @@ object Apps {
  */
 class JarvisAccess : AccessibilityService() {
     override fun onServiceConnected() { me = this }
+    private var lastLook = 0L
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // DoorDash offers: read pay and miles off the Dasher screen and give a verdict
+        // DoorDash offers: read pay and miles off the Dasher screen and give a verdict.
+        // The Dasher map changes many times a second, so look at most about once a second, and only read the whole
+        // screen when an offer (an Accept button) is actually showing; that keeps Jarvis light while he dashes.
         if (event?.packageName?.toString() != OfferJudge.DASHER) return
-        try {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastLook < 900) return
+        lastLook = now
+        try { offerTexts()?.let { OfferJudge.check(this, it) } } catch (_: Exception) {}
+    }
+
+    /** All the text of a Dasher offer on screen (even when it pops up over the map), or null if no offer is showing. */
+    fun offerTexts(): List<String>? {
+        val roots = (try { windows.mapNotNull { it.root } } catch (_: Exception) { emptyList() }) + listOfNotNull(rootInActiveWindow)
+        for (r in roots) {
+            if (r.packageName?.toString() != OfferJudge.DASHER) continue
+            val hasOffer = !r.findAccessibilityNodeInfosByText("Accept").isNullOrEmpty() || !r.findAccessibilityNodeInfosByText("Decline").isNullOrEmpty()
+            if (!hasOffer) continue
             val texts = ArrayList<String>()
-            walk(rootInActiveWindow) { n -> (n.text ?: n.contentDescription)?.toString()?.let { if (it.isNotBlank() && it.length < 80) texts.add(it) } }
-            OfferJudge.check(this, texts)
-        } catch (_: Exception) {}
+            walk(r) { n -> (n.text ?: n.contentDescription)?.toString()?.let { if (it.isNotBlank() && it.length < 80) texts.add(it) } }
+            return texts
+        }
+        return null
     }
     override fun onInterrupt() {}
     override fun onDestroy() { if (me === this) me = null; super.onDestroy() }

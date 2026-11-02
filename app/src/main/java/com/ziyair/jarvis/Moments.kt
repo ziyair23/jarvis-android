@@ -78,7 +78,7 @@ object CallControl {
  */
 object OfferJudge {
     const val DASHER = "com.doordash.driverapp"
-    private var lastSig = ""; private var lastAt = 0L; private var lastCheck = 0L
+    private var lastSig = ""; private var lastAt = 0L; private var lastCheck = 0L; private var lastMiss = 0L
 
     fun minPerMile(p: Prefs) = p.sp.getFloat("min_per_mile", 2f).toDouble()
     fun on(p: Prefs) = p.sp.getBoolean("judge_offers", true)
@@ -90,22 +90,16 @@ object OfferJudge {
         return if (!on(p)) "Order judging is off." else "Judging offers at ${Earnings.money(minPerMile(p))} a mile."
     }
 
-    /** Called with all the text on the Dasher screen. */
-    fun check(context: Context, texts: List<String>) {
-        val now = System.currentTimeMillis()
-        if (now - lastCheck < 700) return
-        lastCheck = now
-        val p = Prefs(context)
-        if (!on(p) || !p.running || Stealth.on(p)) return
-        val all = texts.joinToString(" | ")
-        if (!Regex("\\baccept\\b", RegexOption.IGNORE_CASE).containsMatchIn(all)) return
-        val pay = Regex("\\$\\s?(\\d{1,3}(?:\\.\\d{2})?)").findAll(all).mapNotNull { it.groupValues[1].toDoubleOrNull() }.filter { it in 1.0..200.0 }.maxOrNull() ?: return
-        val miles = Regex("(\\d{1,3}(?:\\.\\d)?)\\s?mi\\b", RegexOption.IGNORE_CASE).findAll(all).mapNotNull { it.groupValues[1].toDoubleOrNull() }.filter { it > 0 }.maxOrNull() ?: return
-        val sig = "$pay|$miles"
-        if (sig == lastSig && now - lastAt < 120_000) return
-        lastSig = sig; lastAt = now
+    /** Pay and miles off an offer screen's text, or null. Pure, so it's unit-tested. */
+    fun read(all: String): Pair<Double, Double>? {
+        val pay = Regex("\\$\\s?(\\d{1,3}(?:\\.\\d{2})?)").findAll(all).mapNotNull { it.groupValues[1].toDoubleOrNull() }.filter { it in 1.0..200.0 }.maxOrNull() ?: return null
+        val miles = Regex("(\\d{1,3}(?:\\.\\d{1,2})?)\\s?(mi|miles?)\\b", RegexOption.IGNORE_CASE).findAll(all).mapNotNull { it.groupValues[1].toDoubleOrNull() }.filter { it > 0 && it < 100 }.maxOrNull() ?: return null
+        return pay to miles
+    }
+
+    /** The spoken verdict for an offer. Pure, so it's unit-tested. */
+    fun verdict(pay: Double, miles: Double, min: Double): String {
         val rate = pay / miles
-        val min = minPerMile(p)
         val payWords = if (pay == Math.floor(pay)) "${pay.toInt()} dollars" else String.format(Locale.US, "%.2f dollars", pay)
         val milesWords = if (miles == Math.floor(miles)) "${miles.toInt()} miles" else "$miles miles"
         val rateWords = String.format(Locale.US, "%.2f", rate).let { if (rate < 1) "${Math.round(rate * 100)} cents" else "$it dollars" }
@@ -115,8 +109,35 @@ object OfferJudge {
             rate >= min * 0.85 -> "$rateWords a mile. Borderline, your call."
             else -> "Only $rateWords a mile. I'd pass."
         }
-        try {
-            context.startService(Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", "$payWords for $milesWords. $verdict"))
-        } catch (_: Exception) {}
+        return "$payWords for $milesWords. $verdict"
+    }
+
+    /** Called with all the text on the Dasher screen when an offer is showing: says the verdict once per offer. */
+    fun check(context: Context, texts: List<String>) {
+        val now = System.currentTimeMillis()
+        if (now - lastCheck < 700) return
+        lastCheck = now
+        val p = Prefs(context)
+        if (!on(p) || !p.running || Stealth.on(p)) return
+        val all = texts.joinToString(" | ")
+        val (pay, miles) = read(all) ?: run {
+            // an offer is up but the pay or miles couldn't be read: log what was on screen (once a minute) so it can be fixed
+            if (now - lastMiss > 60_000) { lastMiss = now; Trace.log(context, "offer", "couldn't read pay or miles from: ${all.take(300)}") }
+            return
+        }
+        val sig = "$pay|$miles"
+        if (sig == lastSig && now - lastAt < 120_000) return
+        lastSig = sig; lastAt = now
+        val line = verdict(pay, miles, minPerMile(p))
+        Trace.log(context, "offer", line)
+        try { context.startService(Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", line)) } catch (_: Exception) {}
+    }
+
+    /** "Is this a good order?": judges whatever offer is on screen right now. */
+    fun now(context: Context): String {
+        val a = JarvisAccess.me ?: return JarvisAccess.NEED
+        val texts = a.offerTexts() ?: return "I don't see a DoorDash offer on screen right now."
+        val (pay, miles) = read(texts.joinToString(" | ")) ?: return "There's an offer up, but I can't read the pay and miles off it."
+        return verdict(pay, miles, minPerMile(Prefs(context)))
     }
 }

@@ -41,6 +41,7 @@
     </queries>
 
     <application
+        android:name=".JarvisApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="Jarvis"

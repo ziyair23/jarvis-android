@@ -121,6 +121,7 @@ class Actions(private val context: Context) {
         put(tool("journal_read", "Read back baby journal moments, optionally about something.", props("about" to str("Optional word to search")), listOf()))
         put(tool("answer_call", "Answer the phone call that's ringing right now.", props(), listOf()))
         put(tool("decline_call", "Decline the phone call that's ringing right now.", props(), listOf()))
+        put(tool("judge_offer", "Is the DoorDash offer on his screen right now a good one? Reads the pay and miles and gives the verdict. Never accepts or declines it.", props(), listOf()))
         put(tool("offer_rule", "Change DoorDash order judging: minimum dollars per mile, or turn it on/off.", props("per_mile" to num("Minimum $ per mile"), "on" to bool("Judge offers or not")), listOf()))
         put(tool("driving_mode", "Turn driving mode on or off (short answers, messages read aloud).", props("on" to bool("true for on")), listOf("on")))
     }
@@ -246,6 +247,7 @@ class Actions(private val context: Context) {
             "journal_read" -> Journal.read(context, input.optString("about"))
             "answer_call" -> CallControl.answer(context)
             "decline_call" -> CallControl.decline(context)
+            "judge_offer" -> OfferJudge.now(context)
             "offer_rule" -> OfferJudge.setRule(context, if (input.has("per_mile")) input.optDouble("per_mile") else null, if (input.has("on")) input.optBoolean("on") else null)
             "house_speaker" -> {
                 val p = prefs
