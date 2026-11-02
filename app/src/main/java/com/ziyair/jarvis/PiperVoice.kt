@@ -98,7 +98,7 @@ object Piper {
         return when {
             downloading -> "Voice: $name, downloading $state"
             pickReady(c) -> "Voice: $name (tap to change)"
-            state.startsWith("failed") -> "Voice: $name, download failed, tap to retry"
+            state.startsWith("failed") -> "Voice: $name didn't finish (${state.removePrefix("failed: ").take(90)}). Tap to carry on"
             else -> "Voice: $name, tap to download (${VOICES[pick(c)]!!.first.mb} MB)"
         }
     }
@@ -106,20 +106,48 @@ object Piper {
     /** Downloads his chosen voice (blocking; run on a background thread). */
     fun download(c: Context): Boolean = fetch(c, VOICES[pick(c)]!!.first)
 
+    /**
+     * Downloads to a file first and RESUMES where it left off if Wi-Fi drops or the phone dozes (the big voice is
+     * 350 MB, so one hiccup used to throw it all away), retrying on its own; then unpacks. Keeps the phone awake
+     * meanwhile, checks there's room first, and writes the real reason to the flight log if it fails.
+     */
     private fun fetch(c: Context, m: Model): Boolean {
         if (ready(c, m)) return true
         synchronized(this) { if (downloading) return false; downloading = true }
         state = "0%"
-        val tmp = File(root(c), "tmp"); tmp.deleteRecursively(); tmp.mkdirs()
+        val root = root(c).apply { mkdirs() }
+        val part = File(root, m.dir + ".tar.bz2.part")
+        val tmp = File(root, "tmp"); tmp.deleteRecursively(); tmp.mkdirs()
+        val pm = c.getSystemService(android.os.PowerManager::class.java)
+        val wake = try { pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "jarvis:voice").apply { acquire(30 * 60_000L) } } catch (_: Exception) { null }
+        @Suppress("DEPRECATION")
+        val wifi = try { (c.applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager)
+            .createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "jarvis:voice").apply { acquire() } } catch (_: Exception) { null }
         try {
-            val conn = URL(m.url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 15000; conn.readTimeout = 60000; conn.instanceFollowRedirects = true
-            if (conn.responseCode != 200) throw Exception("HTTP ${conn.responseCode}")
-            val total = conn.contentLengthLong.takeIf { it > 0 } ?: (m.mb * 1_000_000L)
-            val counting = object : java.io.FilterInputStream(BufferedInputStream(conn.inputStream, 1 shl 16)) {
+            // room for the download plus the unpacked voice
+            val needMb = m.mb * 23 / 10 + 50 - part.length() / 1_000_000
+            val freeMb = root.usableSpace / 1_000_000
+            if (freeMb < needMb) throw Exception("not enough storage: needs about $needMb MB free, the phone has $freeMb MB")
+            Trace.log(c, "voice", "downloading ${m.dir} (${m.mb} MB), ${part.length() / 1_000_000} MB already here, $freeMb MB free")
+            var total = -1L
+            var tries = 0
+            while (true) {
+                try { total = download(m.url, part, total); break }
+                catch (e: Exception) {
+                    tries++
+                    Trace.log(c, "voice", "download hiccup $tries at ${part.length() / 1_000_000} MB: ${e.message}")
+                    if (tries >= 8) throw Exception("download kept dropping (${e.message}); tap to carry on from ${part.length() / 1_000_000} MB")
+                    state = "${if (total > 0) part.length() * 100 / total else 0}%, reconnecting"
+                    Thread.sleep(minOf(30_000L, 2_000L shl minOf(tries, 4)))
+                }
+            }
+            state = "unpacking"
+            Trace.log(c, "voice", "downloaded ${part.length() / 1_000_000} MB, unpacking")
+            val size = part.length()
+            val counting = object : java.io.FilterInputStream(BufferedInputStream(part.inputStream(), 1 shl 16)) {
                 var n = 0L
-                override fun read(): Int = super.read().also { if (it >= 0) { n++; if (n % 65536 == 0L) state = "${n * 100 / total}%" } }
-                override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also { if (it > 0) { n += it; state = "${n * 100 / total}%" } }
+                override fun read(): Int = super.read().also { if (it >= 0) n++ }
+                override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also { if (it > 0) { n += it; state = "unpacking ${n * 100 / size}%" } }
             }
             TarArchiveInputStream(BZip2CompressorInputStream(counting)).use { tar ->
                 val base = tmp.canonicalPath
@@ -132,22 +160,68 @@ object Piper {
                     out.outputStream().use { tar.copyTo(it) }
                 }
             }
-            conn.disconnect()
             val got = File(tmp, m.dir)
-            if (!File(got, "tokens.txt").exists()) throw Exception("voice files missing")
+            if (!File(got, "tokens.txt").exists() || !File(got, if (m.kokoro) "model.onnx" else "en_GB-alan-medium.onnx").exists()) {
+                part.delete()   // a bad copy: start fresh next time
+                throw Exception("voice files missing after unpacking")
+            }
             dir(c, m).deleteRecursively()
             if (!got.renameTo(dir(c, m))) throw Exception("couldn't save voice")
             File(dir(c, m), ".ok").writeText("ok")
+            part.delete()
             if (m.kokoro) File(root(c), OLD_KOKORO).deleteRecursively()   // the old compressed voices aren't needed any more
             state = "done"
+            Trace.log(c, "voice", "${m.dir} ready")
             return true
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             state = "failed: ${e.message}"
+            Trace.log(c, "voice", "download failed: ${e.message}")
+            Problems.log(c, "voice download: ${e.message}")
             return false
         } finally {
             tmp.deleteRecursively()
+            try { wake?.release() } catch (_: Exception) {}
+            try { wifi?.release() } catch (_: Exception) {}
             downloading = false
         }
+    }
+
+    /** Fetches [url] into [part], carrying on from however much is already there. Returns the full size. */
+    private fun download(url: String, part: File, knownTotal: Long): Long {
+        // GitHub hands out a short-lived link to the real file: ask for a fresh one each time
+        var u = URL(url)
+        var conn: HttpURLConnection
+        var hops = 0
+        while (true) {
+            conn = u.openConnection() as HttpURLConnection
+            conn.connectTimeout = 20000; conn.readTimeout = 120000; conn.instanceFollowRedirects = false
+            val have = part.length()
+            if (have > 0) conn.setRequestProperty("Range", "bytes=$have-")
+            val code = conn.responseCode
+            if (code in 300..399) { val loc = conn.getHeaderField("Location") ?: throw Exception("HTTP $code"); conn.disconnect(); u = URL(u, loc); if (++hops > 5) throw Exception("too many redirects"); continue }
+            break
+        }
+        val code = conn.responseCode
+        if (code == 416 && knownTotal > 0 && part.length() >= knownTotal) { conn.disconnect(); return knownTotal }   // already complete
+        if (code == 416) { conn.disconnect(); part.delete(); throw Exception("restarting the download") }
+        if (code != 200 && code != 206) throw Exception("HTTP $code")
+        val append = code == 206
+        val total = if (append) conn.getHeaderField("Content-Range")?.substringAfter('/')?.toLongOrNull() ?: -1L
+            else conn.contentLengthLong
+        val base = if (append) part.length() else 0L
+        java.io.FileOutputStream(part, append).use { out ->
+            conn.inputStream.use { inp ->
+                val buf = ByteArray(1 shl 16); var n = base
+                while (true) {
+                    val r = inp.read(buf); if (r < 0) break
+                    out.write(buf, 0, r); n += r
+                    if (total > 0) state = "${n * 100 / total}%"
+                }
+            }
+        }
+        conn.disconnect()
+        if (total > 0 && part.length() < total) throw Exception("connection closed early")
+        return total
     }
 
     @Synchronized private fun engine(c: Context, m: Model): OfflineTts? {
