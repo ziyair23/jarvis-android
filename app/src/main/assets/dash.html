@@ -261,10 +261,11 @@ const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return m < 
 const KIND = {feed: 'Fed', diaper: 'Diaper', sleep: 'Asleep', wake: 'Awake'};
 
 // ---- sheets: one page at a time slides up over the brain; back button, the scrim or a swipe down closes it ----
-let openId = null;
+let openId = null, pushed = false;
 function openSheet(id) {
   if (openId === id) return;
-  if (openId) $('sh-' + openId).classList.remove('open'); else history.pushState({sheet: id}, '');
+  // the back button closes a sheet; Android's WebView refuses history for app files, so never let that stop the sheet opening
+  if (openId) $('sh-' + openId).classList.remove('open'); else { try { history.pushState({sheet: id}, ''); pushed = true; } catch (e) { pushed = false; } }
   openId = id;
   const el = $('sh-' + id); el.style.transform = ''; el.classList.add('open');
   $('scrim').classList.add('on'); document.body.classList.add('locked');
@@ -276,8 +277,10 @@ function hideSheet() {
   const el = $('sh-' + openId); el.classList.remove('open'); el.style.transform = '';
   $('scrim').classList.remove('on'); document.body.classList.remove('locked'); openId = null;
 }
-function closeSheet() { if (openId) history.back(); }
-window.addEventListener('popstate', hideSheet);
+function closeSheet() { if (!openId) return; if (pushed) { pushed = false; try { history.back(); return; } catch (e) {} } hideSheet(); }
+window.addEventListener('popstate', () => { pushed = false; hideSheet(); });
+// the phone's back button (called by the app): close an open sheet, or say there's nothing to close
+window.backPressed = () => { if (openId) { closeSheet(); return true; } return false; };
 document.querySelectorAll('.sheet').forEach(el => {
   const head = el.querySelector('.head'), body = el.querySelector('.body'); let y0 = null, dy = 0;
   const start = e => { if (e.currentTarget === body && body.scrollTop > 0) return; y0 = e.touches[0].clientY; dy = 0; el.style.transition = 'none'; };

@@ -113,8 +113,13 @@ object Packages {
 object Supplies {
     private val BABY = Regex("(?i)\\b(diapers?|wipes|formula|bottles?|nipples|pacifiers?|binkies|diaper cream|butt paste|desitin|baby wash|baby shampoo|baby lotion|pampers|huggies|similac|enfamil|onesies?|swaddles?|burp cloths?)\\b")
 
-    /** Items on his shopping list worth watching. Pure. */
-    fun worthWatching(item: String) = BABY.containsMatchIn(item)
+    private val STAPLES = Regex("(?i)\\b(milk|eggs?|bread|butter|cheese|chicken|ground beef|beef|steak|rice|pasta|cereal|coffee|creamer|yogurt|bananas?|apples?|potatoes|onions?|tortillas|bacon|sausage|lunch ?meat|deli meat|peanut butter|jelly|oatmeal|juice|water bottles|bottled water|soda|chips|frozen pizza|paper towels|toilet paper|laundry detergent|dish soap|trash bags|toothpaste|shampoo|body wash|deodorant)\\b")
+
+    /** Watched as soon as it goes on his list: baby supplies and everyday grocery staples. Pure. */
+    fun worthWatching(item: String) = BABY.containsMatchIn(item) || STAPLES.containsMatchIn(item)
+
+    /** Watched once he's put it on his list a second time (he keeps rebuying it). Pure. */
+    fun rebuy(timesAdded: Int) = timesAdded >= 2
 
     /** A real deal: at least 10% under the best price seen before. Pure. */
     fun isDeal(now: Double, bestBefore: Double?) = bestBefore != null && bestBefore > 0 && now > 0 && now <= bestBefore * 0.9
@@ -129,15 +134,26 @@ object Supplies {
         val item = item0.trim().take(60); if (item.length < 3) return "What should I watch?"
         val a = all(c)
         for (i in 0 until a.length()) if (key(a.getJSONObject(i).optString("item")) == key(item)) return "Already watching $item."
-        if (a.length() >= 12) return "I'm already watching twelve things; drop one first."
+        if (a.length() >= 25) return "I'm already watching twenty-five things; drop one first."
         a.put(JSONObject().put("item", item).put("added", System.currentTimeMillis()).put("auto", auto)); save(c, a); LogBus.changed()
         return "Watching prices on $item. I'll check weekly and tell you when it's a good deal."
     }
 
-    /** Called when things go on his shopping list: baby supplies get watched automatically. */
+    /** Called when things go on his shopping list: staples and baby supplies straight away, anything else the second time he adds it. */
     fun noticeListAdd(c: Context, items: String) {
         if (!on(c)) return
-        items.split(Regex(",| and ")).map { it.trim() }.filter { worthWatching(it) }.forEach { watch(c, it, auto = true) }
+        val p = Prefs(c)
+        val seen = try { JSONObject(p.sp.getString("supplies_seen", "{}")) } catch (_: Exception) { JSONObject() }
+        val cutoff = System.currentTimeMillis() - 60L * 86_400_000L
+        for (it in items.split(Regex(",| and |&")).map { it.trim() }.filter { it.length >= 3 }) {
+            val k = key(it)
+            val hist = (seen.optJSONArray(k) ?: JSONArray()).let { h -> JSONArray().apply { for (i in 0 until h.length()) if (h.optLong(i) > cutoff) put(h.optLong(i)) } }
+            hist.put(System.currentTimeMillis()); seen.put(k, hist)
+            if (worthWatching(it) || rebuy(hist.length())) watch(c, it, auto = true)
+        }
+        // keep it small
+        if (seen.length() > 200) { val ks = seen.keys().asSequence().toList(); ks.take(ks.size - 200).forEach { seen.remove(it) } }
+        p.sp.edit().putString("supplies_seen", seen.toString()).apply()
     }
 
     @Synchronized fun unwatch(c: Context, item: String): String {
@@ -147,7 +163,7 @@ object Supplies {
     }
 
     fun list(c: Context): String {
-        val a = all(c); if (a.length() == 0) return "Not watching anything yet. Baby supplies you add to the shopping list get watched automatically."
+        val a = all(c); if (a.length() == 0) return "Not watching anything yet. Groceries and baby supplies you add to the shopping list get watched automatically."
         return (0 until a.length()).joinToString("; ") { val o = a.getJSONObject(it)
             o.optString("item") + (o.optJSONObject("last")?.let { l -> ": ${money(l.optDouble("price"))} at ${l.optString("store")}${l.optString("size").takeIf { s -> s.isNotBlank() }?.let { s -> " ($s)" } ?: ""}" } ?: ": not checked yet") } + "." +
             (Prefs(c).sp.getString("supplies_deal", "")?.takeIf { it.isNotBlank() }?.let { " Latest deal: $it" } ?: "")
@@ -177,10 +193,10 @@ object Supplies {
             p.sp.edit().putLong("supplies_checked", System.currentTimeMillis()).apply()
             val cfg = Brain(c).config()
             val items = (0 until a.length()).map { a.getJSONObject(it).optString("item") }
-            val system = "You check prices for Marcus in Spokane, WA. For each item, search for the best current price at big stores he can use (Walmart, Target, Amazon, Costco, Fred Meyer, Walgreens). " +
-                "Compare the common family size (e.g. diapers in the size and pack you find most), and work out a unit price (per diaper, per wipe, per ounce). " +
+            val system = "You check prices for Marcus in Spokane, WA. For each item, search for the best current price at stores he can use: Walmart, Target, Amazon, Costco, Fred Meyer, Safeway, Rosauers, Yoke's, WinCo, Grocery Outlet and Walgreens, including this week's sale and weekly ad prices. " +
+                "Compare a common everyday size (a gallon of milk, a dozen eggs, diapers in the pack you find most), and work out a unit price (per diaper, per egg, per ounce, per pound). " +
                 "Reply with ONLY JSON: {\"items\":[{\"item\":\"exactly as given\",\"store\":\"...\",\"price\":34.97,\"size\":\"e.g. 198 count\",\"unit\":0.18}]}. Skip an item if you can't find a real current price."
-            val tools = JSONArray().put(JSONObject().put("type", "web_search_20250305").put("name", "web_search").put("max_uses", minOf(8, items.size * 2))
+            val tools = JSONArray().put(JSONObject().put("type", "web_search_20250305").put("name", "web_search").put("max_uses", minOf(15, maxOf(4, items.size)))
                 .put("user_location", JSONObject().put("type", "approximate").put("city", p.city.ifBlank { "Spokane" }).put("region", "Washington").put("country", "US")))
             var model = cfg.optString("supplies_model", cfg.optString("agent_model", "claude-haiku-5-5"))
             val msgs = JSONArray().put(JSONObject().put("role", "user").put("content", "Items: " + items.joinToString("; ")))
