@@ -121,6 +121,8 @@ class Actions(private val context: Context) {
         put(tool("journal_read", "Read back baby journal moments, optionally about something.", props("about" to str("Optional word to search")), listOf()))
         put(tool("answer_call", "Answer the phone call that's ringing right now.", props(), listOf()))
         put(tool("decline_call", "Decline the phone call that's ringing right now.", props(), listOf()))
+        put(tool("draft_text", "Get a text or reply ready BEFORE reading it back to him (it is not sent). Then read the exact words back in double quotes and ask. When he says yes, it goes out straight away.",
+            props("who" to str("Contact name, or the person whose message he's replying to"), "message" to str("The exact words"), "reply" to bool("true when it's a reply to a message he just got")), listOf("who", "message")))
         put(tool("judge_offer", "Is the DoorDash offer on his screen right now a good one? Reads the pay and miles and gives the verdict. Never accepts or declines it.", props(), listOf()))
         put(tool("offer_rule", "Change DoorDash order judging: minimum dollars per mile, or turn it on/off.", props("per_mile" to num("Minimum $ per mile"), "on" to bool("Judge offers or not")), listOf()))
         put(tool("driving_mode", "Turn driving mode on or off (short answers, messages read aloud).", props("on" to bool("true for on")), listOf("on")))
@@ -250,6 +252,9 @@ class Actions(private val context: Context) {
             "answer_call" -> CallControl.answer(context)
             "decline_call" -> CallControl.decline(context)
             "judge_offer" -> OfferJudge.now(context)
+            "draft_text" -> { Prefs(context).sp.edit().putString("draft", JSONObject().put("who", input.getString("who")).put("message", input.getString("message"))
+                .put("reply", input.optBoolean("reply")).put("at", System.currentTimeMillis()).toString()).apply()
+                "Ready, not sent. Now read it back to him word for word in double quotes and ask if you should send it." }
             "offer_rule" -> OfferJudge.setRule(context, if (input.has("per_mile")) input.optDouble("per_mile") else null, if (input.has("on")) input.optBoolean("on") else null)
             "house_speaker" -> {
                 val p = prefs
@@ -329,6 +334,24 @@ class Actions(private val context: Context) {
         val ok = Fast.readBack(recent, message)
         if (!ok) Trace.log(context, "blocked", "not sent, wasn't read back: \"${message.take(80)}\"")
         return ok
+    }
+
+    /** "Call Mom": calls straight away, but only when the name clearly matches one contact (otherwise Claude sorts it out). */
+    fun callExact(who: String): String? {
+        val w = who.lowercase().trim()
+        val hit = findNumber(who)?.takeIf { (n, _) -> val l = n.lowercase(); l == w || l.startsWith("$w ") || l.split(" ").contains(w) || partnerAlias(who) != who } ?: return null
+        return run("call", JSONObject().put("who", hit.first)).takeIf { it.startsWith("Calling") }
+    }
+
+    /** "Yes" to a text Jarvis just read back: send exactly that, through the same checks as always. Null if there's nothing waiting. */
+    fun sendDraft(lastReply: String): String? {
+        val p = Prefs(context)
+        val d = try { JSONObject(p.sp.getString("draft", "") ?: "") } catch (_: Exception) { return null }
+        if (System.currentTimeMillis() - d.optLong("at") > 5 * 60_000L) return null
+        val msg = d.optString("message"); if (!Fast.readBack(listOf(lastReply), msg)) return null
+        p.sp.edit().remove("draft").apply()
+        val input = JSONObject().put("who", d.optString("who")).put("message", msg).put("confirmed", true)
+        return if (d.optBoolean("reply")) run("reply_message", input).let { if (it.startsWith("I can't find")) run("send_text", input) else it } else run("send_text", input)
     }
 
     /** A misheard name ("Justustice"): the one contact it's clearly meant to be, or null. */
