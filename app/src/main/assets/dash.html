@@ -250,7 +250,7 @@ let D = null;
 let OS = 0, OL = 0, baseState = '';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const money = v => '$' + (Math.round(v * 100) / 100).toLocaleString('en-US', {maximumFractionDigits: 2});
+const money = v => { const r = Math.round(v * 100) / 100; return '$' + r.toLocaleString('en-US', {minimumFractionDigits: r % 1 ? 2 : 0, maximumFractionDigits: 2}); };
 const clock = ms => new Date(ms).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.floor(m / 60) + 'h ' + (m % 60) + 'm ago'; };
