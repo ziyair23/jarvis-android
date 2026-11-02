@@ -636,7 +636,13 @@ class JarvisService : Service() {
             // live talking: a real two-way voice conversation takes it from here
             if (quick == null && liveOK(wasQuiet)) { main.post { live?.cancel(); stream = null; startLive(text, followUp, turn) }; return@thread }
             else Trace.log(this, "ask", if (followUp) "follow-up to Claude" else "to Claude")
-            val reply = quick?.reply ?: brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false); Orb.set(this@JarvisService, Orb.SPEAK) }; s.add(line) } }) { main.post { ack() } }
+            // he asked Jarvis to DO something: say "On it" straight away so he knows it landed, then do it
+            var acked = false
+            if (quick == null && brain.config().optBoolean("instant_ack", true)) {
+                val last = try { prefs.history().let { h -> (h.length() - 1 downTo 0).map { h.getJSONObject(it) }.firstOrNull { it.optString("role") == "assistant" }?.optString("content").orEmpty() } } catch (_: Exception) { "" }
+                Fast.ackFor(Reflex.norm(text), last)?.let { line -> acked = true; main.post { ack(line) } }
+            }
+            val reply = quick?.reply ?: brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false); Orb.set(this@JarvisService, Orb.SPEAK) }; s.add(line) } }) { if (!acked) main.post { ack() } }
             Trace.log(this, "reply", "${System.currentTimeMillis() - t0}ms, tools ${brain.lastTools.joinToString(",").ifBlank { "none" }}: \"${reply.take(160)}\"")
             main.post {
                 if (turn != turnId) { live?.cancel(); Trace.log(this, "dropped", "cancelled while thinking"); return@post }   // he cancelled while it was thinking

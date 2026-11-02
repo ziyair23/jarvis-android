@@ -64,5 +64,5 @@ object Persona {
     /** Everything worth having ready in his voice before he needs it. */
     fun stockLines(cfg: JSONObject): List<String> =
         (list(cfg, "greetings", DEF_GREET) + list(cfg, "morning_greetings", DEF_MORNING) + list(cfg, "late_greetings", DEF_LATE) +
-            list(cfg, "acks", DEF_ACKS) + list(cfg, "goodbyes", DEF_BYE) + QUICK).distinct()
+            list(cfg, "acks", DEF_ACKS) + list(cfg, "goodbyes", DEF_BYE) + QUICK + Fast.ACKS).distinct()
 }

@@ -50,4 +50,29 @@ class FastTest {
     }
 
     @Test fun callsStayWithThePhoneAgent() { assertTrue("call" !in Agents.CORE) }
+
+    @Test fun saysOnItTheMomentHeAsksForAnAction() {
+        for (t in listOf("open tiktok", "can you open the camera", "play some drake", "call mom", "set an alarm for 6", "turn off the lights",
+            "remind me to call jesse at 5", "navigate to costco", "take me home", "skip this song")) assertTrue(t, Fast.ackFor(t, "") in Fast.ACKS)
+    }
+
+    @Test fun noOnItForQuestionsChatOrTexts() {
+        for (t in listOf("what's the weather", "how are you doing jarvis", "where's the cheapest gas", "is he asleep", "text toby are you coming",
+            "send a message to mom", "thank you", "oh god", "tell me a joke")) assertNull(t, Fast.ackFor(t, ""))
+    }
+
+    @Test fun sayingYesToASendGetsSendingIt() {
+        assertEquals("Sending it, sir.", Fast.ackFor("yes", "Here's what I'll send to Toby: 'On my way.' Shall I send it?"))
+        assertEquals("Sending it, sir.", Fast.ackFor("yeah send it", "Want me to send that reply?"))
+        assertNull("a yes to something else isn't a send", Fast.ackFor("yes", "Want me to play something for the drive?"))
+    }
+
+    @Test fun agentResultsAreSaidStraightAwayOnlyWhenTheyWorked() {
+        assertEquals("Replied to Toby on Messages.", Fast.line("agent_phone", "Replied to Toby on Messages."))
+        assertEquals("Opened TikTok.", Fast.line("agent_phone", "Opened TikTok."))
+        assertNull(Fast.line("agent_phone", "No contact found for that name."))
+        assertNull(Fast.line("agent_phone", "Text to Toby is ready; waiting for his yes."))
+        assertNull(Fast.line("agent_phone", "Sent? I couldn't tell."))
+        assertNull("research answers get phrased by Jarvis", Fast.line("agent_research", "Done. Gas is 3.89 at Costco."))
+    }
 }

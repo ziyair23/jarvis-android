@@ -20,7 +20,7 @@ object Reflex {
         "seven" to 7, "eight" to 8, "nine" to 9, "ten" to 10, "eleven" to 11, "twelve" to 12, "fifteen" to 15, "twenty" to 20,
         "twenty five" to 25, "thirty" to 30, "forty" to 40, "forty five" to 45, "fifty" to 50, "sixty" to 60, "ninety" to 90)
 
-    private fun norm(t0: String): String {
+    fun norm(t0: String): String {
         var t = t0.lowercase(Locale.US).replace(Regex("[^a-z0-9' ]"), " ").replace(Regex("\\s+"), " ").trim()
         t = t.replace(Regex("^((hey|ok|okay|yo) )?(jarvis )?"), "")
         t = t.replace(Regex("^(can you|could you|would you|will you|please|go ahead and|just) "), "")
