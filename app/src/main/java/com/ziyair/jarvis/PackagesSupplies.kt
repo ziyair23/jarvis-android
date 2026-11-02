@@ -193,17 +193,17 @@ object Supplies {
             p.sp.edit().putLong("supplies_checked", System.currentTimeMillis()).apply()
             val cfg = Brain(c).config()
             val items = (0 until a.length()).map { a.getJSONObject(it).optString("item") }
-            val system = "You check prices for Marcus in Spokane, WA. For each item, search for the best current price at stores he can use: Walmart, Target, Amazon, Costco, Fred Meyer, Safeway, Rosauers, Yoke's, WinCo, Grocery Outlet and Walgreens, including this week's sale and weekly ad prices. " +
+            val system = Web.GUIDE + " You check prices for Marcus in Spokane, WA. For each item, search for the best current price at stores he can use: Walmart, Target, Amazon, Costco, Fred Meyer, Safeway, Rosauers, Yoke's, WinCo, Grocery Outlet and Walgreens, including this week's sale and weekly ad prices. " +
                 "Compare a common everyday size (a gallon of milk, a dozen eggs, diapers in the pack you find most), and work out a unit price (per diaper, per egg, per ounce, per pound). " +
                 "Reply with ONLY JSON: {\"items\":[{\"item\":\"exactly as given\",\"store\":\"...\",\"price\":34.97,\"size\":\"e.g. 198 count\",\"unit\":0.18}]}. Skip an item if you can't find a real current price."
-            val tools = JSONArray().put(JSONObject().put("type", "web_search_20250305").put("name", "web_search").put("max_uses", minOf(15, maxOf(4, items.size)))
-                .put("user_location", JSONObject().put("type", "approximate").put("city", p.city.ifBlank { "Spokane" }).put("region", "Washington").put("country", "US")))
+            var tools = Web.tools(c, minOf(15, maxOf(4, items.size)), minOf(10, maxOf(3, items.size)), 4000)
             var model = cfg.optString("supplies_model", cfg.optString("agent_model", "claude-haiku-5-5"))
             val msgs = JSONArray().put(JSONObject().put("role", "user").put("content", "Items: " + items.joinToString("; ")))
             var text = ""
             for (round in 1..4) {
                 val body = JSONObject().put("model", model).put("max_tokens", 1500).put("system", system).put("tools", tools).put("messages", msgs)
                 val (code, resp) = post(p.claudeKey, body)
+                if (code == 400 && Web.fallBack(c, lastErr)) { tools = Web.tools(c, minOf(15, maxOf(4, items.size)), 0); continue }
                 if (code == 400 && round == 1 && model != cfg.optString("research_model", "claude-sonnet-5-5")) { model = cfg.optString("research_model", "claude-sonnet-5-5"); continue }
                 val j = resp ?: run { p.sp.edit().putLong("supplies_checked", System.currentTimeMillis() - 6L * 86_400_000L).apply(); return "Couldn't reach Claude to check prices; I'll try again tomorrow." }
                 Spend.record(c, cfg, model, j.optJSONObject("usage"))
@@ -242,6 +242,7 @@ object Supplies {
         return if (d.isBlank() || System.currentTimeMillis() - p.sp.getLong("supplies_deal_at", 0L) > 4 * 86_400_000L) "" else "Deal on supplies: $d"
     }
 
+    @Volatile private var lastErr = ""
     private fun post(key: String, body: JSONObject): Pair<Int, JSONObject?> = try {
         val k = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
         k.requestMethod = "POST"; k.doOutput = true; k.connectTimeout = 10000; k.readTimeout = 120000
@@ -249,6 +250,7 @@ object Supplies {
         k.outputStream.use { it.write(body.toString().toByteArray()) }
         val code = k.responseCode
         val text = (if (code in 200..299) k.inputStream else k.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+        if (code !in 200..299) lastErr = text
         code to (if (code in 200..299) JSONObject(text) else null)
     } catch (_: Exception) { 0 to null }
 }

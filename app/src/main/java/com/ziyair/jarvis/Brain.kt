@@ -85,7 +85,8 @@ class Brain(private val context: Context) {
             "\nQuiet mode: when he says he's going somewhere he can't have you talking (work, a meeting, class, church, a movie, 'go quiet', 'stealth mode'), call quiet_mode on, with minutes if he gives a time, and confirm in three or four words. When he says he's out, back, or done ('I'm out', 'quiet mode off', 'catch me up'), call quiet_mode off and turn what it returns into a short spoken catch-up starting 'Welcome back, sir.'" +
             "\nStay on what he just said. Never tack unrelated things onto an answer (his battery, an earlier text, other topics) unless he asks. If you offered to send something and he didn't say yes within a couple of minutes, that offer is dropped: don't bring it up again unless he does. Never say something was or wasn't sent, logged or done unless the list of what your actions actually did says so; if he asks and it isn't there, say you're not sure and offer to check." +
             "\nOne reply per request: when you use one of his phone tools, don't write any words alongside the tool call, wait for the result and then answer once. After a web_search, always say the actual answer (scores, times, facts); never reply with just 'Done'. Tool results that say Logged, Set, Opened, Sent, Done and the like mean it worked: say so plainly and never follow up with a 'correction', a second answer or an apology. Only answer what he just asked; don't add notes about earlier conversation, the dashboard numbers or older messages unless he asks." +
-            "\nWhen he asks what something is, to read something, or anything that needs eyes ('what's this', 'read this', 'what does this say'), use look, then answer from the photo in a sentence or two. For anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks." +
+            "\nWhen he asks what something is, to read something, or anything that needs eyes ('what's this', 'read this', 'what does this say'), use look, then answer from the photo in a sentence or two. For anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, open the best pages with web_fetch, then answer in a sentence or two out loud. " + Web.GUIDE +
+            " Where to find the best price or deal on something, or anything that needs comparing a few places, goes to agent_research." +
             (if (Agents.on(context)) "\nSpeed matters: do quick one-step jobs yourself with your own skills (logging feeds, diapers, earnings and expenses, lists, music, directions, lights, alarms, timers; calls and texts always go through agent_phone). Hand a job to an agent only when it needs several steps or their judgment.\nYour agents: some skills named above now live with your specialist agents. Hand the job over with one sentence holding every detail he gave: agent_phone (calls, texts, DMs, apps, music, directions, anything on screen), agent_money (earnings, expenses, the Macan goal, his budget), agent_family (Ziyair's feeds, diapers and sleep, the baby journal, lights and the house), agent_planner (his calendar, reminder lists, alarms, the morning briefing, protocols, planning his day or week), agent_research (questions that need real digging: comparisons, how-tos, prices, plans; quick facts you can still search yourself), agent_pursuit (his clothing brand: ideas, the shoot list, launch to-dos, orders), agent_memory (what you know about him: 'what do you know about me', corrections, tidying, forgetting; quick saves you can still do yourself with remember), agent_builder (when he wants you to change how you work or build something new into yourself), agent_bills (his bills: what's due, adding one, marking one paid), agent_appts (his and Ziyair's appointments and checkups), agent_packages (his deliveries), agent_supplies (prices on groceries, diapers, wipes, formula and other things he rebuys). Then say what they did, in your own words, in one line. The confirm-before-sending rule still applies: pass confirmed=true only after his clear yes." else "")
     }
 
@@ -162,10 +163,9 @@ class Brain(private val context: Context) {
         val deep = !followUp && realQuestion(text) && cfg.optBoolean("smart_answers", true)
         val model = if (deep) cfg.optString("smart_model", "claude-sonnet-5-5") else cfg.optString("model", "claude-haiku-5-5")
         val maxTokens = if (deep) cfg.optInt("smart_max_tokens", 700) else cfg.optInt("max_tokens", 400)
-        if (cfg.optBoolean("web_search", true)) tools.put(JSONObject().put("type", "web_search_20250305").put("name", "web_search")
-            .put("max_uses", cfg.optInt("web_search_max", 3))
-            .put("user_location", JSONObject().put("type", "approximate").put("city", prefs.city.ifBlank { "Spokane" })
-                .put("region", "Washington").put("country", "US").put("timezone", java.util.TimeZone.getDefault().id)))
+        // search, then read the reliable pages (never Yelp-style sites); a real question may read a few more pages
+        fun webTools() = Web.tools(context, cfg.optInt("web_search_max", 3), if (deep) cfg.optInt("web_fetch_deep", 3) else cfg.optInt("web_fetch_max", 2))
+        if (cfg.optBoolean("web_search", true)) { val w = webTools(); for (i in 0 until w.length()) tools.put(w.get(i)) }
         var rounds = 0
         var retried = 0
         var didSomething = false
@@ -190,8 +190,15 @@ class Brain(private val context: Context) {
                 return "I can't reach the network right now, sir."
             }
             // web search not turned on for his Claude account: carry on without it
-            if (code == 400 && resp.contains("web_search", true) && tools.length() > 0 &&
-                tools.getJSONObject(tools.length() - 1).optString("name") == "web_search") { tools.remove(tools.length() - 1); continue }
+            // the newer web tools turned down: switch to the basic search; if even that's refused, carry on without searching
+            if (code == 400 && (resp.contains("web_search", true) || resp.contains("web_fetch", true) || Regex("allowed_callers|url_sources|blocked_domains|max_content_tokens|tools\\.\\d+").containsMatchIn(resp))) {
+                val hadWeb = (0 until tools.length()).any { Web.isWeb(tools.getJSONObject(it)) }
+                if (hadWeb) {
+                    for (i in tools.length() - 1 downTo 0) if (Web.isWeb(tools.getJSONObject(i))) tools.remove(i)
+                    if (Web.fallBack(context, resp)) { val w = webTools(); for (i in 0 until w.length()) tools.put(w.get(i)) }
+                    continue
+                }
+            }
             if (code == 400 && !strippedThinking && (resp.contains("thinking", true) || resp.contains("signature", true))) {
                 strippedThinking = true
                 for (i in 0 until clean.length()) { val m = clean.getJSONObject(i); val c = m.opt("content")
