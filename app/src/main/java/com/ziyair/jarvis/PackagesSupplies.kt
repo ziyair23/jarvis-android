@@ -205,14 +205,14 @@ object Supplies {
                 val body = JSONObject().put("model", model).put("max_tokens", 1500).put("system", system).put("tools", tools).put("messages", msgs)
                 val (code, resp) = post(p.claudeKey, body)
                 if (code == 400 && round == 1 && model != cfg.optString("research_model", "claude-sonnet-5-5")) { model = cfg.optString("research_model", "claude-sonnet-5-5"); continue }
-                val j = resp ?: return "Couldn't reach Claude to check prices."
+                val j = resp ?: run { p.sp.edit().putLong("supplies_checked", System.currentTimeMillis() - 6L * 86_400_000L).apply(); return "Couldn't reach Claude to check prices; I'll try again tomorrow." }
                 Spend.record(c, cfg, model, j.optJSONObject("usage"))
                 val content = j.optJSONArray("content") ?: JSONArray()
                 text = (0 until content.length()).map { content.getJSONObject(it) }.filter { it.optString("type") == "text" }.joinToString("") { it.optString("text") }
                 if (j.optString("stop_reason") == "pause_turn") { msgs.put(JSONObject().put("role", "assistant").put("content", content)); continue }
                 break
             }
-            val json = try { JSONObject(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1)) } catch (_: Exception) { return "Couldn't read the prices this time." }
+            val json = try { JSONObject(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1)) } catch (_: Exception) { p.sp.edit().putLong("supplies_checked", System.currentTimeMillis() - 6L * 86_400_000L).apply(); return "Couldn't read the prices this time; I'll try again tomorrow." }
             val found = json.optJSONArray("items") ?: JSONArray()
             val deals = ArrayList<String>(); var seen = 0
             for (i in 0 until found.length()) {

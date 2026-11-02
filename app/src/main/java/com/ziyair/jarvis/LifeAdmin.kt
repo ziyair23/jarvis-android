@@ -37,7 +37,11 @@ object LifeWatch {
     // ---------------- capture ----------------
     fun inbox(c: Context): JSONArray = try { JSONArray(Prefs(c).sp.getString("life_inbox", "[]")) } catch (_: Exception) { JSONArray() }
 
+    /** His driving apps (pay, orders) are work, not bills. Pure. */
+    fun workApp(app: String) = Regex("(?i)dasher|driver|doordash|uber|grubhub|instacart|spark|amazon flex|gridwise|stride").containsMatchIn(app)
+
     @Synchronized fun capture(c: Context, from: String, title: String, text: String, at: Long = System.currentTimeMillis()) {
+        if (workApp(from)) return
         val body = (if (title.isNotBlank() && !text.startsWith(title)) "$title: " else "") + text
         if (!relevant(body)) return
         val a = inbox(c)
@@ -67,6 +71,7 @@ object LifeWatch {
 
     // ---------------- the daily sweep ----------------
     @Volatile private var sweeping = false
+    @Volatile private var lastTry = 0L
 
     fun on(c: Context) = Agents.on(c) && (Agents.enabled(c, "bills") || Agents.enabled(c, "appts")) && Brain(c).config().optBoolean("life_admin", true)
 
@@ -76,6 +81,7 @@ object LifeWatch {
         val cut = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 5); set(Calendar.MINUTE, 0) }.timeInMillis
         val since = if (System.currentTimeMillis() >= cut) cut else cut - 86_400_000L
         if (Prefs(c).sp.getLong("life_swept", 0L) >= since) return
+        if (System.currentTimeMillis() - lastTry < 30 * 60_000L) return   // after a failed try (no signal), wait half an hour
         sweep(c)
     }
 
@@ -90,10 +96,10 @@ object LifeWatch {
             Bills.roll(c)
             val last = p.sp.getLong("life_swept", 0L)
             val all = inbox(c)
+            val startedAt = System.currentTimeMillis()
             val fresh = (0 until all.length()).map { all.getJSONObject(it) }.filter { it.optLong("at") > last - 3600_000L }
-            p.sp.edit().putLong("life_swept", System.currentTimeMillis()).apply()
             val checkups = Appts.checkupNote(c)
-            if (fresh.isEmpty()) { note(c); return "Nothing new in your texts." + (checkups?.let { " $it" } ?: "") }
+            if (fresh.isEmpty()) { p.sp.edit().putLong("life_swept", startedAt).apply(); note(c); return "Nothing new in your texts." + (checkups?.let { " $it" } ?: "") }
             if (p.claudeKey.isBlank()) return "No Claude key set."
             val cfg = Brain(c).config()
             val model = cfg.optString("agent_model", "claude-haiku-5-5")
@@ -106,7 +112,9 @@ object LifeWatch {
                 "Work out real dates from the message date. Skip anything already known unless the date or amount changed, skip marketing and sales, and leave a list empty if there's nothing."
             val body = JSONObject().put("model", model).put("max_tokens", 900).put("system", system)
                 .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", user)))
-            val resp = post(p.claudeKey, body) ?: return "Couldn't reach Claude to check."
+            // no signal: leave the day unchecked, so these get read next time
+            val resp = post(p.claudeKey, body) ?: run { lastTry = System.currentTimeMillis(); return "Couldn't reach Claude to check; I'll try again later." }
+            p.sp.edit().putLong("life_swept", startedAt).apply()
             Spend.record(c, cfg, model, resp.optJSONObject("usage"))
             val txt = resp.optJSONArray("content")?.let { a -> (0 until a.length()).joinToString("") { a.getJSONObject(it).optString("text") } }.orEmpty()
             val json = try { JSONObject(txt.substring(txt.indexOf('{'), txt.lastIndexOf('}') + 1)) } catch (_: Exception) { JSONObject() }
