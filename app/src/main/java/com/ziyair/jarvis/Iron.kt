@@ -151,6 +151,8 @@ object Briefing {
         add("Baby") { Baby.status(context) }
         add("Money") { "earned today ${Earnings.money(Earnings.today(context))}. " + Earnings.summary(context) }
         add("Lists") { Lists.read(context, null) }
+        add("Bills") { Bills.upcoming(context, 7).ifBlank { null } }
+        add("Appointments") { (Appts.upcoming(context, 7) + (Appts.checkupNote(context)?.let { " $it" } ?: "")).trim().ifBlank { null } }
         add("Reminders") {
             val r = Prefs(context).reminders()
             if (r.length() == 0) null else (0 until r.length()).map { r.getJSONObject(it) }.sortedBy { it.getLong("at") }.take(3)

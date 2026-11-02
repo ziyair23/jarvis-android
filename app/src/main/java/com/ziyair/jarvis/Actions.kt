@@ -86,6 +86,17 @@ class Actions(private val context: Context) {
         put(tool("spending", "How much Jarvis has cost on his Claude account this month, against his budget.", props(), listOf()))
         put(tool("set_budget", "Set his monthly Claude budget in dollars (he gets a warning near it).", props("dollars" to num("Monthly budget")), listOf("dollars")))
         put(tool("briefing", "His morning briefing: weather and roads, next shift, calendar, the baby overnight, money and the Macan goal, lists, reminders. Use for 'brief me', 'morning briefing', 'what's my day look like', 'what's the plan today'. Only when he asks.", props(), listOf()))
+        put(tool("bills_list", "His bills: what's due and when, and about how much is due in the next 30 days.", props(), listOf()))
+        put(tool("bill_add", "Track a bill he tells you about (reminders two days before and on the day).",
+            props("name" to str("Short name, e.g. Phone, Rent, Car insurance"), "amount" to num("Amount in dollars, if known"), "due" to str("Next due date yyyy-MM-dd"), "monthly" to bool("Repeats every month")), listOf("name", "due")))
+        put(tool("bill_paid", "Mark a bill paid (a monthly one moves on to next month).", props("name" to str("The bill")), listOf("name")))
+        put(tool("bill_remove", "Stop tracking a bill.", props("name" to str("The bill")), listOf("name")))
+        put(tool("life_sweep", "Check his recent texts and notifications for new bills and appointments right now (about five seconds).", props(), listOf()))
+        put(tool("appts_list", "His (and Ziyair's) upcoming appointments, plus a heads-up if a checkup is due to be booked.", props(), listOf()))
+        put(tool("appt_add", "Add an appointment: puts it on his calendar, reminds him the evening before and ninety minutes before.",
+            props("what" to str("Short, e.g. Dentist, Ziyair's checkup"), "date" to str("yyyy-MM-dd"), "time" to str("24-hour HH:MM, if known"), "where" to str("Place, if known")), listOf("what", "date")))
+        put(tool("appt_remove", "Remove an appointment and its reminders.", props("what" to str("Part of its name")), listOf("what")))
+        put(tool("set_baby_birthday", "Save the baby's birthday so his usual checkups can be tracked.", props("date" to str("yyyy-MM-dd")), listOf("date")))
         put(tool("pursuit_add", "Pursuit (his clothing brand): save an idea (kind idea, tag design/drop/post/collab), a shot for the shoot list (kind shot), a launch to-do (kind task, who = him or his partner) or an order (kind order). Never sends anything.",
             props("kind" to JSONObject().put("type", "string").put("enum", JSONArray(listOf("idea", "shot", "task", "order"))), "text" to str("The thing itself, in his words"),
                 "tag" to str("design, drop, post, collab, or a product like hoodie"), "who" to str("For tasks: who's doing it")), listOf("kind", "text")))
@@ -259,6 +270,18 @@ class Actions(private val context: Context) {
             "set_budget" -> Spend.setBudget(context, input.getDouble("dollars"))
             "status_report" -> Status.report(context)
             "briefing" -> Briefing.build(context)
+            "bills_list" -> Bills.list(context)
+            "bill_add" -> { val due = try { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(input.getString("due"))?.time } catch (_: Exception) { null }
+                if (due == null) "Need the due date as year-month-day." else "Tracking it: " + Bills.upsert(context, input.getString("name"), input.optDouble("amount", Double.NaN).takeIf { !it.isNaN() }, due, if (input.optBoolean("monthly")) "monthly" else "none") }
+            "bill_paid" -> Bills.paid(context, input.getString("name"))
+            "bill_remove" -> Bills.remove(context, input.getString("name"))
+            "life_sweep" -> LifeWatch.sweep(context)
+            "appts_list" -> Appts.list(context)
+            "appt_add" -> { val t = input.optString("time").takeIf { Regex("\\d{1,2}:\\d{2}").matches(it) }
+                val at = try { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).parse(input.getString("date") + " " + (t ?: "09:00"))?.time } catch (_: Exception) { null }
+                if (at == null) "Need the date as year-month-day." else "Added: " + Appts.upsert(context, input.getString("what"), at, t != null, input.optString("where").ifBlank { null }) }
+            "appt_remove" -> Appts.remove(context, input.getString("what"))
+            "set_baby_birthday" -> Appts.setBirthday(context, input.getString("date"))
             "pursuit_add" -> Pursuit.add(context, input.optString("kind", "idea"), input.getString("text"), input.optString("tag").ifBlank { null }, input.optString("who").ifBlank { null })
             "pursuit_list" -> Pursuit.list(context, input.optString("kind").ifBlank { null }, input.optString("query").ifBlank { null })
             "pursuit_done" -> Pursuit.done(context, input.getString("text"))

@@ -72,7 +72,15 @@ object Agents {
         Coach.TOOL_NAMES, "When he asks how you're improving or what you've learned, read list_lessons and answer in two or three plain sentences. " +
             "If he says a lesson is wrong, drop it. If he asks for a review now, run review_today.")
 
-    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER, COACH)
+    val BILLS = Def("bills", "Bills", "Keeps his bills on his own: learns them from his bill texts and notifications, reminds him before each is due, and says what's coming up.",
+        setOf("bills_list", "bill_add", "bill_paid", "bill_remove", "life_sweep"),
+        "Be exact with amounts and dates. When he asks what's due, give the next few in one or two sentences with the total. Never pay anything or open banking apps.")
+
+    val APPTS = Def("appts", "Appointments", "Keeps his and Ziyair's appointments on his own: finds confirmations in his texts, adds them to the calendar, reminds him before each one, and tracks Ziyair's usual checkups.",
+        setOf("appts_list", "appt_add", "appt_remove", "set_baby_birthday", "life_sweep"),
+        "Times you pass to tools are 24-hour local time. Checkup timing is the usual schedule only; the pediatrician sets the real dates. Never book or cancel anything with an office yourself.")
+
+    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER, COACH, BILLS, APPTS)
     fun def(id: String) = ALL.firstOrNull { it.id == id }
 
     // ---------------- switches, notebooks, stats ----------------
@@ -144,7 +152,7 @@ object Agents {
 
     /** Skills that need a look at the result before the agent is done (everything else returns straight away). */
     private val LOOK_AGAIN = setOf("screen_read", "read_messages", "earnings_summary", "expenses_summary", "baby_status", "journal_read",
-        "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list", "list_lessons", "review_today",
+        "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list", "list_lessons", "review_today", "bills_list", "appts_list", "life_sweep",
         "read_file", "list_files", "build_status", "read_build_errors")
 
     /** Runs one job on an agent (blocking, background thread). Returns what happened, for Jarvis to say. */
