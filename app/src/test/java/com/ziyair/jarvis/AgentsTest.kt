@@ -18,13 +18,13 @@ class AgentsTest {
     @Test fun readsTheRealToolList() { assertTrue("found ${toolNames.size} tools", toolNames.size > 30) }
 
     @Test fun everySkillHasAHome() {
-        val owned = Agents.CORE + Agents.ALL.filter { it.id != "builder" }.flatMap { it.tools }
+        val owned = Agents.CORE + Agents.ALL.filter { it.id != "builder" && it.id != "coach" }.flatMap { it.tools }
         val orphans = toolNames - owned
         assertTrue("skills nobody owns: $orphans", orphans.isEmpty())
     }
 
     @Test fun agentsOnlyClaimRealSkills() {
-        for (d in Agents.ALL.filter { it.id != "builder" }) {
+        for (d in Agents.ALL.filter { it.id != "builder" && it.id != "coach" }) {
             val fake = d.tools - toolNames
             assertTrue("${d.id} claims skills that don't exist: $fake", fake.isEmpty())
         }

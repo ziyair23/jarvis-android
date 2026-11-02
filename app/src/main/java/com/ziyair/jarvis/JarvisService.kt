@@ -144,7 +144,7 @@ class JarvisService : Service() {
     }
 
     private val unlocked = object : android.content.BroadcastReceiver() {
-        override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy) } }
+        override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy); Coach.maybeReview(this@JarvisService) } }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -807,7 +807,7 @@ class JarvisService : Service() {
         recognizer = null
         main.postDelayed({ if (!busy) holdFocus(false) }, 500)
         main.postDelayed({ if (recognizer == null) quiet(false) }, 400)
-        if (chatted) { chatted = false; thread { Memory.learn(this) } }
+        if (chatted) { chatted = false; thread { Memory.learn(this); Coach.maybeReview(this) } }
         busy = false
         release()
         LogBus.changed()

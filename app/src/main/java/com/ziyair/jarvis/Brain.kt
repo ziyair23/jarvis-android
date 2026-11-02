@@ -46,6 +46,7 @@ class Brain(private val context: Context) {
             (if (prefs.babyName.isNotBlank()) "\nHis baby son is ${prefs.babyName}. Speech-to-text often mishears that name (as Zaire, Zyair, Ziair, Isaiah, Xavier, Sahir, Zayer, 'C a', 'see ya', 'the air' and similar): treat any of those as ${prefs.babyName}." else "") +
             "\nHe talks naturally, not in commands, and speech-to-text garbles words. Work out what he means from loose wording and act on it: 'note that we just fed him', 'he ate', 'bottle's done', 'we fed the baby' all mean log_baby feed; 'changed him', 'he pooped' mean a diaper; 'he's down', 'he's out' mean asleep. If the meaning is reasonably clear, do it and confirm in a few words; only ask a short question when it's genuinely ambiguous. Never ask him to rephrase or use specific words." +
             Memory.promptBlock(context) +
+            Coach.promptBlock(context) +
             "\nRight now it is " + now + "." +
             todaySoFar() +
             (if (DriveMode.on) "\nHE IS DRIVING: one short sentence per reply, never ask him to look at or touch the phone." else "") +
@@ -113,9 +114,18 @@ class Brain(private val context: Context) {
             if (last != null && last.getString("role") == role) last.put("content", last.getString("content") + "\n" + m.getString("content"))
             else clean.put(JSONObject().put("role", role).put("content", m.getString("content")))
         }
+        // he's correcting Jarvis: remember it for Coach, and remind Jarvis to own it and learn from it
+        var said = text
+        if (Coach.on(context) && Coach.isCorrection(text)) {
+            val prev = (h.length() - 1 downTo maxOf(0, h.length() - 3)).map { h.getJSONObject(it) }.firstOrNull { it.optString("role") == "assistant" }?.optString("content").orEmpty()
+            if (prev.isNotBlank()) {
+                Coach.noteCorrection(context, prev, text)
+                said = "$text\n(He's correcting you. Own it in a few words, put it right, and save what to do differently with learn_lesson.)"
+            }
+        }
         val tail = if (clean.length() > 0) clean.getJSONObject(clean.length() - 1) else null
-        if (tail != null && tail.getString("role") == "user") tail.put("content", tail.getString("content") + "\n" + text)
-        else clean.put(JSONObject().put("role", "user").put("content", text))
+        if (tail != null && tail.getString("role") == "user") tail.put("content", tail.getString("content") + "\n" + said)
+        else clean.put(JSONObject().put("role", "user").put("content", said))
 
         lastTools.clear()
         val actions = Actions(context)
@@ -209,6 +219,7 @@ class Brain(private val context: Context) {
             if (reply.contains("[ignore]", true)) return ""
             prefs.addTurn("user", text)
             prefs.addTurn("assistant", reply)
+            Coach.morningSaid(context)
             return reply
         }
     }

@@ -19,7 +19,7 @@ object Agents {
     class Def(val id: String, val name: String, val blurb: String, val tools: Set<String>, val style: String)
 
     /** Skills Jarvis keeps himself: the quick, everyday ones where an extra hop would only slow him down. */
-    val CORE = setOf("set_timer", "remind_me", "get_weather", "remember", "forget",
+    val CORE = setOf("set_timer", "remind_me", "get_weather", "remember", "forget", "learn_lesson",
         "quiet_mode", "set_voice", "status_report", "look", "list_add",
         "list_check", "list_read", "list_clear", "driving_mode", "media_control", "answer_call", "decline_call")
 
@@ -60,7 +60,11 @@ object Agents {
     val BUILDER = Def("builder", "Builder", "Works on Jarvis himself: changes how he talks and behaves, and builds new versions for Marcus to approve.",
         Builder.TOOL_NAMES, Builder.STYLE)
 
-    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER)
+    val COACH = Def("coach", "Coach", "Makes Jarvis better every day: learns from his mistakes and Marcus's corrections, reviews each day, and tunes him.",
+        Coach.TOOL_NAMES, "When he asks how you're improving or what you've learned, read list_lessons and answer in two or three plain sentences. " +
+            "If he says a lesson is wrong, drop it. If he asks for a review now, run review_today.")
+
+    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER, COACH)
     fun def(id: String) = ALL.firstOrNull { it.id == id }
 
     // ---------------- switches, notebooks, stats ----------------
@@ -132,7 +136,7 @@ object Agents {
 
     /** Skills that need a look at the result before the agent is done (everything else returns straight away). */
     private val LOOK_AGAIN = setOf("screen_read", "read_messages", "earnings_summary", "expenses_summary", "baby_status", "journal_read",
-        "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list",
+        "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list", "list_lessons", "review_today",
         "read_file", "list_files", "build_status", "read_build_errors")
 
     /** Runs one job on an agent (blocking, background thread). Returns what happened, for Jarvis to say. */
@@ -158,6 +162,7 @@ object Agents {
             val actions = Actions(c)
             val tools = JSONArray()
             if (id == "builder") { val b = Builder.tools(); for (i in 0 until b.length()) tools.put(b.get(i)) }
+            else if (id == "coach") { val b = Coach.tools(); for (i in 0 until b.length()) tools.put(b.get(i)) }
             else { val all = actions.tools(); for (i in 0 until all.length()) { val t = all.getJSONObject(i); if (t.optString("name") in d.tools) tools.put(t) } }
             // the research agent searches the web itself (Claude's search tool, a few searches per job)
             if (id == "research") tools.put(JSONObject().put("type", "web_search_20250305").put("name", "web_search").put("max_uses", cfg.optInt("research_max_searches", 4))
@@ -192,6 +197,7 @@ object Agents {
                             val out = when {
                                 name == "note_to_self" -> if (addNote(c, id, input.optString("note"))) "Noted." else "Already noted."
                                 id == "builder" -> Builder.run(c, name, input, confirmed)
+                                id == "coach" -> Coach.runTool(c, name, input)
                                 name in d.tools -> actions.run(name, input)
                                 else -> "That skill belongs to another agent."
                             }
@@ -247,6 +253,6 @@ object Agents {
             .put("needs", if (d.id == "builder" && !Builder.allowed(c)) "Add a GitHub token in setup to let him build new versions. Small changes work without it." else "")
             .put("active", active.containsKey(d.id))
             .put("skills", JSONArray(d.tools.sorted())).put("count", Prefs(c).sp.getInt("agent_count_${d.id}", 0))
-            .put("runs", runs(c, d.id)).put("notes", notes(c, d.id)))
+            .put("runs", runs(c, d.id)).put("notes", if (d.id == "coach") Coach.lessons(c) else notes(c, d.id)))
     }
 }
