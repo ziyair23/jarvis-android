@@ -36,6 +36,25 @@ object Fast {
         return null
     }
 
+    // ---------------- "On it." the moment he asks for something ----------------
+    val ACKS = listOf("On it, sir.", "Right away, sir.", "Sending it, sir.")
+    private val ACTION = Regex("^(open|launch|start|play|put on|pause|resume|skip|turn (on|off|up|down)|turn the|set|start a|remind|add|log|navigate|take me|get me directions|directions|call|dial|ring|facetime|show me|switch|lock|unlock|dim|brighten|go to)\\b")
+    private val QUESTION = Regex("^(what|what's|whats|how|where|when|why|who|which|is|are|was|were|do|does|did|should|would|could i|can i|tell me|explain)\\b")
+    private val YES = Regex("^(yes|yeah|yep|yup|sure|do it|send it|go ahead|ok send it|okay send it|yes send it|yes please|send)\\b")
+
+    /**
+     * The line to say straight away when he asks Jarvis to DO something (so he knows it landed), or null.
+     * [t] is normalised text; [lastReply] is what Jarvis last said (for "yes" to "Shall I send it?"). Pure, unit-tested.
+     */
+    fun ackFor(t: String, lastReply: String): String? {
+        val s = t.replace(Regex("^(can you|could you|would you|will you|please|go ahead and|i need you to|i want you to) "), "").trim()
+        if (s.isEmpty() || s.split(" ").size > 14) return null
+        if (YES.containsMatchIn(s) && Regex("(?i)(send it|shall i send|want me to send|should i send|send this|reply)").containsMatchIn(lastReply) && lastReply.trimEnd().endsWith("?")) return ACKS[2]
+        if (QUESTION.containsMatchIn(s)) return null
+        if (Regex("^(text|message|send|reply|tell)\\b").containsMatchIn(s)) return null   // those are read back first, not done straight away
+        return if (ACTION.containsMatchIn(s)) ACKS[s.length % 2] else null
+    }
+
     /** What he says after logging a baby event, from what the log returned. */
     fun babyLine(kind: String, out: String): String {
         val next = Regex("Next feed heads-up at ([0-9: ]+[AP]M)").find(out)?.groupValues?.get(1)
@@ -51,8 +70,17 @@ object Fast {
     /** Tools whose success can be said as-is. Anything not clearly a success goes back to Claude to explain. */
     val FAST = setOf("set_timer", "remind_me", "set_alarm", "cancel_reminders", "call", "log_baby", "log_earnings", "list_add", "log_expense")
 
+    /** An agent's result Jarvis can say straight away: a short, plain success (not a question, not a problem). Pure. */
+    fun agentLine(out: String): String? {
+        val o = out.trim()
+        if (o.length !in 4..160 || o.contains('?') || o.contains('\n')) return null
+        if (Regex("(?i)\\b(couldn'?t|can'?t|cannot|failed|error|problem|not found|no contact|isn'?t|didn'?t|unable|waiting|needs?|confirm|missing|which)\\b").containsMatchIn(o)) return null
+        return if (Regex("^(Sent|Replied|Calling|Called|Opened|Playing|Paused|Logged|Added|Saved|Set|Started|Directions|Done|Turned|Lights|Answered|Declined|Marked|Tracking|Stopped|Removed|Watching|Ticked)\\b").containsMatchIn(o)) o else null
+    }
+
     fun line(tool: String, out: String, input: org.json.JSONObject? = null): String? {
         val o = out.trim()
+        if (tool.startsWith("agent_") && tool != "agent_research" && tool != "agent_builder") return agentLine(o)
         return when (tool) {
             "set_timer" -> if (o.startsWith("Timer set for")) o else null
             "remind_me" -> if (o.startsWith("Reminder set for")) o else null

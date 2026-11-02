@@ -170,11 +170,14 @@ class Brain(private val context: Context) {
         var retried = 0
         var didSomething = false
         var strippedThinking = false
+        var thinkingParamRefused = prefs.sp.getBoolean("thinking_param_refused", false)
         var earlierText = ""
         while (true) {
             val body = JSONObject()
                 .put("model", model)
                 .put("max_tokens", maxTokens)
+            if (!deep && !thinkingParamRefused && cfg.optBoolean("quick_no_thinking", true)) body.put("thinking", JSONObject().put("type", "disabled"))
+            body
                 .put("system", JSONArray()
                     .put(JSONObject().put("type", "text").put("text", stablePrompt(cfg)).put("cache_control", JSONObject().put("type", "ephemeral")))
                     .put(JSONObject().put("type", "text").put("text", livePart() + (if (deep) "\nThis is a real question: give him a proper spoken answer, three to six natural sentences with the actual details (names, numbers, scores, times), like a knowledgeable friend talking. No lists or headings." else "") + (if (!followUp) "\nThe wake word can occasionally misfire on the TV. Only if what you heard is obviously not meant for you (TV dialogue, song lyrics, or a meaningless one or two word fragment) reply with exactly [ignore]. Anything that could be a request or a question, even garbled, is for you: work out what he meant and answer it." else "") + if (followUp) "\nYou're mid-conversation with him, so this was picked up without the wake word. Carry the conversation on naturally, the way two people talk. Only if it is obviously not meant for you (clearly him talking to someone else, the TV, song lyrics), reply with exactly [ignore]. When in doubt, it's for you: answer it." else "")))
@@ -198,6 +201,10 @@ class Brain(private val context: Context) {
                     if (Web.fallBack(context, resp)) { val w = webTools(); for (i in 0 until w.length()) tools.put(w.get(i)) }
                     continue
                 }
+            }
+            // his model won't take "no thinking": leave the switch out from now on
+            if (code == 400 && !thinkingParamRefused && body.has("thinking") && resp.contains("thinking", true) && !resp.contains("signature", true)) {
+                thinkingParamRefused = true; prefs.sp.edit().putBoolean("thinking_param_refused", true).apply(); continue
             }
             if (code == 400 && !strippedThinking && (resp.contains("thinking", true) || resp.contains("signature", true))) {
                 strippedThinking = true
@@ -242,7 +249,7 @@ class Brain(private val context: Context) {
                         lastTools.addAll(Agents.drainInner())   // skills an agent used count as used (music, texts...)
                         if (Agents.on(context) && !name.startsWith("agent_")) Agents.owner(name)?.let { Agents.flash(it) }
                         if (out is String) recordAction(name, out)
-                        fastLines.add(if (fastOn && name in Fast.FAST && out is String) Fast.line(name, out) else null)
+                        fastLines.add(if (fastOn && (name in Fast.FAST || name.startsWith("agent_")) && out is String) Fast.line(name, out) else null)
                         results.put(JSONObject().put("type", "tool_result").put("tool_use_id", part.getString("id")).put("content", out))
                     }
                 }

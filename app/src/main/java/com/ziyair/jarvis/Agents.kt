@@ -202,9 +202,12 @@ object Agents {
             val msgs = JSONArray().put(JSONObject().put("role", "user").put("content", task))
             for (round in 1..(if (id == "builder") 14 else 6)) {
                 val body = JSONObject().put("model", model).put("max_tokens", when (id) { "builder" -> 4000; "research" -> 900; else -> 500 }).put("system", system)
+                // everyday agents act without hidden thinking first (Research and Builder keep it)
+                if (id != "research" && id != "builder" && !Prefs(c).sp.getBoolean("thinking_param_refused", false)) body.put("thinking", JSONObject().put("type", "disabled"))
                     .put("tools", tools).put("messages", msgs)
                 val resp = post(key, body) ?: run {
                     // the newer web tools turned down: drop back to the basic search once and try again
+                    if (body.has("thinking") && lastError.contains("thinking", true)) { Prefs(c).sp.edit().putBoolean("thinking_param_refused", true).apply(); return@run null }
                     if (id == "research" && Web.fallBack(c, lastError)) {
                         for (i in tools.length() - 1 downTo 0) if (Web.isWeb(tools.getJSONObject(i))) tools.remove(i)
                         val w = Web.tools(c, cfg.optInt("research_max_searches", 5), 0); for (i in 0 until w.length()) tools.put(w.get(i))
