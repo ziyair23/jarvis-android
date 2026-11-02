@@ -29,7 +29,13 @@ class PackagesSuppliesTest {
 
     @Test fun watchesBabySuppliesAutomatically() {
         for (t in listOf("diapers", "wipes", "Similac formula", "pacifiers", "Pampers size 1")) assertTrue(t, Supplies.worthWatching(t))
-        for (t in listOf("milk", "eggs", "gas", "chips")) assertFalse(t, Supplies.worthWatching(t))
+        for (t in listOf("gas", "a birthday card", "tape")) assertFalse(t, Supplies.worthWatching(t))
+    }
+
+    @Test fun watchesGroceriesToo() {
+        for (t in listOf("milk", "a dozen eggs", "bread", "chicken breasts", "coffee", "paper towels")) assertTrue(t, Supplies.worthWatching(t))
+        assertFalse("once isn't a habit", Supplies.rebuy(1))
+        assertTrue("twice is", Supplies.rebuy(2))
     }
 
     @Test fun onlyRealDeals() {

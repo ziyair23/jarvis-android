@@ -83,7 +83,7 @@ object Agents {
     val PACKAGES = Def("packages", "Packages", "Follows his deliveries on its own from store and carrier notifications, and tells him when something's delivered.",
         setOf("packages_list", "package_done"), "Say what's coming and when in one or two sentences. Never open shopping apps or change orders.")
 
-    val SUPPLIES = Def("supplies", "Supplies", "Watches prices on the things he keeps rebuying, like diapers, wipes and formula, and tells him when something's a real deal.",
+    val SUPPLIES = Def("supplies", "Supplies", "Watches prices on the groceries and baby supplies he keeps rebuying (milk, eggs, diapers, wipes, formula...) at the stores around Spokane, and tells him when something's a real deal.",
         setOf("supplies_list", "supply_watch", "supply_unwatch", "supply_check"), "Give the price, the store and the size. Never buy anything or add to a cart.")
 
     val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER, COACH, BILLS, APPTS, PACKAGES, SUPPLIES)

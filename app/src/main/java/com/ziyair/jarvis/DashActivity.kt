@@ -38,7 +38,11 @@ class DashActivity : Activity() {
     override fun onPause() { Orb.inApp = false; LogBus.unlisten(refresh); if (::web.isInitialized) { web.onPause(); web.pauseTimers() }; super.onPause() }
 
     @Suppress("DEPRECATION")
-    override fun onBackPressed() { if (::web.isInitialized && web.canGoBack()) web.goBack() else super.onBackPressed() }
+    override fun onBackPressed() {
+        if (!::web.isInitialized) { super.onBackPressed(); return }
+        // an open sheet closes first; otherwise leave the app as usual
+        web.evaluateJavascript("(window.backPressed ? window.backPressed() : false)") { v -> if (v != "true") finish() }
+    }
 
     inner class Bridge {
         private val ctx get() = this@DashActivity
