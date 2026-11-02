@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="access_desc">Lets Jarvis open things, tap buttons, scroll, type and go back or home when you ask him to by voice. He only looks at the screen when you ask for something.</string>
-    <string name="brain_wallpaper_desc">Jarvis's brain, alive on your screen: it lights up when he listens, talks, thinks, or hands a job to one of his agents.</string>
+    <string name="brain_wallpaper_desc">Jarvis\'s brain, alive on your screen: it lights up when he listens, talks, thinks, or hands a job to one of his agents.</string>
 </resources>
