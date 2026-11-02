@@ -38,9 +38,12 @@ object Packages {
         }
         val eta = Regex("(?i)\\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\b").find(all)?.value?.lowercase()
             ?.takeIf { status != "delivered" }
-        var item = (if (Regex("(?i)^(delivered|arriving|shipped|out for delivery)\\b").containsMatchIn(title) || title.length < 4) text else title)
-        item = item.replace(Regex("(?i)^(delivered|arriving (today|tomorrow|\\w+day)|out for delivery|shipped|your (package|order|shipment)( from [A-Za-z ]+)?( has| is| was)?( been)?( shipped| delivered| arriving| out for delivery)?)[:!.,-]*\\s*"), "")
+        fun strip(x: String) = x.replace(Regex("(?i)^(delivered|arriving (today|tomorrow|\\w+day)|out for delivery|shipped|your (package|order|shipment)( from [A-Za-z ]+)?( has| is| was)?( been)?( shipped| delivered| arriving| out for delivery)?)[:!.,-]*\\s*"), "")
             .replace(TRACK, "").replace(Regex("\\s+"), " ").trim().trimEnd('.', '!')
+        // the item's name: from the title ("Delivered: Pampers Size 1"), unless the title is only a status or the store's name
+        val fromTitle = strip(title)
+        val generic = Regex("(?i)^(ups|fedex|usps|amazon|target|walmart|update|ups update|fedex update|order update|delivery update|your order|your package|a package)?$")
+        var item = if (fromTitle.length >= 4 && !generic.matches(fromTitle)) fromTitle else strip(text)
         if (item.length < 3) item = "a package"
         return Parsed(status, item.take(60), eta, TRACK.find(all)?.value)
     }
