@@ -80,7 +80,13 @@ object Agents {
         setOf("appts_list", "appt_add", "appt_remove", "set_baby_birthday", "life_sweep"),
         "Times you pass to tools are 24-hour local time. Checkup timing is the usual schedule only; the pediatrician sets the real dates. Never book or cancel anything with an office yourself.")
 
-    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER, COACH, BILLS, APPTS)
+    val PACKAGES = Def("packages", "Packages", "Follows his deliveries on its own from store and carrier notifications, and tells him when something's delivered.",
+        setOf("packages_list", "package_done"), "Say what's coming and when in one or two sentences. Never open shopping apps or change orders.")
+
+    val SUPPLIES = Def("supplies", "Supplies", "Watches prices on the things he keeps rebuying, like diapers, wipes and formula, and tells him when something's a real deal.",
+        setOf("supplies_list", "supply_watch", "supply_unwatch", "supply_check"), "Give the price, the store and the size. Never buy anything or add to a cart.")
+
+    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER, COACH, BILLS, APPTS, PACKAGES, SUPPLIES)
     fun def(id: String) = ALL.firstOrNull { it.id == id }
 
     // ---------------- switches, notebooks, stats ----------------
@@ -152,7 +158,7 @@ object Agents {
 
     /** Skills that need a look at the result before the agent is done (everything else returns straight away). */
     private val LOOK_AGAIN = setOf("screen_read", "read_messages", "earnings_summary", "expenses_summary", "baby_status", "journal_read",
-        "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list", "list_lessons", "review_today", "bills_list", "appts_list", "life_sweep",
+        "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list", "list_lessons", "review_today", "bills_list", "appts_list", "life_sweep", "packages_list", "supplies_list", "supply_check",
         "read_file", "list_files", "build_status", "read_build_errors")
 
     /** Runs one job on an agent (blocking, background thread). Returns what happened, for Jarvis to say. */

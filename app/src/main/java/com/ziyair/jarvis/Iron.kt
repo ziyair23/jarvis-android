@@ -151,6 +151,8 @@ object Briefing {
         add("Baby") { Baby.status(context) }
         add("Money") { "earned today ${Earnings.money(Earnings.today(context))}. " + Earnings.summary(context) }
         add("Lists") { Lists.read(context, null) }
+        add("Packages") { Packages.today(context).ifBlank { null } }
+        add("Deals") { Supplies.deal(context).ifBlank { null } }
         add("Bills") { Bills.upcoming(context, 7).ifBlank { null } }
         add("Appointments") { (Appts.upcoming(context, 7) + (Appts.checkupNote(context)?.let { " $it" } ?: "")).trim().ifBlank { null } }
         add("Reminders") {

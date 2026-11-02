@@ -69,6 +69,8 @@ class DashActivity : Activity() {
                 .put("reminders", p.reminders())
                 .put("bills", Bills.json(ctx))
                 .put("appts", Appts.json(ctx))
+                .put("packages", Packages.all(ctx))
+                .put("supplies", Supplies.all(ctx))
                 .put("history", p.history())
                 .toString()
         }

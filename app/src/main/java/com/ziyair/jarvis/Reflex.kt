@@ -53,7 +53,7 @@ object Reflex {
                 is Fast.Quick.Baby -> { val out = Baby.log(c, q.kind, 0.0, ""); Agents.flash("family"); Hit(Fast.babyLine(q.kind, out)) }
                 is Fast.Quick.Earn -> { Earnings.log(c, q.amount, "today", false); Agents.flash("money")
                     Hit("Logged ${Earnings.money(q.amount)}. You're at ${Earnings.money(Earnings.today(c))} today.") }
-                is Fast.Quick.ListAdd -> { val out = Lists.add(c, q.items, null); Hit(Fast.line("list_add", out) ?: out) }
+                is Fast.Quick.ListAdd -> { val out = Lists.add(c, q.items, null); Supplies.noticeListAdd(c, q.items); Hit(Fast.line("list_add", out) ?: out) }
             }
         }
         when {

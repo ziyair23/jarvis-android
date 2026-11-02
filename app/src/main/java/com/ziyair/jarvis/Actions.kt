@@ -97,6 +97,12 @@ class Actions(private val context: Context) {
             props("what" to str("Short, e.g. Dentist, Ziyair's checkup"), "date" to str("yyyy-MM-dd"), "time" to str("24-hour HH:MM, if known"), "where" to str("Place, if known")), listOf("what", "date")))
         put(tool("appt_remove", "Remove an appointment and its reminders.", props("what" to str("Part of its name")), listOf("what")))
         put(tool("set_baby_birthday", "Save the baby's birthday so his usual checkups can be tracked.", props("date" to str("yyyy-MM-dd")), listOf("date")))
+        put(tool("packages_list", "His deliveries: what's on the way, out for delivery, or just delivered.", props(), listOf()))
+        put(tool("package_done", "Stop following a package (by part of its name).", props("what" to str("Part of the item name")), listOf("what")))
+        put(tool("supplies_list", "The supplies whose prices are watched, their latest prices, and any current deal.", props(), listOf()))
+        put(tool("supply_watch", "Start watching the price of something he rebuys.", props("item" to str("e.g. Pampers size 1 diapers")), listOf("item")))
+        put(tool("supply_unwatch", "Stop watching the price of something.", props("item" to str("The item")), listOf("item")))
+        put(tool("supply_check", "Check current prices on the watched supplies right now (about twenty seconds).", props(), listOf()))
         put(tool("pursuit_add", "Pursuit (his clothing brand): save an idea (kind idea, tag design/drop/post/collab), a shot for the shoot list (kind shot), a launch to-do (kind task, who = him or his partner) or an order (kind order). Never sends anything.",
             props("kind" to JSONObject().put("type", "string").put("enum", JSONArray(listOf("idea", "shot", "task", "order"))), "text" to str("The thing itself, in his words"),
                 "tag" to str("design, drop, post, collab, or a product like hoodie"), "who" to str("For tasks: who's doing it")), listOf("kind", "text")))
@@ -260,7 +266,7 @@ class Actions(private val context: Context) {
                 }
             }
             "set_home_wifi" -> HomeNet.setHere(context)
-            "list_add" -> Lists.add(context, input.getString("items"), input.optString("list"))
+            "list_add" -> Lists.add(context, input.getString("items"), input.optString("list")).also { Supplies.noticeListAdd(context, input.getString("items")) }
             "list_check" -> Lists.check(context, input.getString("items"), input.optString("list"))
             "list_read" -> Lists.read(context, input.optString("list"))
             "list_clear" -> Lists.clear(context, input.optString("list"), input.optBoolean("everything"))
@@ -282,6 +288,12 @@ class Actions(private val context: Context) {
                 if (at == null) "Need the date as year-month-day." else "Added: " + Appts.upsert(context, input.getString("what"), at, t != null, input.optString("where").ifBlank { null }) }
             "appt_remove" -> Appts.remove(context, input.getString("what"))
             "set_baby_birthday" -> Appts.setBirthday(context, input.getString("date"))
+            "packages_list" -> Packages.list(context)
+            "package_done" -> Packages.done(context, input.optString("what"))
+            "supplies_list" -> Supplies.list(context)
+            "supply_watch" -> Supplies.watch(context, input.getString("item"))
+            "supply_unwatch" -> Supplies.unwatch(context, input.getString("item"))
+            "supply_check" -> Supplies.check(context)
             "pursuit_add" -> Pursuit.add(context, input.optString("kind", "idea"), input.getString("text"), input.optString("tag").ifBlank { null }, input.optString("who").ifBlank { null })
             "pursuit_list" -> Pursuit.list(context, input.optString("kind").ifBlank { null }, input.optString("query").ifBlank { null })
             "pursuit_done" -> Pursuit.done(context, input.getString("text"))
