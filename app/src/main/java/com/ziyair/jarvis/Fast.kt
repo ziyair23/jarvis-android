@@ -55,6 +55,35 @@ object Fast {
         return if (ACTION.containsMatchIn(s)) ACKS[s.length % 2] else null
     }
 
+    // ---------------- the confirm rule, enforced in code ----------------
+    private fun plain(s: String) = s.lowercase().replace(Regex("[^a-z0-9]"), "")
+
+    /** The messages Jarvis read back, in quotes, in what he last said. Pure. */
+    fun quoted(reply: String): List<String> =
+        Regex("[\"\u201c\u201d]([^\"\u201c\u201d]{2,600})[\"\u201c\u201d]").findAll(reply).map { it.groupValues[1] }.toList() +
+            Regex("(?<![a-zA-Z])'([^']{6,600})'(?![a-zA-Z])").findAll(reply).map { it.groupValues[1] }.toList()
+
+    /**
+     * May this message go out? Only if it's (near enough word for word) a message Jarvis read back to him in quotes,
+     * so a "yes" can never send something he didn't hear. Pure, unit-tested.
+     */
+    fun readBack(lastReplies: List<String>, message: String): Boolean {
+        val m = plain(message); if (m.length < 2) return false
+        return lastReplies.flatMap { quoted(it) }.map { plain(it) }.any { q -> q == m || (q.length >= 8 && (q.contains(m) || m.contains(q)) && minOf(q.length, m.length) * 10 >= maxOf(q.length, m.length) * 9) }
+    }
+
+    /** A contact for a misheard name: the one name the heard word starts with or is a letter or two off from. Pure. */
+    fun closestName(heard: String, names: List<String>): String? {
+        val h = heard.lowercase().replace(Regex("[^a-z ]"), "").trim(); if (h.length < 3) return null
+        fun dist(a: String, b: String): Int { val d = IntArray(b.length + 1) { it }; for (i in 1..a.length) { var prev = d[0]; d[0] = i
+            for (j in 1..b.length) { val t = d[j]; d[j] = minOf(d[j] + 1, d[j - 1] + 1, prev + if (a[i - 1] == b[j - 1]) 0 else 1); prev = t } }; return d[b.length] }
+        val scored = names.distinct().mapNotNull { n -> val first = n.lowercase().split(" ").first().replace(Regex("[^a-z]"), ""); if (first.length < 3) return@mapNotNull null
+            val score = when { h == first -> 0; h.startsWith(first) && first.length >= 4 -> 1; dist(h.split(" ").first(), first) <= (if (first.length >= 6) 2 else 1) -> 2; else -> 99 }
+            if (score < 99) n to score else null }
+        val best = scored.minByOrNull { it.second } ?: return null
+        return if (scored.count { it.second == best.second } == 1) best.first else null
+    }
+
     /** What he says after logging a baby event, from what the log returned. */
     fun babyLine(kind: String, out: String): String {
         val next = Regex("Next feed heads-up at ([0-9: ]+[AP]M)").find(out)?.groupValues?.get(1)
