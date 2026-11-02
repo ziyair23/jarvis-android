@@ -16,6 +16,16 @@ class BrainWallpaperTest {
         assertTrue(m.p.all { !it.isNaN() && kotlin.math.abs(it) < 2f })
     }
 
+    @Test fun signalsCanHopNeuronToNeuron() {
+        val n = m.kind.size
+        assertEquals(n + 1, m.adjStart.size)
+        assertEquals(m.e.size, m.adj.size)   // every fibre is listed at both of its ends
+        for (i in 0 until n) for (j in m.adjStart[i] until m.adjStart[i + 1]) {
+            val e = m.adj[j]; assertTrue(m.e[e * 2] == i || m.e[e * 2 + 1] == i)
+        }
+        assertTrue("most neurons connect onward", (0 until n).count { m.adjStart[it + 1] > m.adjStart[it] } > n * 0.8)
+    }
+
     @Test fun everyAgentHasAPlaceThatCanLightUp() {
         for (d in Agents.ALL) {
             assertTrue("${d.id} has no place in the brain", BrainModel.POS.containsKey(d.id))

@@ -4,12 +4,13 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
 import android.graphics.Shader
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
+import android.view.Choreographer
 import android.view.SurfaceHolder
 import kotlin.math.abs
 import kotlin.math.acos
@@ -21,33 +22,44 @@ import kotlin.math.sqrt
 /**
  * Jarvis's brain as a live wallpaper (lock screen, and home screen if the phone applies it to both).
  * The same brain as the Brain tab: a folded cortex, cerebellum and stem as points and fibres, slowly turning.
- * It's alive: it brightens while he listens, pulses with his voice while he talks, sparks faster while he thinks,
- * and when an agent picks up a job its part of the brain lights up and a pulse runs along its thread to Jarvis.
- * Only draws while it's on screen, and slows right down when nothing's happening, so it's easy on the battery.
+ * Drawn on the graphics chip in step with the screen (60 or 120 fps, whatever the phone runs), with nothing
+ * allocated per frame, so it never stutters.
+ * Always a little alive: sparks firing, chains of neurons lighting one after another, a wave of thought sweeping
+ * through every few seconds, soft pulses running between agents and Jarvis. And it reacts: brighter while he
+ * listens, pulsing with his voice while he talks, racing while he thinks, and an agent's region lights up (with its
+ * name) while it works. Only draws while it's on screen.
  */
 class BrainWallpaper : WallpaperService() {
     override fun onCreateEngine(): Engine = BrainEngine()
 
-    inner class BrainEngine : Engine() {
-        private val handler = Handler(Looper.getMainLooper())
+    inner class BrainEngine : Engine(), Choreographer.FrameCallback {
         private var visible = false
-        private val draw = Runnable { frame() }
         private val m = BrainModel.get()
         private val n = m.p.size / 3
-        private val px = FloatArray(n); private val py = FloatArray(n); private val pz = FloatArray(n); private val pf = FloatArray(n)
+        private val ne = m.e.size / 2
+        private val px = FloatArray(n); private val py = FloatArray(n); private val pz = FloatArray(n)
         private var yaw = 0.6f
         private val pitch = -0.22f
-        private var lastT = 0f
-        private val born = SystemClock.elapsedRealtime()
+        private var lastNs = 0L
+        private var t = 0f
         private var shown = 0f
 
         private val dens = resources.displayMetrics.density
         private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 0.8f * dens }
+        private val glowLine = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.6f * dens; strokeCap = Paint.Cap.ROUND; xfermode = PorterDuffXfermode(PorterDuff.Mode.ADD) }
         private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
         private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val add = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.ADD) }
+        private val glow = Paint(Paint.ANTI_ALIAS_FLAG)
         private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
         private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; textSize = 13f * dens; letterSpacing = 0.08f }
         private val path = Path()
+
+        // made once, then scaled into place (no new objects while animating)
+        private val unitGlow = RadialGradient(0f, 0f, 1f, intArrayOf(Color.argb(255, 201, 102, 92), Color.argb(0, 201, 102, 92)), null, Shader.TileMode.CLAMP)
+        private val unitHalo = RadialGradient(0f, 0f, 1f, intArrayOf(Color.argb(0, 176, 82, 74), Color.argb(0, 176, 82, 74), Color.argb(255, 176, 82, 74), Color.argb(0, 176, 82, 74)),
+            floatArrayOf(0f, 0.38f, 0.5f, 1f), Shader.TileMode.CLAMP)
+        private val unitCore = RadialGradient(0f, 0f, 1f, intArrayOf(Color.argb(255, 176, 82, 74), Color.argb(0, 176, 82, 74)), null, Shader.TileMode.CLAMP)
 
         // per-depth batches, so thousands of fibres are a handful of draw calls
         private val B = 4
@@ -55,41 +67,75 @@ class BrainWallpaper : WallpaperService() {
         private val lineN = IntArray(B)
         private val dotBuf = Array(3 * B) { FloatArray(n * 2) }
         private val dotN = IntArray(3 * B)
+        private val waveBuf = FloatArray(n * 2)
 
-        private val sparks = ArrayList<Spark>()
-        private val pulses = ArrayList<Pulse>()
-        private val wasActive = HashSet<String>()
-        private var agents: List<String> = emptyList()
+        // sparks: a ring buffer of (edge, start time)
+        private val SPARKS = 400
+        private val sparkE = IntArray(SPARKS); private val sparkT = FloatArray(SPARKS) { -9f }; private var sparkI = 0
+        private var sparkDebt = 0f
+        // chains: a signal hopping neuron to neuron
+        private val CH = 24
+        private val chPoint = IntArray(CH); private val chLeft = IntArray(CH); private val chNext = FloatArray(CH) { -1f }
+        private var nextChain = 0.5f
+        // a wave of thought sweeping through
+        private var waveAt = 2f
+        // pulses along agent threads
+        private val PU = 24
+        private val puAgent = IntArray(PU); private val puT = FloatArray(PU) { -9f }; private val puSoft = BooleanArray(PU); private var puI = 0
+        private var nextSoft = 1.5f
+
+        private val ids = BrainModel.POS.keys.toTypedArray()
+        private val agentOn = BooleanArray(ids.size)
+        private val agentBusy = BooleanArray(ids.size)
+        private val wasBusy = BooleanArray(ids.size)
+        private val nx = FloatArray(ids.size); private val ny = FloatArray(ids.size); private val nz = FloatArray(ids.size); private val nf = FloatArray(ids.size)
+        private val order = IntArray(ids.size)
         private var agentsAt = 0L
-        private val dust = Array(60) { floatArrayOf((it * 0.37f) % 6.28f, 1.25f + (it * 0.173f) % 0.5f, ((it * 0.61f) % 1.4f) - 0.7f, 0.05f + (it * 0.031f) % 0.1f) }
+        private val names = ids.map { id -> Agents.def(id)?.name ?: id }
+
+        private val DUST = 70
+        private val dA = FloatArray(DUST) { (it * 0.37f) % 6.28f }; private val dR = FloatArray(DUST) { 1.2f + (it * 0.173f) % 0.6f }
+        private val dY = FloatArray(DUST) { ((it * 0.61f) % 1.5f) - 0.75f }; private val dS = FloatArray(DUST) { 0.06f + (it * 0.031f) % 0.12f }
         private val rnd = java.util.Random(7)
 
         override fun onVisibilityChanged(v: Boolean) {
             visible = v
-            handler.removeCallbacks(draw)
-            if (v) { lastT = now(); handler.post(draw) }
+            val ch = Choreographer.getInstance()
+            ch.removeFrameCallback(this)
+            if (v) { lastNs = 0L; ch.postFrameCallback(this) }
         }
-        override fun onSurfaceDestroyed(holder: SurfaceHolder) { visible = false; handler.removeCallbacks(draw); super.onSurfaceDestroyed(holder) }
-        override fun onDestroy() { handler.removeCallbacks(draw); super.onDestroy() }
+        override fun onSurfaceDestroyed(holder: SurfaceHolder) { visible = false; Choreographer.getInstance().removeFrameCallback(this); super.onSurfaceDestroyed(holder) }
+        override fun onDestroy() { Choreographer.getInstance().removeFrameCallback(this); super.onDestroy() }
 
-        private fun now() = (SystemClock.elapsedRealtime() - born) / 1000f
-
-        private fun frame() {
+        override fun doFrame(frameTimeNanos: Long) {
             if (!visible) return
-            val busy = Orb.state != Orb.HIDDEN || Agents.active.isNotEmpty()
+            val dt = if (lastNs == 0L) 0.016f else ((frameTimeNanos - lastNs) / 1e9f).coerceIn(0f, 0.1f)
+            lastNs = frameTimeNanos
+            t += dt
             val h = surfaceHolder
             var c: Canvas? = null
-            try { c = h.lockCanvas(); if (c != null) render(c) } catch (_: Exception) {}
-            finally { if (c != null) try { h.unlockCanvasAndPost(c) } catch (_: Exception) {} }
-            handler.postDelayed(draw, if (busy) 33L else 50L)   // 30 fps while he's doing something, 20 at rest
+            try { c = h.lockHardwareCanvas() } catch (_: Throwable) {}
+            if (c == null) try { c = h.lockCanvas() } catch (_: Throwable) {}
+            try { if (c != null) render(c, dt) } catch (_: Throwable) {}
+            finally { if (c != null) try { h.unlockCanvasAndPost(c) } catch (_: Throwable) {} }
+            if (visible) Choreographer.getInstance().postFrameCallback(this)
         }
 
         private fun col(r: Int, g: Int, b: Int, a: Float) = Color.argb((a.coerceIn(0f, 1f) * 255).toInt(), r, g, b)
 
-        private fun render(cv: Canvas) {
-            val t = now(); val dt = (t - lastT).coerceIn(0f, 0.1f); lastT = t
+        private fun spark(e: Int) { sparkE[sparkI] = e; sparkT[sparkI] = t; sparkI = (sparkI + 1) % SPARKS }
+        private fun pulse(a: Int, soft: Boolean, delay: Float = 0f) { puAgent[puI] = a; puT[puI] = t + delay; puSoft[puI] = soft; puI = (puI + 1) % PU }
+
+        private fun circle(cv: Canvas, shader: Shader, x: Float, y: Float, r: Float, alpha: Float) {
+            if (alpha <= 0.004f || r <= 0f) return
+            glow.shader = shader; glow.alpha = (alpha.coerceIn(0f, 1f) * 255).toInt()
+            cv.save(); cv.translate(x, y); cv.scale(r, r); cv.drawCircle(0f, 0f, 1f, glow); cv.restore()
+        }
+
+        private fun render(cv: Canvas, dt: Float) {
             val W = cv.width.toFloat(); val H = cv.height.toFloat()
-            val cx = W / 2; val cy = H * 0.56f; val S = min(W, H * 0.6f) * 0.36f
+            val cx = W / 2; val cy = H * 0.56f
+            val S = min(W, H * 0.6f) * 0.36f * (1 + 0.012f * sin(t * 0.9f))   // the whole brain breathes, very slightly
 
             // what Jarvis is doing right now
             val st = Orb.state
@@ -97,24 +143,29 @@ class BrainWallpaper : WallpaperService() {
             val target = when (st) {
                 Orb.LISTEN -> 0.35f + Orb.level * 0.65f
                 Orb.SPEAK -> if (voice >= 0f) 0.35f + voice * 0.65f else 0.45f + 0.3f * abs(sin(t * 6.5f))
-                Orb.THINK -> 0.45f + 0.08f * sin(t * 3f)
-                else -> 0.12f + 0.06f * (0.5f + 0.5f * sin(t * 1.1f))
+                Orb.THINK -> 0.5f + 0.08f * sin(t * 3f)
+                else -> 0.16f + 0.07f * (0.5f + 0.5f * sin(t * 1.1f))
             }
-            shown += (target - shown) * (if (target > shown) 0.4f else 0.08f)
+            val k = 1f - Math.pow(if (target > shown) 0.0005 else 0.08, dt.toDouble()).toFloat()   // same feel at any frame rate
+            shown += (target - shown) * k
+
             if (SystemClock.elapsedRealtime() - agentsAt > 3000) {
                 agentsAt = SystemClock.elapsedRealtime()
-                agents = try { if (Agents.on(applicationContext)) Agents.ALL.filter { Agents.enabled(applicationContext, it.id) }.map { it.id } else emptyList() } catch (_: Exception) { emptyList() }
+                try { val on = Agents.on(applicationContext); for (i in ids.indices) agentOn[i] = on && Agents.def(ids[i]) != null && Agents.enabled(applicationContext, ids[i]) } catch (_: Exception) {}
             }
-            val active = Agents.active.keys.toSet()
-            for (id in active) if (id !in wasActive) for (k in 0..2) pulses.add(Pulse(id, t + k * 0.25f))
-            wasActive.clear(); wasActive.addAll(active)
+            var anyBusy = false
+            for (i in ids.indices) {
+                agentBusy[i] = Agents.active.containsKey(ids[i])
+                if (agentBusy[i]) anyBusy = true
+                if (agentBusy[i] && !wasBusy[i]) for (j in 0..2) pulse(i, false, j * 0.22f)
+                wasBusy[i] = agentBusy[i]
+            }
 
-            yaw += dt * (0.1f + 0.25f * shown)
+            yaw += dt * (0.14f + 0.3f * shown)
 
-            // background: near-black with a faint oxblood bloom behind the brain
+            // background: near-black with an oxblood bloom behind the brain
             cv.drawColor(Color.rgb(11, 11, 12))
-            fill.shader = RadialGradient(cx, cy, S * 2.2f, intArrayOf(col(176, 82, 74, 0.10f + 0.22f * shown), col(176, 82, 74, 0f)), null, Shader.TileMode.CLAMP)
-            cv.drawCircle(cx, cy, S * 2.2f, fill); fill.shader = null
+            circle(cv, unitGlow, cx, cy, S * 2.3f, 0.12f + 0.2f * shown)
 
             // project
             val cyw = cos(yaw); val syw = sin(yaw); val cp = cos(pitch); val sp = sin(pitch)
@@ -123,113 +174,132 @@ class BrainWallpaper : WallpaperService() {
                 val x = x0 * cyw + z0 * syw; var z = -x0 * syw + z0 * cyw
                 val y = y0 * cp - z * sp; z = y0 * sp + z * cp
                 val f = 3.2f / (3.2f - z)
-                px[i] = cx + x * S * f; py[i] = cy - y * S * f; pz[i] = z; pf[i] = f
+                px[i] = cx + x * S * f; py[i] = cy - y * S * f; pz[i] = z
             }
 
             // fibres, batched by depth: faint at the back, warmer at the front
             lineN.fill(0)
-            for (k in 0 until m.e.size / 2) {
-                val a = m.e[k * 2]; val b = m.e[k * 2 + 1]
+            for (e in 0 until ne) {
+                val a = m.e[e * 2]; val b = m.e[e * 2 + 1]
                 val bucket = (((pz[a] + pz[b]) / 2 + 1) / 2 * B).toInt().coerceIn(0, B - 1)
                 val buf = lineBuf[bucket]; var o = lineN[bucket]
                 buf[o++] = px[a]; buf[o++] = py[a]; buf[o++] = px[b]; buf[o++] = py[b]; lineN[bucket] = o
             }
-            for (b in 0 until B) { line.color = col(201, 102, 92, 0.05f + 0.15f * (b + 0.5f) / B + 0.12f * shown); cv.drawLines(lineBuf[b], 0, lineN[b], line) }
+            for (b in 0 until B) { line.color = col(201, 102, 92, 0.06f + 0.16f * (b + 0.5f) / B + 0.12f * shown); cv.drawLines(lineBuf[b], 0, lineN[b], line) }
 
-            // sparks: a fibre flashes for a moment; more while he thinks or talks, and around an agent at work
-            val rate = 1 + (shown * 4).toInt() + (if (st == Orb.THINK) 2 else 0)
-            for (k in 0 until rate) if (rnd.nextFloat() < 0.6f) sparks.add(Spark(rnd.nextInt(m.e.size / 2), t))
-            for (id in active) m.near[id]?.takeIf { it.isNotEmpty() }?.let { ne -> repeat(3) { sparks.add(Spark(ne[rnd.nextInt(ne.size)], t)) } }
-            sparks.removeAll { t - it.t > 0.7f }
-            for (s in sparks) {
-                val a = m.e[s.e * 2]; val b = m.e[s.e * 2 + 1]; val k = 1 - (t - s.t) / 0.7f
-                line.color = col(232, 140, 125, 0.65f * k); line.strokeWidth = 1.5f * dens
-                cv.drawLine(px[a], py[a], px[b], py[b], line)
-                fill.color = col(250, 205, 192, 0.55f * k); cv.drawCircle((px[a] + px[b]) / 2, (py[a] + py[b]) / 2, 1.6f * dens, fill)
+            // sparks: always some firing; many more while he listens, talks or thinks
+            sparkDebt += dt * (16f + 70f * shown + (if (st == Orb.THINK) 50f else 0f))
+            while (sparkDebt >= 1f) { spark(rnd.nextInt(ne)); sparkDebt -= 1f }
+            for (i in ids.indices) if (agentBusy[i]) m.near[ids[i]]?.takeIf { it.isNotEmpty() }?.let { nr -> if (rnd.nextFloat() < dt * 40f) spark(nr[rnd.nextInt(nr.size)]) }
+
+            // chains: a signal hopping from neuron to neuron along the fibres
+            if (t >= nextChain) {
+                val slot = (0 until CH).firstOrNull { chLeft[it] <= 0 }
+                if (slot != null) { chPoint[slot] = rnd.nextInt(n); chLeft[slot] = 6 + rnd.nextInt(8); chNext[slot] = t }
+                nextChain = t + (if (st != Orb.HIDDEN || anyBusy) 0.15f else 0.55f) + rnd.nextFloat() * 0.6f
             }
-            line.strokeWidth = 0.8f * dens
+            for (s in 0 until CH) {
+                if (chLeft[s] <= 0 || t < chNext[s]) continue
+                val p = chPoint[s]; val from = m.adjStart[p]; val to = m.adjStart[p + 1]
+                if (to <= from) { chLeft[s] = 0; continue }
+                val e = m.adj[from + rnd.nextInt(to - from)]
+                spark(e)
+                chPoint[s] = if (m.e[e * 2] == p) m.e[e * 2 + 1] else m.e[e * 2]
+                chLeft[s]--; chNext[s] = t + 0.055f
+            }
 
-            // neurons, batched by kind and depth
-            dotN.fill(0)
+            add.color = Color.WHITE
+            for (s in 0 until SPARKS) {
+                val age = t - sparkT[s]; if (age < 0f || age > 0.7f) continue
+                val e = sparkE[s]; val a = m.e[e * 2]; val b = m.e[e * 2 + 1]; val kk = 1 - age / 0.7f
+                glowLine.color = col(232, 140, 125, 0.7f * kk)
+                cv.drawLine(px[a], py[a], px[b], py[b], glowLine)
+                add.color = col(250, 205, 192, 0.6f * kk); cv.drawCircle((px[a] + px[b]) / 2, (py[a] + py[b]) / 2, 1.7f * dens, add)
+            }
+
+            // neurons, batched by kind and depth; the wave of thought lights a band of them as it passes
+            if (t >= waveAt + 1.8f) waveAt = t + (if (st != Orb.HIDDEN) 1.2f else 3.5f) + rnd.nextFloat() * 2f
+            val wv = if (t >= waveAt) -1.15f + (t - waveAt) / 1.8f * 2.3f else 9f
+            dotN.fill(0); var wn = 0
             for (i in 0 until n) {
                 val kind = when (m.kind[i]) { 0, 2 -> 0; 1 -> 1; else -> 2 }
                 val bucket = kind * B + (((pz[i] + 1) / 2) * B).toInt().coerceIn(0, B - 1)
                 val buf = dotBuf[bucket]; var o = dotN[bucket]
                 buf[o++] = px[i]; buf[o++] = py[i]; dotN[bucket] = o
+                if (kind != 2 && abs(m.p[i * 3 + 2] - wv) < 0.07f) { waveBuf[wn++] = px[i]; waveBuf[wn++] = py[i] }
             }
             for (kind in 0..2) for (b in 0 until B) {
                 val d = (b + 0.5f) / B
                 dot.strokeWidth = (if (kind == 2) 1.6f else 2.2f) * dens * (0.85f + 0.3f * d)
                 dot.color = when (kind) {
-                    0 -> col(239, 235, 228, 0.08f + 0.42f * d + 0.15f * shown)
-                    1 -> col(226, 180, 170, 0.12f + 0.4f * d)
+                    0 -> col(239, 235, 228, 0.1f + 0.42f * d + 0.15f * shown)
+                    1 -> col(226, 180, 170, 0.14f + 0.4f * d)
                     else -> col(201, 102, 92, 0.06f + 0.12f * d)
                 }
                 cv.drawPoints(dotBuf[kind * B + b], 0, dotN[kind * B + b], dot)
             }
+            if (wn > 0) { dot.strokeWidth = 3f * dens; dot.color = col(240, 170, 158, 0.55f); dot.xfermode = add.xfermode
+                cv.drawPoints(waveBuf, 0, wn, dot); dot.xfermode = null }
 
             // dust drifting around
-            for (d in dust) {
-                d[0] += d[3] * dt
-                val x0 = cos(d[0]) * d[1]; val z0 = sin(d[0]) * d[1]; val y0 = d[2]
+            for (i in 0 until DUST) {
+                dA[i] += dS[i] * dt * (1 + shown)
+                val x0 = cos(dA[i]) * dR[i]; val z0 = sin(dA[i]) * dR[i]; val y0 = dY[i] + 0.04f * sin(t * 0.7f + i)
                 val x = x0 * cyw + z0 * syw; var z = -x0 * syw + z0 * cyw; val y = y0 * cp - z * sp; z = y0 * sp + z * cp
                 val f = 3.2f / (3.2f - z)
-                fill.color = col(201, 102, 92, 0.08f + 0.2f * (z + 1) / 2)
+                fill.color = col(201, 102, 92, 0.08f + 0.22f * (z + 1) / 2)
                 cv.drawCircle(cx + x * S * f, cy - y * S * f, 1.4f * dens * f, fill)
             }
 
-            // agents: a thread from each to Jarvis at the centre; a working one glows and sends pulses inward
-            fun proj(p: FloatArray): FloatArray {
-                val x = p[0] * cyw + p[2] * syw; var z = -p[0] * syw + p[2] * cyw; val y = p[1] * cp - z * sp; z = p[1] * sp + z * cp
-                val f = 3.2f / (3.2f - z); return floatArrayOf(cx + x * S * f, cy - y * S * f, z, f)
-            }
-            val nodes = agents.mapNotNull { id -> BrainModel.POS[id]?.let { id to proj(it) } }
-            for ((id, p) in nodes) {
-                val on = id in active
-                path.reset(); path.moveTo(p[0], p[1]); path.quadTo((p[0] + cx) / 2, (p[1] + cy) / 2 - 24 * dens, cx, cy)
-                ring.strokeWidth = (if (on) 2f else 1f) * dens
-                ring.color = if (on) col(236, 170, 160, 0.9f) else col(201, 102, 92, 0.18f + 0.12f * (p[2] + 1) / 2)
+            // agents: a thread from each to Jarvis at the centre
+            var cnt = 0
+            for (i in ids.indices) {
+                if (!agentOn[i]) continue
+                val q = BrainModel.POS.getValue(ids[i])
+                val x = q[0] * cyw + q[2] * syw; var z = -q[0] * syw + q[2] * cyw; val y = q[1] * cp - z * sp; z = q[1] * sp + z * cp
+                val f = 3.2f / (3.2f - z)
+                nx[i] = cx + x * S * f; ny[i] = cy - y * S * f; nz[i] = z; nf[i] = f
+                order[cnt++] = i
+                path.reset(); path.moveTo(nx[i], ny[i]); path.quadTo((nx[i] + cx) / 2, (ny[i] + cy) / 2 - 24 * dens, cx, cy)
+                ring.strokeWidth = (if (agentBusy[i]) 2f else 1f) * dens
+                ring.color = if (agentBusy[i]) col(236, 170, 160, 0.9f) else col(201, 102, 92, 0.2f + 0.14f * (z + 1) / 2)
                 cv.drawPath(path, ring)
             }
-            pulses.removeAll { t - it.t > 1.4f }
-            for (pu in pulses) {
-                if (t < pu.t) continue
-                val p = nodes.firstOrNull { it.first == pu.id }?.second ?: continue
-                val k = (t - pu.t) / 1.4f; val mx = (p[0] + cx) / 2; val my = (p[1] + cy) / 2 - 24 * dens
-                val x = (1 - k) * (1 - k) * p[0] + 2 * (1 - k) * k * mx + k * k * cx
-                val y = (1 - k) * (1 - k) * p[1] + 2 * (1 - k) * k * my + k * k * cy
-                fill.color = col(255, 230, 222, 0.95f); cv.drawCircle(x, y, 4f * dens, fill)
+            // soft pulses now and then, so there's always a little traffic between his agents and him
+            if (t >= nextSoft && cnt > 0) { pulse(order[rnd.nextInt(cnt)], true); nextSoft = t + 1.2f + rnd.nextFloat() * 1.8f }
+            for (s in 0 until PU) {
+                val age = t - puT[s]; if (age < 0f || age > 1.4f) continue
+                val i = puAgent[s]; if (!agentOn[i]) continue
+                val kk = age / 1.4f; val mx = (nx[i] + cx) / 2; val my = (ny[i] + cy) / 2 - 24 * dens
+                val x = (1 - kk) * (1 - kk) * nx[i] + 2 * (1 - kk) * kk * mx + kk * kk * cx
+                val y = (1 - kk) * (1 - kk) * ny[i] + 2 * (1 - kk) * kk * my + kk * kk * cy
+                circle(cv, unitGlow, x, y, (if (puSoft[s]) 7f else 11f) * dens, if (puSoft[s]) 0.5f else 0.9f)
+                add.color = if (puSoft[s]) col(236, 170, 160, 0.6f) else col(255, 232, 224, 1f)
+                cv.drawCircle(x, y, (if (puSoft[s]) 2.2f else 3.6f) * dens, add)
             }
-            for ((id, p) in nodes.sortedBy { it.second[2] }) {
-                val on = id in active
-                val r = (if (on) 7f else 4.5f) * dens * p[3]
-                fill.shader = RadialGradient(p[0], p[1], r * 3.2f, intArrayOf(col(201, 102, 92, if (on) 0.6f else 0.22f), col(201, 102, 92, 0f)), null, Shader.TileMode.CLAMP)
-                cv.drawCircle(p[0], p[1], r * 3.2f, fill); fill.shader = null
-                fill.color = if (on) Color.rgb(240, 195, 186) else col(201, 102, 92, 0.55f + 0.35f * (p[2] + 1) / 2)
-                cv.drawCircle(p[0], p[1], r, fill)
+            // agents back to front
+            for (a in 1 until cnt) { val v = order[a]; var b = a - 1; while (b >= 0 && nz[order[b]] > nz[v]) { order[b + 1] = order[b]; b-- }; order[b + 1] = v }
+            for (o in 0 until cnt) {
+                val i = order[o]; val busy = agentBusy[i]
+                val r = (if (busy) 7f else 4.5f) * dens * nf[i]
+                circle(cv, unitGlow, nx[i], ny[i], r * 3.4f, if (busy) 0.65f else 0.22f + 0.06f * sin(t * 1.7f + i))
+                fill.color = if (busy) Color.rgb(240, 195, 186) else col(201, 102, 92, 0.55f + 0.35f * (nz[i] + 1) / 2)
+                cv.drawCircle(nx[i], ny[i], r, fill)
                 // only a working agent shows its name, so the lock screen stays clean
-                if (on) { text.color = col(239, 235, 228, 0.9f); cv.drawText(Agents.def(id)?.name ?: id, p[0], p[1] - r - 9 * dens, text) }
+                if (busy) { text.color = col(239, 235, 228, 0.9f); cv.drawText(names[i], nx[i], ny[i] - r - 9 * dens, text) }
             }
 
             // Jarvis: the halo at the centre, breathing at rest, alive with his voice
             val R = 22f * dens * (1 + 0.12f * shown)
-            fill.shader = RadialGradient(cx, cy, R * 2.6f, intArrayOf(col(176, 82, 74, 0f), col(176, 82, 74, 0f), col(176, 82, 74, 0.2f + 0.5f * shown), col(176, 82, 74, 0f)),
-                floatArrayOf(0f, 0.38f, 0.5f, 1f), Shader.TileMode.CLAMP)
-            cv.drawCircle(cx, cy, R * 2.6f, fill); fill.shader = null
+            circle(cv, unitHalo, cx, cy, R * 2.6f, 0.25f + 0.55f * shown)
             fill.color = Color.rgb(21, 21, 23); cv.drawCircle(cx, cy, R * 0.96f, fill)
             ring.strokeWidth = 2f * dens; ring.color = col(201, 102, 92, 0.55f + 0.45f * shown); cv.drawCircle(cx, cy, R, ring)
             if (st == Orb.THINK) { ring.strokeWidth = 3f * dens; ring.color = col(236, 170, 160, 0.95f)
-                cv.drawArc(cx - R, cy - R, cx + R, cy + R, (t * 140f) % 360f, 70f, false, ring) }
-            if (st == Orb.SPEAK || st == Orb.LISTEN) {
-                fill.shader = RadialGradient(cx, cy, R * 0.9f, intArrayOf(col(176, 82, 74, 0.4f * shown), col(176, 82, 74, 0f)), null, Shader.TileMode.CLAMP)
-                cv.drawCircle(cx, cy, R * 0.9f, fill); fill.shader = null
-            }
+                cv.drawArc(cx - R, cy - R, cx + R, cy + R, (t * 160f) % 360f, 70f, false, ring) }
+            circle(cv, unitCore, cx, cy, R * 0.9f, 0.08f + 0.45f * shown)
         }
     }
 }
-
-private class Spark(val e: Int, val t: Float)
-private class Pulse(val id: String, val t: Float)
 
 /** The brain's shape: built once (same recipe as the Brain tab) and shared. */
 class BrainModel private constructor() {
@@ -237,6 +307,9 @@ class BrainModel private constructor() {
     val kind: IntArray
     val e: IntArray
     val near: Map<String, IntArray>
+    /** For each neuron, the fibres touching it: adj[adjStart[i] until adjStart[i + 1]]. */
+    val adjStart: IntArray
+    val adj: IntArray
 
     init {
         var seed = 11L
@@ -284,6 +357,11 @@ class BrainModel private constructor() {
             for (k in 0 until min(3, near.size)) if (i < near[k].first) { edges.add(i); edges.add(near[k].first) }
         }
         e = edges.toIntArray()
+        val deg = IntArray(n + 1)
+        for (k in 0 until e.size / 2) { deg[e[k * 2]]++; deg[e[k * 2 + 1]]++ }
+        adjStart = IntArray(n + 1); for (i in 0 until n) adjStart[i + 1] = adjStart[i] + deg[i]
+        adj = IntArray(adjStart[n]); val fillAt = adjStart.copyOf()
+        for (k in 0 until e.size / 2) { adj[fillAt[e[k * 2]]++] = k; adj[fillAt[e[k * 2 + 1]]++] = k }
         this.near = POS.mapValues { (_, q) ->
             (0 until e.size / 2).filter { k -> val a = e[k * 2]; val dx = p[a * 3] - q[0]; val dy = p[a * 3 + 1] - q[1]; val dz = p[a * 3 + 2] - q[2]; dx * dx + dy * dy + dz * dz < 0.12f }.toIntArray()
         }
