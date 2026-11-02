@@ -134,6 +134,13 @@ class MainActivity : Activity() {
             prefs.talkFirst = !prefs.talkFirst; Scheduler.scheduleDaily(this); render()
         }
         findViewById<Button>(R.id.clear).setOnClickListener { prefs.clearHistory(); render() }
+        findViewById<Button>(R.id.brainWall).setOnClickListener {
+            // opens the phone's wallpaper preview on Jarvis's brain; he taps Set (and picks Lock screen if asked)
+            val comp = android.content.ComponentName(this, BrainWallpaper::class.java)
+            val i = Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).putExtra(android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, comp)
+            try { startActivity(i); android.widget.Toast.makeText(this, "Tap Set, then pick Lock screen if it asks", android.widget.Toast.LENGTH_LONG).show() }
+            catch (_: Exception) { try { startActivity(Intent(android.app.WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) } catch (_: Exception) {} }
+        }
         update.setOnClickListener {
             update.text = "Checking…"
             thread {
