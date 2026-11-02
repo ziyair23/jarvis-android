@@ -51,7 +51,7 @@ object Web {
     /** Claude turned the new tools down: use the basic search from now on. True if there was something to drop back from. */
     fun fallBack(c: Context, error: String): Boolean {
         if (legacy(c)) return false
-        if (!Regex("web_fetch|web_search|allowed_callers|url_sources|blocked_domains|max_content_tokens|response_inclusion", RegexOption.IGNORE_CASE).containsMatchIn(error)) return false
+        if (!Regex("web_fetch|web_search|allowed_callers|url_sources|blocked_domains|max_content_tokens|response_inclusion|tools\\.\\d+", RegexOption.IGNORE_CASE).containsMatchIn(error)) return false
         Prefs(c).sp.edit().putBoolean("web_legacy", true).apply()
         Trace.log(c, "web", "new web tools not accepted, using basic search: ${error.take(160)}")
         return true

@@ -191,7 +191,7 @@ class Brain(private val context: Context) {
             }
             // web search not turned on for his Claude account: carry on without it
             // the newer web tools turned down: switch to the basic search; if even that's refused, carry on without searching
-            if (code == 400 && (resp.contains("web_search", true) || resp.contains("web_fetch", true) || Regex("allowed_callers|url_sources|blocked_domains").containsMatchIn(resp))) {
+            if (code == 400 && (resp.contains("web_search", true) || resp.contains("web_fetch", true) || Regex("allowed_callers|url_sources|blocked_domains|max_content_tokens|tools\\.\\d+").containsMatchIn(resp))) {
                 val hadWeb = (0 until tools.length()).any { Web.isWeb(tools.getJSONObject(it)) }
                 if (hadWeb) {
                     for (i in tools.length() - 1 downTo 0) if (Web.isWeb(tools.getJSONObject(i))) tools.remove(i)
