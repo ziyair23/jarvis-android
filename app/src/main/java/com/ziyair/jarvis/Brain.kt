@@ -39,10 +39,26 @@ class Brain(private val context: Context) {
 
     private fun systemPrompt(cfg: JSONObject): String = stablePrompt(cfg) + livePart()
 
+    /** What his actions actually did recently, so he never has to guess (or "confess" to something that did happen). */
+    private fun recordAction(name: String, out: String) {
+        if (name in setOf("get_weather", "look", "status_report", "briefing", "list_read", "memory_list") || out.isBlank()) return
+        val a = try { JSONArray(prefs.sp.getString("recent_actions", "[]")) } catch (_: Exception) { JSONArray() }
+        a.put(JSONObject().put("at", System.currentTimeMillis()).put("n", name).put("o", out.replace('\n', ' ').take(140)))
+        val keep = JSONArray(); for (i in maxOf(0, a.length() - 10) until a.length()) keep.put(a.get(i))
+        prefs.sp.edit().putString("recent_actions", keep.toString()).apply()
+    }
+    private fun recentActions(): String {
+        val a = try { JSONArray(prefs.sp.getString("recent_actions", "[]")) } catch (_: Exception) { return "" }
+        val t = SimpleDateFormat("h:mm a", Locale.US)
+        val l = (0 until a.length()).map { a.getJSONObject(it) }.filter { System.currentTimeMillis() - it.optLong("at") < 3 * 3600_000L }
+        return if (l.isEmpty()) "" else "\nWhat your actions actually did in the last few hours (this is the truth; trust it over your memory of the conversation): " +
+            l.joinToString("; ") { "${t.format(Date(it.optLong("at")))} ${it.optString("n").removePrefix("agent_")}: ${it.optString("o")}" } + "."
+    }
+
     /** The part of his instructions that changes minute to minute: kept separate so the rest can be cached. */
     private fun livePart(): String {
         val now = SimpleDateFormat("EEEE, MMMM d, h:mm a", Locale.US).format(Date())
-        return "\nRight now it is " + now + "." +
+        return "\nRight now it is " + now + "." + recentActions() +
             todaySoFar() +
             (if (DriveMode.on) "\nHE IS DRIVING: one short sentence per reply, never ask him to look at or touch the phone." else "") +
             (Inbox.lastAnnounced?.let { if (System.currentTimeMillis() - it.at < 180_000) "\nYou just read him a message from ${it.sender} on ${it.app}. If he dictates a reply, read it back and ask to send; reply with reply_message who='last'. Don't comment on the message itself." else "" } ?: "") +
@@ -67,6 +83,7 @@ class Brain(private val context: Context) {
             "\nRun his day hands-free: whenever he mentions money he made, log it with log_earnings without asking; whenever he mentions feeding, changing or the baby sleeping or waking, log it with log_baby. When he mentions something to buy or do later ('we need wipes', 'add milk'), put it on a list; when he mentions paying for gas, food or car stuff, log it with log_expense (his Jarvis spending on Claude is 'spending', not an expense). If he asked you something and a tool can do it, do it rather than telling him how." +
             "\nYou can drive his phone: open_app for any app, media_control for play/pause/skip, stop_navigation to cancel directions, and phone_task for anything inside an app (it looks at the screen and taps through it like a person: DMs on Snapchat or Instagram, searching and playing a video, settings). Give phone_task the whole job in one sentence, then confirm in a few words what it did. Never post, send, buy or delete anything without his clear yes, and pass confirmed=true only after that yes." +
             "\nQuiet mode: when he says he's going somewhere he can't have you talking (work, a meeting, class, church, a movie, 'go quiet', 'stealth mode'), call quiet_mode on, with minutes if he gives a time, and confirm in three or four words. When he says he's out, back, or done ('I'm out', 'quiet mode off', 'catch me up'), call quiet_mode off and turn what it returns into a short spoken catch-up starting 'Welcome back, sir.'" +
+            "\nStay on what he just said. Never tack unrelated things onto an answer (his battery, an earlier text, other topics) unless he asks. If you offered to send something and he didn't say yes within a couple of minutes, that offer is dropped: don't bring it up again unless he does. Never say something was or wasn't sent, logged or done unless the list of what your actions actually did says so; if he asks and it isn't there, say you're not sure and offer to check." +
             "\nOne reply per request: when you use one of his phone tools, don't write any words alongside the tool call, wait for the result and then answer once. After a web_search, always say the actual answer (scores, times, facts); never reply with just 'Done'. Tool results that say Logged, Set, Opened, Sent, Done and the like mean it worked: say so plainly and never follow up with a 'correction', a second answer or an apology. Only answer what he just asked; don't add notes about earlier conversation, the dashboard numbers or older messages unless he asks." +
             "\nWhen he asks what something is, to read something, or anything that needs eyes ('what's this', 'read this', 'what does this say'), use look, then answer from the photo in a sentence or two. For anything current or that you're not sure of (scores, games last night, news, prices, store hours, facts), use web_search, then answer in a sentence or two out loud: no links, no source names unless he asks." +
             (if (Agents.on(context)) "\nSpeed matters: do quick one-step jobs yourself with your own skills (logging feeds, diapers, earnings and expenses, lists, music, directions, lights, alarms, timers; calls and texts always go through agent_phone). Hand a job to an agent only when it needs several steps or their judgment.\nYour agents: some skills named above now live with your specialist agents. Hand the job over with one sentence holding every detail he gave: agent_phone (calls, texts, DMs, apps, music, directions, anything on screen), agent_money (earnings, expenses, the Macan goal, his budget), agent_family (Ziyair's feeds, diapers and sleep, the baby journal, lights and the house), agent_planner (his calendar, reminder lists, alarms, the morning briefing, protocols, planning his day or week), agent_research (questions that need real digging: comparisons, how-tos, prices, plans; quick facts you can still search yourself), agent_pursuit (his clothing brand: ideas, the shoot list, launch to-dos, orders), agent_memory (what you know about him: 'what do you know about me', corrections, tidying, forgetting; quick saves you can still do yourself with remember), agent_builder (when he wants you to change how you work or build something new into yourself), agent_bills (his bills: what's due, adding one, marking one paid), agent_appts (his and Ziyair's appointments and checkups), agent_packages (his deliveries), agent_supplies (prices on groceries, diapers, wipes, formula and other things he rebuys). Then say what they did, in your own words, in one line. The confirm-before-sending rule still applies: pass confirmed=true only after his clear yes." else "")
@@ -152,6 +169,7 @@ class Brain(private val context: Context) {
         var rounds = 0
         var retried = 0
         var didSomething = false
+        var strippedThinking = false
         var earlierText = ""
         while (true) {
             val body = JSONObject()
@@ -174,6 +192,15 @@ class Brain(private val context: Context) {
             // web search not turned on for his Claude account: carry on without it
             if (code == 400 && resp.contains("web_search", true) && tools.length() > 0 &&
                 tools.getJSONObject(tools.length() - 1).optString("name") == "web_search") { tools.remove(tools.length() - 1); continue }
+            if (code == 400 && !strippedThinking && (resp.contains("thinking", true) || resp.contains("signature", true))) {
+                strippedThinking = true
+                for (i in 0 until clean.length()) { val m = clean.getJSONObject(i); val c = m.opt("content")
+                    if (m.optString("role") == "assistant" && c is JSONArray) { val keep = JSONArray()
+                        for (k in 0 until c.length()) { val b = c.optJSONObject(k); if (b == null || (b.optString("type") != "thinking" && b.optString("type") != "redacted_thinking")) keep.put(c.get(k)) }
+                        m.put("content", keep) } }
+                Trace.log(context, "problem", "retrying without thinking blocks")
+                continue
+            }
             if (code !in 200..299) Problems.log(context, "Claude $code: ${resp.take(160)}")
             if ((code == 429 || code == 529 || code >= 500) && retried < 1) { retried++; Thread.sleep(1200); continue }
             if (code !in 200..299 && didSomething) return "Done, sir."
@@ -207,6 +234,7 @@ class Brain(private val context: Context) {
                         val out: Any = if (name == "look") look() else actions.run(name, part.optJSONObject("input") ?: JSONObject())
                         lastTools.addAll(Agents.drainInner())   // skills an agent used count as used (music, texts...)
                         if (Agents.on(context) && !name.startsWith("agent_")) Agents.owner(name)?.let { Agents.flash(it) }
+                        if (out is String) recordAction(name, out)
                         fastLines.add(if (fastOn && name in Fast.FAST && out is String) Fast.line(name, out) else null)
                         results.put(JSONObject().put("type", "tool_result").put("tool_use_id", part.getString("id")).put("content", out))
                     }

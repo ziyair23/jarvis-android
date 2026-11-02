@@ -208,7 +208,7 @@ class Actions(private val context: Context) {
                 Music.play(context, pkg, name, q, input.optString("song").ifBlank { null })
             }
             "get_weather" -> Weather.report(context, input.optString("place")) ?: "Couldn't get the weather right now."
-            "open_app" -> Apps.open(context, input.getString("name"))
+            "open_app" -> Apps.open(context, input.optString("name").ifBlank { input.optString("app").ifBlank { input.optString("app_name").ifBlank { input.optString("package") } } }.ifBlank { return "Which app?" })
             "media_control" -> Apps.media(context, input.getString("action"))
             "stop_navigation" -> JarvisAccess.stopNavigation(context)
             "screen_read" -> JarvisAccess.read()
