@@ -75,6 +75,7 @@ class DashActivity : Activity() {
                 .put("appts", Appts.json(ctx))
                 .put("packages", Packages.all(ctx))
                 .put("mealPlan", Meals.plan(ctx))
+                .put("dayPlan", try { DayPlan.card(ctx).takeIf { System.currentTimeMillis() - it.optLong("at") < 60_000L } ?: DayPlan.save(ctx) } catch (_: Exception) { org.json.JSONObject() })
                 .put("mind", try { Mind.json(ctx) } catch (e: Exception) { Trace.log(ctx, "dash", "mind failed: ${e.message}"); org.json.JSONObject() })
                 .put("spendTx", Spending.all(ctx).let { a -> org.json.JSONArray().apply { for (i in maxOf(0, a.length() - 300) until a.length()) put(a.get(i)) } })
                 .put("supplies", Supplies.all(ctx))

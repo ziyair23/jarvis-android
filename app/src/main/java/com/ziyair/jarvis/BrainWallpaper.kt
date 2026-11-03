@@ -1,6 +1,8 @@
 package com.ziyair.jarvis
 
 import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Typeface
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
@@ -98,6 +100,72 @@ class BrainWallpaper : WallpaperService() {
         private val dY = FloatArray(DUST) { ((it * 0.61f) % 1.5f) - 0.75f }; private val dS = FloatArray(DUST) { 0.06f + (it * 0.031f) % 0.12f }
         private val rnd = java.util.Random(7)
 
+        // his day, under the brain: what's on Jarvis's mind and what's coming up (read from the phone every few seconds)
+        private var cardAt = 0L
+        private var cardOn = true
+        private var head = ""; private var updated = ""
+        private var times = arrayOf<String>(); private var whats = arrayOf<String>()
+        private var headLines = arrayOf<String>()
+        private var headW = 0f
+        private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 10.5f * dens; letterSpacing = 0.18f; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL) }
+        private val headP = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 19f * dens; typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL) }
+        private val timeP = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12.5f * dens; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL) }
+        private val itemP = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 14f * dens; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL) }
+        private val shade = Paint()
+        private var shadeH = 0f
+
+        private fun readCard() {
+            cardAt = SystemClock.elapsedRealtime()
+            try {
+                val ctx = applicationContext
+                cardOn = Brain(ctx).config().optBoolean("lock_card", true) && Mind.enabled(ctx)
+                val c = DayPlan.card(ctx)
+                head = if (Mind.thinking) "Thinking things over…" else c.optString("headline")
+                updated = c.optLong("thoughtAt").takeIf { it > 0 }?.let { java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(it)) }.orEmpty()
+                val a = c.optJSONArray("items") ?: org.json.JSONArray()
+                times = Array(minOf(a.length(), 5)) { a.getJSONObject(it).optString("t") }
+                whats = Array(minOf(a.length(), 5)) { a.getJSONObject(it).optString("x") }
+                headW = 0f
+            } catch (_: Exception) {}
+        }
+
+        /** Splits [s] into at most [max] lines that fit [w] (the last one ends in … if it had to be cut). */
+        private fun wrap(s: String, p: Paint, w: Float, max: Int): Array<String> {
+            val out = ArrayList<String>(); var rest = s.trim()
+            while (rest.isNotEmpty() && out.size < max) {
+                var n = p.breakText(rest, true, w, null)
+                if (n < rest.length) { val sp = rest.lastIndexOf(' ', n); if (sp > 0) n = sp }
+                var line = rest.substring(0, n).trim(); rest = rest.substring(n).trim()
+                if (out.size == max - 1 && rest.isNotEmpty()) { while (line.isNotEmpty() && p.measureText("$line…") > w) line = line.dropLast(1); line = line.trimEnd() + "…"; rest = "" }
+                out.add(line)
+            }
+            return out.toTypedArray()
+        }
+
+        private fun drawCard(cv: Canvas, W: Float, H: Float) {
+            if (head.isBlank() && whats.isEmpty()) return
+            val left = 28f * dens; val w = W - 2 * left
+            val top = H * 0.655f
+            if (shadeH != H) { shadeH = H; shade.shader = LinearGradient(0f, top - 60 * dens, 0f, H, intArrayOf(Color.argb(0, 11, 11, 12), Color.argb(215, 11, 11, 12), Color.argb(235, 11, 11, 12)), floatArrayOf(0f, 0.35f, 1f), Shader.TileMode.CLAMP) }
+            cv.drawRect(0f, top - 60 * dens, W, H, shade)
+            var y = top
+            label.color = col(201, 102, 92, 0.95f); cv.drawText("ON HIS MIND", left, y, label)
+            if (updated.isNotBlank()) { label.color = col(162, 157, 149, 0.7f); val tw = label.measureText(updated.uppercase()); cv.drawText(updated.uppercase(), left + w - tw, y, label) }
+            y += 27f * dens
+            if (headW != w) { headW = w; headLines = wrap(head, headP, w, 2) }
+            headP.color = col(239, 235, 228, 0.96f)
+            for (l in headLines) { cv.drawText(l, left, y, headP); y += 25f * dens }
+            y += 8f * dens
+            val col1 = 74f * dens
+            for (i in whats.indices) {
+                timeP.color = col(162, 157, 149, 0.85f); cv.drawText(times[i], left, y, timeP)
+                itemP.color = col(239, 235, 228, 0.84f)
+                val t = whats[i]; val fit = itemP.breakText(t, true, w - col1, null)
+                cv.drawText(if (fit < t.length) t.substring(0, maxOf(0, fit - 1)).trimEnd() + "…" else t, left + col1, y, itemP)
+                y += 22f * dens
+            }
+        }
+
         override fun onVisibilityChanged(v: Boolean) {
             visible = v
             val ch = Choreographer.getInstance()
@@ -134,11 +202,13 @@ class BrainWallpaper : WallpaperService() {
 
         private fun render(cv: Canvas, dt: Float) {
             val W = cv.width.toFloat(); val H = cv.height.toFloat()
-            val cx = W / 2; val cy = H * 0.56f
+            if (SystemClock.elapsedRealtime() - cardAt > 4000) readCard()
+            val withCard = cardOn && (head.isNotBlank() || whats.isNotEmpty())
+            val cx = W / 2; val cy = H * (if (withCard) 0.43f else 0.56f)
             val S = min(W, H * 0.6f) * 0.36f * (1 + 0.012f * sin(t * 0.9f))   // the whole brain breathes, very slightly
 
             // what Jarvis is doing right now
-            val st = Orb.state
+            val st = if (Orb.state == Orb.HIDDEN && Mind.thinking) Orb.THINK else Orb.state
             val voice = if (st == Orb.SPEAK) Orb.voiceLevel() else -1f
             val target = when (st) {
                 Orb.LISTEN -> 0.35f + Orb.level * 0.65f
@@ -297,6 +367,7 @@ class BrainWallpaper : WallpaperService() {
             if (st == Orb.THINK) { ring.strokeWidth = 3f * dens; ring.color = col(236, 170, 160, 0.95f)
                 cv.drawArc(cx - R, cy - R, cx + R, cy + R, (t * 160f) % 360f, 70f, false, ring) }
             circle(cv, unitCore, cx, cy, R * 0.9f, 0.08f + 0.45f * shown)
+            if (withCard) drawCard(cv, W, H)
         }
     }
 }
