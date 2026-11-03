@@ -125,4 +125,20 @@ class AdvancedTest {
         assertEquals("Tue", DashDays.usualDays(h, tue))
         assertTrue("dash_day is a quick skill", "dash_day" in Agents.CORE)
     }
+
+    @Test fun scanReadsBusinessTextsOnly() {
+        val rows = listOf(Triple("+15095550000", "are you coming sunday", 3L), Triple("+15095551234", "hey whats up", 4L),
+            Triple("72975", "Your Walmart order of $84.12 has been delivered", 5L), Triple("72975", "Your Walmart order of $91.40 has been delivered", 6L),
+            Triple("TMOBILE", "Your T-Mobile bill of $65 is due Nov 12", 2L), Triple("33663", "Your verification code is 482913", 7L))
+        val out = Scan.businessTexts(rows)
+        assertTrue(out.toString(), out.any { it.contains("T-Mobile bill") })
+        assertEquals("near-identical order texts count once", 1, out.count { it.contains("Walmart order") })
+        assertFalse(out.any { it.contains("code") }); assertFalse(out.any { it.contains("whats up") })
+    }
+
+    @Test fun burstsOfTextsBecomeOneLine() {
+        assertEquals("Sir, 3 new messages: 2 from Mom and 1 from Jesse.", Inbox.bundle(listOf("Mom", "Jesse", "Mom")))
+        assertEquals("Sir, 2 new messages: from Mom.", Inbox.bundle(listOf("Mom", "Mom")))
+        assertTrue("scan is a quick skill", "scan_phone" in Agents.CORE)
+    }
 }

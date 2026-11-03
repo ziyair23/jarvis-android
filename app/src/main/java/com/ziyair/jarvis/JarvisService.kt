@@ -198,6 +198,10 @@ class JarvisService : Service() {
             ACTION_LISTEN -> { if (!busy) onWake(manual = true); return START_STICKY }
             ACTION_HUSH -> {
                 main.post {
+                    // a tap means "not now": clear everything waiting, and keep incoming texts quiet for a couple of minutes
+                    msgMuteUntil = System.currentTimeMillis() + brain.config().optInt("hush_mutes_messages_sec", 120) * 1000L
+                    sayGen++; pending.clear(); burst.clear()
+                    Trace.log(this, "hush", "tapped: cleared the queue, texts quiet for a bit")
                     if (!busy) { Orb.set(this, Orb.HIDDEN); return@post }
                     turnId++
                     dropLive("tapped")
@@ -215,9 +219,10 @@ class JarvisService : Service() {
                 val text = intent.getStringExtra("text")
                 val thenListen = intent.getBooleanExtra("listen", false)
                 val ringing = intent.getBooleanExtra("ringing", false)
+                val from = intent.getStringExtra("from"); val msgAt = intent.getLongExtra("at", System.currentTimeMillis())
                 thread {
                     val line = moment?.let { Scheduler.momentLine(this, it) } ?: text.orEmpty()
-                    if (line.isNotBlank()) main.post { sayFirst(line, thenListen, ringing) }
+                    if (line.isNotBlank()) main.post { if (from != null) sayMessage(Pend(line, thenListen, from, msgAt)) else sayFirst(line, thenListen, ringing) }
                 }
                 return START_STICKY
             }
@@ -783,7 +788,7 @@ class JarvisService : Service() {
             // a call beats whatever he was doing: drop it and announce the caller
             if (busy) {
                 try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
-                recognizer = null; hush(); thinking = false; speaking = false; pending.clear(); turnId++
+                recognizer = null; hush(); thinking = false; speaking = false; pending.clear(); burst.clear(); turnId++
                 dropLive("phone ringing")
             }
             busy = true; acquire(); stopWakeWord(); followUps = 1
@@ -801,7 +806,7 @@ class JarvisService : Service() {
         val onCall = getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL
         if (onCall || PhoneControl.nightQuiet(this)) { note(line); Scheduler.notify(this, "Jarvis", line, false); if (!prefs.running && !busy) stopEverything(); return }
         // mid-conversation: hold it and say it right after
-        if (busy) { if (pending.size < 5) pending.add(line to thenListen); return }
+        if (busy) { if (pending.size < 5) pending.add(Pend(line, thenListen, null, System.currentTimeMillis())); return }
         note(line)
         busy = true
         followUps = 1
@@ -855,7 +860,31 @@ class JarvisService : Service() {
         } catch (_: Exception) {}
     }
 
-    private val pending = ArrayList<Pair<String, Boolean>>()
+    /** Something waiting to be said; [from] is set for a text message (so it can be skipped or bundled). */
+    class Pend(val line: String, val listen: Boolean, val from: String?, val at: Long)
+    private val pending = ArrayList<Pend>()
+    private val burst = ArrayList<Pend>()
+    @Volatile private var msgMuteUntil = 0L
+    @Volatile private var sayGen = 0
+
+    /** Should this text still be read out? Not if he tapped "not now" recently, or already saw it on his phone. */
+    private fun stillNew(p: Pend): Boolean =
+        p.from == null || (System.currentTimeMillis() >= msgMuteUntil && !Inbox.seenSince(p.from, p.at))
+
+    /** A text came in: wait a moment for others in the same burst, then read one, or sum several up in one line. */
+    private fun sayMessage(p: Pend) {
+        if (!stillNew(p)) { Trace.log(this, "msg", "not read out (muted or already seen): ${p.from}"); return }
+        if (busy) { pending.removeAll { it.from != null && it.line == p.line }; if (pending.size < 6) pending.add(p); return }
+        burst.add(p)
+        if (burst.size == 1) { val gen = sayGen; main.postDelayed({ if (gen == sayGen) flushBurst() else burst.clear() }, 1500) }
+    }
+
+    private fun flushBurst() {
+        val l = burst.filter { stillNew(it) }; burst.clear()
+        if (l.isEmpty()) return
+        if (busy) { l.forEach { if (pending.size < 6) pending.add(it) }; return }
+        if (l.size == 1) sayFirst(l[0].line, l[0].listen) else sayFirst(Inbox.bundle(l.map { it.from!! }), false)
+    }
 
     private fun finishTurn() {
         Orb.set(this, Orb.HIDDEN)
@@ -865,10 +894,14 @@ class JarvisService : Service() {
         speaking = false
         thinking = false
         inConvo = false
+        pending.removeAll { !stillNew(it) }
         if (pending.isNotEmpty() && prefs.running) {
-            val (line, listenAfter) = pending.removeAt(0)
+            val msgs = pending.filter { it.from != null }
+            val (line, listenAfter) = if (msgs.size >= 2) { pending.removeAll(msgs); Inbox.bundle(msgs.map { it.from!! }) to false }
+                else pending.removeAt(0).let { it.line to it.listen }
             busy = false
-            main.postDelayed({ sayFirst(line, listenAfter) }, 400)
+            val gen = sayGen
+            main.postDelayed({ if (gen == sayGen) sayFirst(line, listenAfter) }, 400)
             return
         }
         try { recognizer?.destroy() } catch (_: Exception) {}

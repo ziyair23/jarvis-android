@@ -36,6 +36,19 @@ object Inbox {
         return items.lastOrNull { it.sender.lowercase() == w } ?: items.lastOrNull { it.sender.lowercase().split(" ").contains(w) }
     }
 
+    /** When he last saw each sender's messages himself (opened or swiped the notification away). */
+    private val seen = HashMap<String, Long>()
+    @Synchronized fun markSeen(sender: String) { if (sender.isNotBlank()) seen[sender.lowercase()] = System.currentTimeMillis() }
+    @Synchronized fun seenSince(sender: String, at: Long): Boolean = (seen[sender.lowercase()] ?: 0L) >= at
+
+    /** Several texts at once, in one line: "Sir, 3 new messages: 2 from Mom and 1 from Jesse." Pure, unit-tested. */
+    fun bundle(froms: List<String>): String {
+        val counts = LinkedHashMap<String, Int>(); froms.forEach { counts[it] = (counts[it] ?: 0) + 1 }
+        val parts = counts.map { (who, n) -> if (counts.size == 1) "from $who" else "$n from $who" }
+        val list = if (parts.size <= 1) parts.joinToString() else parts.dropLast(1).joinToString(", ") + " and " + parts.last()
+        return "Sir, ${froms.size} new messages: $list."
+    }
+
     /** True if this exact message was already read out in the last two minutes (apps re-post the same notification). */
     private var lastSaid = ""; private var lastSaidAt = 0L
     @Synchronized fun alreadySaid(m: Msg): Boolean {
@@ -66,6 +79,17 @@ object DriveMode {
 }
 
 class MessageListener : NotificationListenerService() {
+    /** He opened a text or swiped it away: he's seen it, so Jarvis won't read it out. */
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        try {
+            val n = sbn.notification ?: return
+            if (n.category != Notification.CATEGORY_MESSAGE && sbn.packageName !in MESSAGING_APPS) return
+            val ex = n.extras ?: return
+            (ex.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE) ?: ex.getCharSequence(Notification.EXTRA_TITLE))?.toString()?.let { Inbox.markSeen(it) }
+            (ex.getParcelableArray(Notification.EXTRA_MESSAGES)?.lastOrNull() as? Bundle)?.getCharSequence("sender")?.toString()?.let { Inbox.markSeen(it) }
+        } catch (_: Exception) {}
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName == packageName) return
         val n = sbn.notification ?: return
@@ -110,7 +134,8 @@ class MessageListener : NotificationListenerService() {
             val ask = if (reply != null) " Want to reply, sir?" else ""
             try {
                 startService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_SAY)
-                    .putExtra("text", "Message from $sender: $text.$ask").putExtra("listen", reply != null))
+                    .putExtra("text", "Message from $sender: $text.$ask").putExtra("listen", reply != null)
+                    .putExtra("from", sender).putExtra("at", m.at))
             } catch (_: Exception) {}
         }
     }

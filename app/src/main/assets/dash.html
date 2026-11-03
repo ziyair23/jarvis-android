@@ -269,6 +269,10 @@ input::placeholder{color:#5f5b56}
   </div>
   <div class="card"><div class="label">Today, on your lock screen</div>
     <div class="grid2" style="grid-template-columns:1fr 1fr;margin:0 0 14px"><button id="dash-on" onclick="J.dashDay(true);setTimeout(load,150)">Dashing today</button><button id="dash-off" onclick="J.dashDay(false);setTimeout(load,150)">Day off</button></div><div id="mind-head" style="font:400 19px/1.35 var(--serif);margin:0 0 6px"></div><ul class="list" id="mind-plan"></ul><div class="label" style="margin:14px 0 6px">List</div><div class="dim" id="mind-list" style="line-height:1.5"></div></div>
+  <div class="card"><div class="label">Getting to know you</div>
+    <p class="dim" id="scan-line" style="margin:0 0 12px;line-height:1.5"></p>
+    <button class="primary" id="scan-btn" style="width:100%" onclick="scanGo()">Get to know me</button>
+    <ul class="list" id="scan-list" style="margin-top:10px"></ul></div>
   <div class="card" id="mind-sug-card"><div class="label">Waiting for your yes</div><ul class="list" id="mind-sug"></ul></div>
   <div class="card"><div class="label">Thoughts</div><ul class="list" id="mind-thoughts"></ul></div>
   <div class="card"><div class="label">His ideas</div><ul class="list" id="mind-ideas"></ul></div>
@@ -340,6 +344,7 @@ function addX() { const a = $('x-amt').value, w = $('x-what').value.trim(); if (
 function addJ() { const v = $('j-in').value.trim(); if (!v) return; J.addJournal(v); $('j-in').value = ''; }
 function earn(day) { const v = $('m-amt').value; if (!v) return; J.logEarn(v, day, false); $('m-amt').value = ''; }
 function setGoal() { const v = $('m-amt').value; if (!v) return; J.setGoal(v, D.goalName || 'the Macan'); $('m-amt').value = ''; }
+function scanGo() { J.scanStart(); setTimeout(load, 300); }
 function mindAct(id, yes) { J.mindAct(String(id), yes); setTimeout(load, 150); }
 function mindNow() { const ok = J.mindNow(); $('mind-state').textContent = ok ? 'Thinking right now…' : 'He thought a few minutes ago; give him ten.'; setTimeout(load, 400); }
 function addMem() { const v = $('mem-in').value.trim(); if (!v) return; J.remember(v); $('mem-in').value = ''; }
@@ -471,6 +476,11 @@ function load() {
     const dd = D.dashToday || 'NO';
     $('dash-on').className = dd === 'ON' ? 'primary' : ''; $('dash-off').className = dd === 'OFF' ? 'primary' : '';
     $('dash-on').textContent = dd === 'LIKELY' ? 'Dashing today (usual)' : 'Dashing today';
+    { const SC = D.scan || {}, R = SC.report || {};
+      $('scan-btn').disabled = !!SC.running; $('scan-btn').textContent = SC.running ? (SC.step || 'Working') + '…' : R.at ? 'Scan again' : 'Get to know me';
+      $('scan-line').textContent = SC.running ? 'Reading back through your phone. If he opens your shopping apps, leave the phone be for a minute.'
+        : R.summary ? R.summary + ' (' + ago(R.at) + ')' : 'He reads back through your texts from businesses, calendar, birthdays and your shopping apps\' order history, and learns your bills, what you buy and your routines. What friends and family say is never read.';
+      $('scan-list').innerHTML = SC.running ? '' : (R.learned || []).map(x => `<li style="font-size:14px">${esc(x)}</li>`).join(''); }
     const DP = D.dayPlan || {}; $('mind-head').textContent = DP.headline || '';
     $('mind-plan').innerHTML = (DP.items || []).map(x => `<li><span class="t" style="min-width:70px;color:var(--ink-faint)">${esc(x.t)}</span><span>${esc(x.x)}</span></li>`).join('') || '<li class="empty">Nothing else on today.</li>';
     $('mind-list').textContent = (DP.list || []).join(', ') || 'Nothing on the list.';
