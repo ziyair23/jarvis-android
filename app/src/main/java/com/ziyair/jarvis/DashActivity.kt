@@ -74,6 +74,8 @@ class DashActivity : Activity() {
                 .put("bills", Bills.json(ctx))
                 .put("appts", Appts.json(ctx))
                 .put("packages", Packages.all(ctx))
+                .put("mealPlan", Meals.plan(ctx))
+                .put("spendTx", Spending.all(ctx).let { a -> org.json.JSONArray().apply { for (i in maxOf(0, a.length() - 300) until a.length()) put(a.get(i)) } })
                 .put("supplies", Supplies.all(ctx))
                 .put("history", p.history())
                 .toString()

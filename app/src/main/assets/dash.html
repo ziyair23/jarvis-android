@@ -188,6 +188,7 @@ input::placeholder{color:#5f5b56}
     <button style="width:100%;margin-top:8px" onclick="addX()">Log expense</button>
     <ul class="list" id="x-list" style="margin-top:8px"></ul>
   </div>
+  <div class="card"><div class="label">Where it went this week</div><div id="sp-week" class="faint" style="margin-bottom:8px"></div><div id="sp-cats"></div></div>
   <div class="card"><div class="label">Days</div><ul class="list" id="m-days"></ul></div>
 </div></div>
 
@@ -219,6 +220,10 @@ input::placeholder{color:#5f5b56}
   <div class="card">
     <div class="label">Bills and appointments</div>
     <ul class="list" id="life-list"></ul>
+  </div>
+  <div class="card">
+    <div class="label">This week's meals</div>
+    <ul class="list" id="meal-list"></ul>
   </div>
   <div class="card" id="pk-card">
     <div class="label">Packages</div>
@@ -417,6 +422,18 @@ function load() {
   $('life-list').innerHTML = life.length ? life.slice(0, 10).map(x => `<li><span class="t">${dayLbl(x.at)}</span><span>${esc(x.t)}${x.time ? ' <span class="faint">' + clock(x.at) + '</span>' : ''}</span></li>`).join('')
     : '<li class="empty">Nothing yet. Bills and Appointments find these in your texts on their own.</li>';
   const soon = life.find(x => x.at < Date.now() + 3 * 864e5);
+  // meals, planned by their agent
+  const MP = (D.mealPlan && D.mealPlan.meals) || {}, DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const todayName = new Date().toLocaleDateString('en-US', {weekday: 'long'});
+  $('meal-list').innerHTML = DAYS.filter(d => MP[d]).map(d => `<li style="display:block"><div>${d === todayName ? '<b style="font-weight:600">Tonight</b> · ' : '<span class="t" style="display:inline-block;min-width:0;margin-right:6px">' + d.slice(0, 3) + '</span>'}${esc(MP[d].name)}</div><div class="faint">${esc(MP[d].ing || '')}</div></li>`).join('')
+    || '<li class="empty">No plan yet. Say "Jarvis, plan our dinners this week."</li>';
+  // money: where it went this week, from bank and card notifications
+  { const TX = Array.from({length: (D.spendTx || []).length}, (_, i) => D.spendTx[i]);
+    const mon = new Date(); mon.setHours(0, 0, 0, 0); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+    const wk = TX.filter(t => t.at >= mon.getTime() && t.c !== 'income'); const tot = wk.reduce((s, t) => s + t.a, 0);
+    const by = {}; wk.forEach(t => by[t.c] = (by[t.c] || 0) + t.a); const cats = Object.entries(by).sort((a, b) => b[1] - a[1]); const mx = cats.length ? cats[0][1] : 1;
+    $('sp-week').textContent = wk.length ? `${money(tot)} across ${wk.length} purchase${wk.length === 1 ? '' : 's'}` : 'Purchases from your bank, card and Cash App notifications show up here.';
+    $('sp-cats').innerHTML = cats.map(([c, v]) => `<div style="display:flex;align-items:center;gap:10px;margin:6px 0"><span style="width:96px;font:500 13px var(--sans);color:var(--ink-dim);text-transform:capitalize">${esc(c)}</span><div class="bar" style="flex:1;margin:0"><i style="width:${Math.max(4, v / mx * 100)}%"></i></div><span style="min-width:64px;text-align:right">${money(v)}</span></div>`).join(''); }
   // packages, followed by their agent
   const PK = []; for (let i = 0; i < (D.packages || []).length; i++) { const k = D.packages[i]; if (k.status !== 'delivered' || Date.now() - k.at < 864e5) PK.push(k); }
   PK.sort((a, b) => b.at - a.at);
@@ -475,7 +492,7 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   let A = [], sel = 'jarvis', yaw = 0.6, pitch = -0.22, vy = 0.12, vp = 0, drag = null, lastT = 0, pulses = [], lastActive = {};
   // where each agent lives in the brain, roughly where that kind of thinking happens
   const POS = {memory:[0.3,-0.32,-0.12], phone:[0.05,0.28,0.98], planner:[-0.42,0.52,0.55], research:[0.44,0.5,0.52], money:[0.5,0.62,-0.18],
-    family:[-0.74,-0.16,0.2], pursuit:[0.74,-0.14,0.16], builder:[-0.1,0.4,-0.96], coach:[-0.36,-0.3,-0.62], bills:[0.62,0.18,-0.55], appts:[-0.62,0.34,-0.22], packages:[0.35,-0.3,0.72], supplies:[-0.3,-0.36,0.68]};
+    family:[-0.74,-0.16,0.2], pursuit:[0.74,-0.14,0.16], builder:[-0.1,0.4,-0.96], coach:[-0.36,-0.3,-0.62], bills:[0.62,0.18,-0.55], appts:[-0.62,0.34,-0.22], packages:[0.35,-0.3,0.72], supplies:[-0.3,-0.36,0.68], meals:[-0.5,0.1,0.78]};
   // ---- the brain itself: a folded cortex (two hemispheres), cerebellum and brain stem, as points and fibres ----
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const P = [], KIND = [];
