@@ -3,8 +3,6 @@ package com.ziyair.jarvis
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -24,7 +22,9 @@ object Agents {
         "list_check", "list_read", "list_clear", "driving_mode", "media_control", "answer_call", "decline_call",
         // quick one-step jobs he does himself (an extra hop to an agent costs a whole second); agents keep the bigger jobs
         "log_baby", "baby_status", "log_earnings", "earnings_summary", "log_expense", "play_music", "navigate",
-        "lights", "open_app", "set_alarm", "journal_add", "pursuit_add", "judge_offer", "draft_text", "meal_tonight")
+        "lights", "open_app", "set_alarm", "journal_add", "pursuit_add", "judge_offer", "draft_text", "meal_tonight",
+        // the advanced ones: whole jobs, follow-through, and what his own mind has been up to
+        "run_job", "follow_up_add", "follow_ups_list", "follow_up_done", "mind_recent")
 
     /** Lights an agent up in the brain for a moment when its skill was used directly. */
     fun flash(id: String, ms: Long = 1600) { val t = System.currentTimeMillis(); active[id] = t; Thread { try { Thread.sleep(ms) } catch (_: Exception) {}; active.remove(id, t) }.start() }
@@ -161,63 +161,94 @@ object Agents {
     /** Skills that send, call or act on his behalf: their confirmed flag always equals Marcus's actual yes. */
     val CONFIRMABLE = setOf("send_text", "reply_message", "phone_task")
 
+    /** Agents that think things through on the bigger model (Phone, Packages and Supplies stay quick). */
+    val SMART = setOf("planner", "money", "family", "pursuit", "memory", "coach", "bills", "appts", "meals", "research", "builder")
+    /** Agents that can ask each other (Builder and Phone don't: one works on Jarvis himself, the other only acts on his yes). */
+    private val TEAM_PLAYERS = setOf("money", "family", "planner", "research", "pursuit", "memory", "bills", "appts", "packages", "supplies", "meals")
+
     /** Skills that need a look at the result before the agent is done (everything else returns straight away). */
     private val LOOK_AGAIN = setOf("screen_read", "read_messages", "earnings_summary", "expenses_summary", "baby_status", "journal_read",
         "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list", "list_lessons", "review_today", "bills_list", "appts_list", "life_sweep", "packages_list", "supplies_list", "supply_check", "meals_week", "money_week", "subscriptions_list", "cheapest_store", "list_read",
-        "read_file", "list_files", "build_status", "read_build_errors")
+        "read_file", "list_files", "build_status", "read_build_errors", "ask_agent", "follow_ups_list")
+
+    fun smartFor(c: Context, id: String) = id in SMART && Brain(c).config().optBoolean("agents_smart", true) && !Claude.nearBudget(c)
+
+    private fun tool(name: String, desc: String, props: JSONObject, req: List<String>) = JSONObject().put("name", name).put("description", desc)
+        .put("input_schema", JSONObject().put("type", "object").put("properties", props).put("required", JSONArray(req)))
+    private fun s(d: String) = JSONObject().put("type", "string").put("description", d)
+
+    /** "Ask another agent": the team works together, one level deep (an asked agent can't ask on). */
+    fun askTool(c: Context, except: String?): JSONObject {
+        val ids = ALL.filter { it.id in TEAM_PLAYERS && it.id != except && enabled(c, it.id) }
+        return tool("ask_agent", "Ask another of Jarvis's agents for something you need, or hand them their part of the job. " +
+            ids.joinToString(" ") { "${it.id}: ${it.blurb}" },
+            JSONObject().put("agent", JSONObject().put("type", "string").put("enum", JSONArray(ids.map { it.id })))
+                .put("task", s("What you need from them, in one sentence with every detail")), listOf("agent", "task"))
+    }
+    val TEAM_NOTE = tool("team_note", "Tell the rest of the team something they should know for the next few days (a payday, a big bill, a busy day, he's low on something). One short line.",
+        JSONObject().put("note", s("The note")), listOf("note"))
 
     /** Runs one job on an agent (blocking, background thread). Returns what happened, for Jarvis to say. */
-    fun run(c: Context, id: String, task: String, confirmed: Boolean): String {
+    fun run(c: Context, id: String, task: String, confirmed: Boolean, depth: Int = 0): String {
         val d = def(id) ?: return "No agent called $id."
         if (!enabled(c, id)) return "The ${d.name} agent is switched off in the Brain tab."
-        val key = Prefs(c).claudeKey
-        if (key.isBlank()) return "No Claude key set."
+        if (Prefs(c).claudeKey.isBlank()) return "No Claude key set."
         // the research agent uses the bigger model: it waits once he's at his monthly budget
         if (id == "research" && Spend.thisMonth(Prefs(c)) >= Spend.budget(Prefs(c))) return "He's at his Claude budget for the month, so deep research is paused; I can still do a quick search."
         val t0 = System.currentTimeMillis()
         active[id] = t0
-        Trace.log(c, "agent", "${d.name} <- \"${task.take(140)}\"${if (confirmed) " (confirmed)" else ""}")
+        Trace.log(c, "agent", "${d.name} <- \"${task.take(140)}\"${if (confirmed) " (confirmed)" else ""}${if (depth > 0) " (asked by the team)" else ""}")
         val used = ArrayList<String>()
         var result = ""
         try {
             val cfg = Brain(c).config()
-            val model = when (id) {
-                "builder" -> cfg.optString("builder_model", "claude-sonnet-5-5")
-                "research" -> cfg.optString("research_model", "claude-sonnet-5-5")
+            val smart = smartFor(c, id)
+            val model = when {
+                id == "builder" -> cfg.optString("builder_model", "claude-sonnet-5-5")
+                id == "research" -> cfg.optString("research_model", "claude-sonnet-5-5")
+                smart -> cfg.optString("agent_smart_model", "claude-sonnet-5-5")
                 else -> cfg.optString("agent_model", "claude-haiku-5-5")
             }
             val actions = Actions(c)
             val tools = JSONArray()
             if (id == "builder") { val b = Builder.tools(); for (i in 0 until b.length()) tools.put(b.get(i)) }
             else if (id == "coach") { val b = Coach.tools(); for (i in 0 until b.length()) tools.put(b.get(i)) }
-            else { val all = actions.tools(); for (i in 0 until all.length()) { val t = all.getJSONObject(i); if (t.optString("name") in d.tools) tools.put(t) } }
-            // the research agent searches the web itself (Claude's search tool, a few searches per job)
+            else { val all = actions.tools(); for (i in 0 until all.length()) { val t = all.getJSONObject(i); if (t.optString("name") in d.tools || t.optString("name") in Loops.TOOLS) tools.put(t) } }
             // the research agent searches and reads the real pages itself (a few searches and pages per job)
             if (id == "research") { val w = Web.tools(c, cfg.optInt("research_max_searches", 5), cfg.optInt("research_max_pages", 4)); for (i in 0 until w.length()) tools.put(w.get(i)) }
+            val team = depth == 0 && id in TEAM_PLAYERS && cfg.optBoolean("agents_team", true)
+            if (team) { tools.put(askTool(c, id)); tools.put(TEAM_NOTE) }
             tools.put(JSONObject().put("name", "note_to_self").put("description", "Save one short thing you've learned about how he likes this done (a habit, a preference, a correction), so you do it better next time. Not for one-off details.")
                 .put("input_schema", JSONObject().put("type", "object").put("properties", JSONObject().put("note", JSONObject().put("type", "string"))).put("required", JSONArray().put("note"))))
             tools.getJSONObject(tools.length() - 1).put("cache_control", JSONObject().put("type", "ephemeral"))
             val nb = notes(c, id)
             val system = "You are the ${d.name} agent inside Jarvis, Marcus's personal assistant. ${d.blurb} ${d.style}\n" +
-                "Jarvis hands you one job; do it with your tools, then reply with ONE short plain sentence saying exactly what happened (facts and numbers, no pleasantries). Jarvis will say it to Marcus.\n" +
+                (if (smart) "Think it through like a sharp, experienced assistant would: check what you need first, connect it to the rest of his life below, and finish the whole job, not just the first step. " +
+                    "Then reply in one to three plain sentences with the specifics (amounts, dates, names) and anything he should decide. Jarvis will say it to Marcus.\n"
+                else "Jarvis hands you one job; do it with your tools, then reply with ONE short plain sentence saying exactly what happened (facts and numbers, no pleasantries). Jarvis will say it to Marcus.\n") +
+                (if (team) "You're part of a team: ask_agent gets you what another agent knows or hands them their part (Bills knows what's due, Money knows what he's made and spent, Planner knows his calendar, Meals knows dinners). " +
+                    "Use it when the job really touches their area, not for show. Use follow_up_add when something needs chasing later.\n" else "") +
                 "If you can't do it, say what's missing in one sentence. Never invent results.\n" +
                 (if (confirmed) "Marcus has confirmed this job.\n" else "Marcus has NOT confirmed sending, posting, calling, buying or installing anything: don't.\n") +
                 (if (nb.length() > 0) "What you've learned about him:\n" + (0 until nb.length()).joinToString("\n") { "- " + nb.getJSONObject(it).optString("t") } + "\n" else "") +
-                "Right now it is " + java.text.SimpleDateFormat("EEEE h:mm a", java.util.Locale.US).format(java.util.Date()) + "."
+                (if (smart && id != "builder") "\nWhat the whole team knows right now:\n" + Team.brief(c) + "\n" else "") +
+                "Right now it is " + java.text.SimpleDateFormat("EEEE, MMMM d, h:mm a", java.util.Locale.US).format(java.util.Date()) + "."
             val msgs = JSONArray().put(JSONObject().put("role", "user").put("content", task))
-            for (round in 1..(if (id == "builder") 14 else 6)) {
-                val body = JSONObject().put("model", model).put("max_tokens", when (id) { "builder" -> 4000; "research" -> 900; "meals" -> 1500; else -> 500 }).put("system", system)
-                // everyday agents act without hidden thinking first (Research and Builder keep it)
-                if (id != "research" && id != "builder" && !Prefs(c).sp.getBoolean("thinking_param_refused", false)) body.put("thinking", JSONObject().put("type", "disabled"))
-                    .put("tools", tools).put("messages", msgs)
-                val resp = post(key, body) ?: run {
+            val maxRounds = when { id == "builder" -> 14; smart -> 10; else -> 6 }
+            for (round in 1..maxRounds) {
+                val body = JSONObject().put("model", model)
+                    .put("max_tokens", when { id == "builder" -> 8000; id == "research" -> 5000; smart -> 4000; else -> 600 })
+                    .put("system", system).put("tools", tools).put("messages", msgs)
+                if (smart) Claude.smart(body, if (id == "research" || id == "builder") "high" else cfg.optString("agent_effort", "medium"))
+                else body.put("thinking", JSONObject().put("type", "disabled"))
+                val resp = Claude.send(c, body) ?: run {
                     // the newer web tools turned down: drop back to the basic search once and try again
-                    if (body.has("thinking") && lastError.contains("thinking", true)) { Prefs(c).sp.edit().putBoolean("thinking_param_refused", true).apply(); return@run null }
-                    if (id == "research" && Web.fallBack(c, lastError)) {
+                    if (id == "research" && Web.fallBack(c, Claude.lastError)) {
                         for (i in tools.length() - 1 downTo 0) if (Web.isWeb(tools.getJSONObject(i))) tools.remove(i)
                         val w = Web.tools(c, cfg.optInt("research_max_searches", 5), 0); for (i in 0 until w.length()) tools.put(w.get(i))
                         return@run null
                     }
+                    Problems.log(c, "${d.name} agent: Claude ${Claude.lastCode} ${Claude.lastError.take(140)}")
                     result = "The ${d.name} agent couldn't reach Claude."; return result
                 } ?: continue
                 Spend.record(c, cfg, model, resp.optJSONObject("usage"))
@@ -234,13 +265,16 @@ object Agents {
                             if (name in CONFIRMABLE) input.put("confirmed", confirmed)
                             val out = when {
                                 name == "note_to_self" -> if (addNote(c, id, input.optString("note"))) "Noted." else "Already noted."
+                                name == "ask_agent" && team -> input.optString("agent").let { other ->
+                                    if (other == id || other !in TEAM_PLAYERS) "Ask a different agent." else run(c, other, input.optString("task"), false, depth + 1) }
+                                name == "team_note" && team -> Team.note(c, d.name, input.optString("note"))
                                 id == "builder" -> Builder.run(c, name, input, confirmed)
                                 id == "coach" -> Coach.runTool(c, name, input)
-                                name in d.tools -> actions.run(name, input)
+                                name in d.tools || name in Loops.TOOLS -> actions.run(name, input)
                                 else -> "That skill belongs to another agent."
                             }
                             if (name != "note_to_self") { used.add(name); inner.add(System.currentTimeMillis() to name); outs.add(out) }
-                            if (name in LOOK_AGAIN) lookAgain = true
+                            if (name in LOOK_AGAIN || smart) lookAgain = true
                             Trace.log(c, "agent", "${d.name}: $name -> ${out.take(140)}")
                             results.put(JSONObject().put("type", "tool_result").put("tool_use_id", p.optString("id")).put("content", out))
                         }
@@ -253,13 +287,13 @@ object Agents {
                 if (!lookAgain && id != "builder" && id != "meals" && outs.isNotEmpty()) { result = outs.joinToString(" "); break }
                 msgs.put(JSONObject().put("role", "assistant").put("content", content))
                 msgs.put(JSONObject().put("role", "user").put("content", results))
-                if (round == (if (id == "builder") 14 else 6)) result = outs.joinToString(" ").ifBlank { "Ran out of steps." }
+                if (round == maxRounds) result = outs.joinToString(" ").ifBlank { "Ran out of steps." }
             }
         } catch (e: Exception) {
             Problems.log(c, "${d.name} agent: ${e.message}")
             result = "The ${d.name} agent hit a problem: ${e.message}"
         } finally {
-            active.remove(id)
+            if (active[id] == t0) active.remove(id)
             val ms = System.currentTimeMillis() - t0
             logRun(c, id, task, result, ms, used)
             Trace.log(c, "agent", "${d.name} -> \"${result.take(160)}\" (${ms}ms)")
@@ -267,21 +301,6 @@ object Agents {
         }
         return result
     }
-
-    @Volatile private var lastError = ""
-    private fun post(key: String, body: JSONObject): JSONObject? = try {
-        val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
-        c.requestMethod = "POST"; c.doOutput = true
-        c.connectTimeout = 10000; c.readTimeout = 60000
-        c.setRequestProperty("content-type", "application/json")
-        c.setRequestProperty("x-api-key", key)
-        c.setRequestProperty("anthropic-version", "2023-06-01")
-        c.outputStream.use { it.write(body.toString().toByteArray()) }
-        val ok = c.responseCode in 200..299
-        val text = (if (ok) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (!ok) lastError = text
-        if (ok) JSONObject(text) else null
-    } catch (_: Exception) { null }
 
     /** Everything the Brain tab shows. */
     fun json(c: Context): JSONArray = JSONArray().apply {

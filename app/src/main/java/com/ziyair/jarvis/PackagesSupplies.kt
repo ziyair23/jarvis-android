@@ -71,6 +71,7 @@ object Packages {
         p.eta?.let { o.put("eta", it) }; p.tracking?.let { o.put("track", it) }
         save(c, a); LogBus.changed()
         Trace.log(c, "packages", "${o.optString("item")}: ${p.status}")
+        if (p.status == "delivered" && was != "delivered") try { Loops.onDelivered(c, o.optString("item")) } catch (_: Exception) {}
         // say it when something lands (once), unless he's in quiet mode
         if (p.status == "delivered" && was != "delivered" && Prefs(c).running && !Stealth.on(Prefs(c)) && Brain(c).config().optBoolean("packages_announce", true)) {
             Agents.flash("packages")

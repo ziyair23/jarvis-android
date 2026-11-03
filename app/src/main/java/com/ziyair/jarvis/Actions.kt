@@ -121,6 +121,15 @@ class Actions(private val context: Context) {
         put(tool("journal_read", "Read back baby journal moments, optionally about something.", props("about" to str("Optional word to search")), listOf()))
         put(tool("answer_call", "Answer the phone call that's ringing right now.", props(), listOf()))
         put(tool("decline_call", "Decline the phone call that's ringing right now.", props(), listOf()))
+        put(tool("run_job", "A whole job with several parts that needs planning across his life: 'handle my week', 'get us ready for tomorrow', 'sort out everything for Ziyair's checkup', 'what do I need to do before payday, and do it'. Runs in the background with all the agents and reports back when done.",
+            props("goal" to str("The whole job, with every detail he gave")), listOf("goal")))
+        put(tool("follow_up_add", "Keep something open and chase it over the next days: a reply he's waiting on, a delivery, something due by a date. Closes itself when the reply or package arrives; brings it up if it slips.",
+            props("what" to str("What to follow up on, short"), "kind" to str("reply, delivery, date or task"), "who" to str("Who he's waiting on, for a reply"),
+                "in_hours" to num("Due in this many hours"), "date" to str("Or due on yyyy-MM-dd"), "time" to str("HH:mm on that date"),
+                "then" to str("remind (default) or draft (offer to send a nudge)")), listOf("what")))
+        put(tool("follow_ups_list", "What's open to follow up on.", props(), listOf()))
+        put(tool("follow_up_done", "Close a follow-up (it's sorted, or he says drop it).", props("which" to str("Words from it, or its id")), listOf("which")))
+        put(tool("mind_recent", "What Jarvis has been thinking about and doing on his own lately: things he noticed, did, suggested, and his latest idea.", props(), listOf()))
         put(tool("meal_save", "Save one dinner to this week's meal plan (replaces that day's meal).", props("day" to str("Monday to Sunday"), "name" to str("The meal, short"), "ingredients" to str("What to buy for it, comma separated")), listOf("day", "name", "ingredients")))
         put(tool("meals_week", "This week's meal plan.", props(), listOf()))
         put(tool("meal_tonight", "What's for dinner tonight on the meal plan.", props(), listOf()))
@@ -259,6 +268,11 @@ class Actions(private val context: Context) {
             "answer_call" -> CallControl.answer(context)
             "decline_call" -> CallControl.decline(context)
             "judge_offer" -> OfferJudge.now(context)
+            "run_job" -> Jobs.start(context, input.optString("goal"))
+            "follow_up_add" -> Loops.add(context, input)
+            "follow_ups_list" -> Loops.list(context)
+            "follow_up_done" -> Loops.done(context, input.optString("which"))
+            "mind_recent" -> Mind.recent(context)
             "meal_save" -> Meals.save(context, input.getString("day"), input.getString("name"), input.optString("ingredients"))
             "meals_week" -> Meals.week(context)
             "meal_tonight" -> Meals.tonight(context)
@@ -377,7 +391,7 @@ class Actions(private val context: Context) {
         return Fast.closestName(who, names)
     }
 
-    private fun findNumber(whoIn: String): Pair<String, String>? {
+    fun findNumber(whoIn: String): Pair<String, String>? {
         val who = partnerAlias(whoIn)
         if (who.replace(Regex("[^0-9+]"), "").length >= 7) return who to who
         if (!has(Manifest.permission.READ_CONTACTS)) return null
