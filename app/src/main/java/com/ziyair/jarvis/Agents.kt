@@ -24,7 +24,7 @@ object Agents {
         "list_check", "list_read", "list_clear", "driving_mode", "media_control", "answer_call", "decline_call",
         // quick one-step jobs he does himself (an extra hop to an agent costs a whole second); agents keep the bigger jobs
         "log_baby", "baby_status", "log_earnings", "earnings_summary", "log_expense", "play_music", "navigate",
-        "lights", "open_app", "set_alarm", "journal_add", "pursuit_add", "judge_offer", "draft_text")
+        "lights", "open_app", "set_alarm", "journal_add", "pursuit_add", "judge_offer", "draft_text", "meal_tonight")
 
     /** Lights an agent up in the brain for a moment when its skill was used directly. */
     fun flash(id: String, ms: Long = 1600) { val t = System.currentTimeMillis(); active[id] = t; Thread { try { Thread.sleep(ms) } catch (_: Exception) {}; active.remove(id, t) }.start() }
@@ -38,7 +38,7 @@ object Agents {
             "Texts, DMs, replies and calls only go out when the task says he confirmed; otherwise get it ready and say it's waiting for his yes.")
 
     val MONEY = Def("money", "Money", "Tracks what he makes and spends, the Macan fund, and his Jarvis bill.",
-        setOf("log_earnings", "earnings_summary", "set_goal", "log_expense", "expenses_summary", "spending", "set_budget", "offer_rule"),
+        setOf("log_earnings", "earnings_summary", "set_goal", "log_expense", "expenses_summary", "spending", "set_budget", "offer_rule", "money_week", "subscriptions_list"),
         "Be exact with numbers. Log what he says, then answer with the figure that matters (today, the week, how far to the goal).")
 
     val FAMILY = Def("family", "Family and home", "Ziyair's feeds, diapers and sleep, the baby journal, the lights and the house.",
@@ -86,7 +86,12 @@ object Agents {
     val SUPPLIES = Def("supplies", "Supplies", "Watches prices on the groceries and baby supplies he keeps rebuying (milk, eggs, diapers, wipes, formula...) at the stores around Spokane, and tells him when something's a real deal.",
         setOf("supplies_list", "supply_watch", "supply_unwatch", "supply_check"), "Give the price, the store and the size. Never buy anything or add to a cart.")
 
-    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER, COACH, BILLS, APPTS, PACKAGES, SUPPLIES)
+    val MEALS = Def("meals", "Meals", "Plans a week of cheap, healthy, quick dinners for him and his girlfriend, builds the grocery list from it, and knows which store is cheapest.",
+        setOf("meal_save", "meals_week", "meal_tonight", "meals_to_list", "cheapest_store", "list_read"),
+        "Healthy, cheap and quick: 30 minutes or less, there's a newborn at home. Simple, real food from a normal grocery store; reuse ingredients across the week so less goes to waste. " +
+            "When you plan, save every day with meal_save (ingredients as a short shopping list). Then say the week in one or two sentences, not every ingredient. Never buy or order anything.")
+
+    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER, COACH, BILLS, APPTS, PACKAGES, SUPPLIES, MEALS)
     fun def(id: String) = ALL.firstOrNull { it.id == id }
 
     // ---------------- switches, notebooks, stats ----------------
@@ -158,7 +163,7 @@ object Agents {
 
     /** Skills that need a look at the result before the agent is done (everything else returns straight away). */
     private val LOOK_AGAIN = setOf("screen_read", "read_messages", "earnings_summary", "expenses_summary", "baby_status", "journal_read",
-        "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list", "list_lessons", "review_today", "bills_list", "appts_list", "life_sweep", "packages_list", "supplies_list", "supply_check",
+        "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list", "list_lessons", "review_today", "bills_list", "appts_list", "life_sweep", "packages_list", "supplies_list", "supply_check", "meals_week", "money_week", "subscriptions_list", "cheapest_store", "list_read",
         "read_file", "list_files", "build_status", "read_build_errors")
 
     /** Runs one job on an agent (blocking, background thread). Returns what happened, for Jarvis to say. */
@@ -201,7 +206,7 @@ object Agents {
                 "Right now it is " + java.text.SimpleDateFormat("EEEE h:mm a", java.util.Locale.US).format(java.util.Date()) + "."
             val msgs = JSONArray().put(JSONObject().put("role", "user").put("content", task))
             for (round in 1..(if (id == "builder") 14 else 6)) {
-                val body = JSONObject().put("model", model).put("max_tokens", when (id) { "builder" -> 4000; "research" -> 900; else -> 500 }).put("system", system)
+                val body = JSONObject().put("model", model).put("max_tokens", when (id) { "builder" -> 4000; "research" -> 900; "meals" -> 1500; else -> 500 }).put("system", system)
                 // everyday agents act without hidden thinking first (Research and Builder keep it)
                 if (id != "research" && id != "builder" && !Prefs(c).sp.getBoolean("thinking_param_refused", false)) body.put("thinking", JSONObject().put("type", "disabled"))
                     .put("tools", tools).put("messages", msgs)
@@ -245,7 +250,7 @@ object Agents {
                 if (resp.optString("stop_reason") == "pause_turn") { msgs.put(JSONObject().put("role", "assistant").put("content", content)); continue }
                 if (results.length() == 0) { result = text.toString().trim().ifBlank { "Done." }; break }
                 // one quick step done and nothing to read back: hand the result straight to Jarvis (saves a whole round)
-                if (!lookAgain && id != "builder" && outs.isNotEmpty()) { result = outs.joinToString(" "); break }
+                if (!lookAgain && id != "builder" && id != "meals" && outs.isNotEmpty()) { result = outs.joinToString(" "); break }
                 msgs.put(JSONObject().put("role", "assistant").put("content", content))
                 msgs.put(JSONObject().put("role", "user").put("content", results))
                 if (round == (if (id == "builder") 14 else 6)) result = outs.joinToString(" ").ifBlank { "Ran out of steps." }
