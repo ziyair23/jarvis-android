@@ -155,3 +155,21 @@ object Fast {
         }
     }
 }
+
+/** When Jarvis may answer without hearing his name. Pure, unit-tested. */
+object FollowUp {
+    /** Why this follow-up isn't for him (or null if it is): too long after he spoke, too many in a row, or long chatter. */
+    fun reject(text: String, msSinceHeSpoke: Long, inRow: Int): String? {
+        val words = text.trim().split(Regex("\\s+")).size
+        val named = Regex("(?i)\\b(jarvis|jervis|jarvas)\\b").containsMatchIn(text)
+        return when {
+            msSinceHeSpoke > 25_000 -> "too long since he spoke"
+            inRow >= 4 -> "four follow-ups in a row"
+            words > 30 && !named -> "long chatter, sounds like people talking"
+            else -> null
+        }
+    }
+
+    /** Jarvis only asked what was said ("I didn't catch that"): don't keep listening after it. */
+    fun clarifying(reply: String) = Regex("(?i)(didn'?t (quite )?catch|not quite following|can'?t tell what|could you (say|tell me) (that |what|again)|say that again|came through as fragments|go on, sir|what would you like|i'?m listening)").containsMatchIn(reply)
+}

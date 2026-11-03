@@ -69,8 +69,12 @@ object Crash {
                 ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "was closed for using too much battery or CPU"
                 ApplicationExitInfo.REASON_SIGNALED -> "was killed by the system"
                 ApplicationExitInfo.REASON_USER_REQUESTED, ApplicationExitInfo.REASON_USER_STOPPED -> null   // he closed it
-                ApplicationExitInfo.REASON_PERMISSION_CHANGE, ApplicationExitInfo.REASON_DEPENDENCY_DIED, ApplicationExitInfo.REASON_PACKAGE_UPDATED -> null
-                else -> null
+                ApplicationExitInfo.REASON_PACKAGE_UPDATED -> null   // an update
+                ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "was restarted because a permission changed"
+                ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "stopped because something it relies on stopped"
+                ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "failed to start"
+                ApplicationExitInfo.REASON_EXIT_SELF -> "shut itself down"
+                else -> "was stopped by the phone (reason ${r.reason}, often battery saving)"
             } ?: continue
             val at = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US).format(Date(r.timestamp))
             // for a freeze or engine crash Android keeps the details: the first lines say where it was stuck

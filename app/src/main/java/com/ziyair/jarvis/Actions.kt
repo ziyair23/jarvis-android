@@ -62,8 +62,8 @@ class Actions(private val context: Context) {
             props("amount" to num("Dollars made"), "day" to str("'today', 'yesterday' or YYYY-MM-DD"), "replace" to bool("true if this is a correction of that day's total")), listOf("amount")))
         put(tool("earnings_summary", "His earnings so far today, this week, this month, his daily average and progress toward his savings goal (the Macan).", props(), listOf()))
         put(tool("set_goal", "Set his savings goal amount (e.g. what the Porsche Macan costs).", props("amount" to num("Goal in dollars"), "name" to str("What it's for, e.g. 'the Macan'")), listOf("amount")))
-        put(tool("log_baby", "Log something about the baby: a feed, a diaper, sleep or waking. Feeds also set a heads-up for the next feed.",
-            props("kind" to str("feed, diaper, sleep or wake"), "minutes_ago" to num("How long ago it happened, 0 if just now"), "note" to str("Optional detail, e.g. '4 oz' or 'poop'")), listOf("kind")))
+        put(tool("log_baby", "Log something about the baby: a feed, a diaper, sleep, waking, or anything else (tummy time, a bath, medicine, pumping, a doctor visit). Feeds also set a heads-up for the next feed.",
+            props("kind" to str("feed, diaper, sleep, wake, or a short name for anything else, e.g. 'tummy time', 'bath', 'medicine'"), "minutes_ago" to num("How long ago it happened, 0 if just now"), "note" to str("Details, e.g. '4 oz', 'poop', '5 minutes'")), listOf("kind")))
         put(tool("baby_status", "When the baby last ate, feeds and diapers today, and whether he's asleep.", props(), listOf()))
         put(tool("set_feed_interval", "Change how many hours between feeds for the next-feed heads-up (default 3).", props("hours" to num("Hours between feeds")), listOf("hours")))
         put(tool("phone_control", "Control the phone: quiet_on/quiet_off (Do Not Disturb, e.g. 'the baby's asleep'), flashlight_on/flashlight_off, volume (level 0-10).",

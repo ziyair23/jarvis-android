@@ -304,6 +304,12 @@ class JarvisService : Service() {
             if (!earListening) return
             earListening = false
             listenSession++
+            // without his name, only a quick reply to what Jarvis just said counts; never other people talking nearby
+            if (!earFirst) {
+                val why = FollowUp.reject(text, System.currentTimeMillis() - lastSpokeEnd, followUpsInRow)
+                if (why != null) { Trace.log(this@JarvisService, "ignored", "$why: not answering without his name"); inConvo = false; finishTurn(); return }
+                followUpsInRow++
+            }
             handle(text, followUp = !earFirst)
         }
         override fun onNoise() {
@@ -328,6 +334,8 @@ class JarvisService : Service() {
         val e = ear ?: return listen(firstTurn)
         earFirst = firstTurn
         earListening = true
+        if (firstTurn) followUpsInRow = 0
+        val listenStarted = System.currentTimeMillis()
         val session = ++listenSession
         Orb.set(this, Orb.LISTEN)
         if (CallControl.ringingNow() && !ringHushedForEar) ringHushedForEar = ringHush(true)
@@ -339,6 +347,14 @@ class JarvisService : Service() {
                 if (System.currentTimeMillis() > listenUntil && !e.speechStarted) {
                     earListening = false
                     Trace.log(this@JarvisService, "silence", "nothing said, going back to sleep")
+                    finishTurn()
+                    return
+                }
+                // constant talking nearby (people, TV) must never keep him listening: 40 seconds at most
+                if (System.currentTimeMillis() - listenStarted > 40_000) {
+                    earListening = false
+                    e.set(Ear.Mode.SLEEP)
+                    Trace.log(this@JarvisService, "silence", "listened 40 s with nothing for him, going back to sleep")
                     finishTurn()
                     return
                 }
@@ -438,8 +454,12 @@ class JarvisService : Service() {
     }
 
     /** Next turn of the conversation, or back to waiting for "Hey Jarvis". */
+    @Volatile private var lastSpokeEnd = 0L
+    @Volatile private var followUpsInRow = 0
+
     private fun nextTurn(keepGoing: Boolean) {
         thinking = false
+        lastSpokeEnd = System.currentTimeMillis()
         if (keepGoing && prefs.running) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } }
         else finishTurn()
     }
@@ -659,7 +679,8 @@ class JarvisService : Service() {
                 if (wasQuiet && Stealth.on(prefs)) { live?.cancel(); Stealth.silentNote(this, reply); LogBus.changed(); finishTurn(); return@post }
                 LogBus.changed()
                 // keep the conversation going (he can talk over Jarvis to cut in); a question from Jarvis always waits for an answer
-                val keep = inConvo || reply.trimEnd().endsWith("?")
+                // a question from Jarvis waits for an answer, unless he was only asking what was said (then he stops, so he never chats with the room)
+                val keep = (inConvo || reply.trimEnd().endsWith("?")) && !(followUp && FollowUp.clarifying(reply))
                 val tok = ++speechTok
                 val next = { if (tok == speechTok) { speaking = false; stopWakeWord(); nextTurn(keep) } }
                 speaking = true
@@ -744,7 +765,7 @@ class JarvisService : Service() {
             speak(line) {
                 overRing = false
                 if (hushed) ringHush(false)
-                if (thenListen && CallControl.ringingNow()) { openWindow(5); afterSpeaking { listen(firstTurn = false) } } else finishTurn()
+                if (thenListen && CallControl.ringingNow()) { lastSpokeEnd = System.currentTimeMillis(); openWindow(5); afterSpeaking { listen(firstTurn = false) } } else finishTurn()
             }
             return
         }
@@ -761,7 +782,7 @@ class JarvisService : Service() {
         holdFocus(true)
         Sfx.play("alert")
         val say: (String, () -> Unit) -> Unit = if (Cast.mode(prefs) != "off") { t, f -> speakHouse(t, f) } else { t, f -> speak(t, f) }
-        main.postDelayed({ say(line) { if (thenListen) { openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() } }, 300)
+        main.postDelayed({ say(line) { if (thenListen) { lastSpokeEnd = System.currentTimeMillis(); openWindow(convoSeconds()); afterSpeaking { listen(firstTurn = false) } } else finishTurn() } }, 300)
     }
 
     /** Driving mode follows the car's Bluetooth (matched by name, no extra permission needed). */
