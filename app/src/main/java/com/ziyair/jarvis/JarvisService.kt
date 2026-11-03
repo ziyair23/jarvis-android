@@ -153,7 +153,8 @@ class JarvisService : Service() {
     }
 
     private val unlocked = object : android.content.BroadcastReceiver() {
-        override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy); Coach.maybeReview(this@JarvisService); LifeWatch.maybeSweep(this@JarvisService); Supplies.maybeCheck(this@JarvisService); Meals.maybePlanWeek(this@JarvisService) } }
+        override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy); Coach.maybeReview(this@JarvisService); LifeWatch.maybeSweep(this@JarvisService); Supplies.maybeCheck(this@JarvisService); Meals.maybePlanWeek(this@JarvisService); Mind.maybeThink(this@JarvisService)
+            Loops.sweep(this@JarvisService)?.let { line -> main.postDelayed({ sayFirst(line, thenListen = line.endsWith("?")) }, 2500) } } }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -847,7 +848,7 @@ class JarvisService : Service() {
         recognizer = null
         main.postDelayed({ if (!busy) holdFocus(false) }, 500)
         main.postDelayed({ if (recognizer == null) quiet(false) }, 400)
-        if (chatted) { chatted = false; thread { Memory.learn(this); Coach.maybeReview(this); LifeWatch.maybeSweep(this); Supplies.maybeCheck(this); Meals.maybePlanWeek(this) } }
+        if (chatted) { chatted = false; thread { Memory.learn(this); Coach.maybeReview(this); LifeWatch.maybeSweep(this); Supplies.maybeCheck(this); Meals.maybePlanWeek(this); Mind.maybeThink(this) } }
         busy = false
         release()
         LogBus.changed()

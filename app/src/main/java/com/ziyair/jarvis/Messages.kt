@@ -99,6 +99,7 @@ class MessageListener : NotificationListenerService() {
         val reply = n.actions?.firstOrNull { a -> a.remoteInputs?.any { it.allowFreeFormInput } == true }
         val m = Msg(sender, text, appName(sbn.packageName), System.currentTimeMillis(), reply)
         Inbox.add(m)
+        try { Loops.onMessage(this, sender) } catch (_: Exception) {}
 
         val prefs = Prefs(this)
         val announce = when (prefs.readMessages) { "always" -> true; "driving" -> DriveMode.on; else -> false }

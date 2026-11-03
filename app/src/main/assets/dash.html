@@ -48,6 +48,12 @@ header h1{font:300 30px/1.1 var(--serif);margin:6px 0 0;letter-spacing:-.2px}
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tile{display:block;text-align:left;background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--edge);border-radius:var(--r);padding:15px 15px 14px;color:var(--ink);font:inherit;min-height:0;position:relative;overflow:hidden;cursor:pointer}
 .tile.wide{grid-column:1/-1}
+.mdot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ink-faint)}
+.mdot.on{background:var(--accent,#c0564b);box-shadow:0 0 10px var(--accent,#c0564b);animation:mpulse 1.4s ease-in-out infinite}
+@keyframes mpulse{50%{opacity:.35}}
+.sug{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--edge)}
+.sug .acts{display:flex;gap:8px}.sug .acts button{flex:1;min-height:40px;padding:8px 10px}
+.list li.col{display:block}
 .tile:active{transform:scale(.985)}
 .tile .k{font:500 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:flex;align-items:center;gap:6px}
 .tile .k .go{margin-left:auto;opacity:.55}
@@ -126,6 +132,11 @@ input::placeholder{color:#5f5b56}
 <button id="health-warn" class="warn" onclick="openSheet('settings')"></button>
 
 <div class="tiles">
+  <div class="tile wide" id="mind-tile" onclick="openSheet('mind')" role="button">
+    <div class="k"><i id="mind-dot" class="mdot"></i>On his mind<span class="go">›</span></div>
+    <div class="sub" id="t-mind" style="color:var(--ink-dim);font-size:14px;line-height:1.45;margin-top:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden"></div>
+    <div id="t-mind-sug" onclick="event.stopPropagation()"></div>
+  </div>
   <button class="tile" onclick="openSheet('money')">
     <div class="k">Today<span class="go">›</span></div>
     <div class="v" id="t-earn">$0</div>
@@ -250,6 +261,18 @@ input::placeholder{color:#5f5b56}
   <div class="card"><div class="label">Skills</div><div id="ag-skills" style="display:flex;flex-wrap:wrap;gap:6px"></div></div>
 </div></div>
 
+<div class="sheet" id="sh-mind"><div class="head"><div class="grab"></div><div class="title"><h2>His mind</h2><button class="icon" aria-label="Close" onclick="closeSheet()">×</button></div></div><div class="body">
+  <div class="card">
+    <p class="dim" id="mind-state" style="margin:0 0 12px">He thinks on his own in the morning, afternoon and evening, does the safe things himself, and asks you about the rest.</p>
+    <div class="grid2" style="grid-template-columns:1fr 1fr"><button class="primary" id="mind-now" onclick="mindNow()">Think now</button><button id="mind-sw" onclick="J.mindToggle(!(D.mind && D.mind.on))">Turn off</button></div>
+  </div>
+  <div class="card" id="mind-sug-card"><div class="label">Waiting for your yes</div><ul class="list" id="mind-sug"></ul></div>
+  <div class="card"><div class="label">Thoughts</div><ul class="list" id="mind-thoughts"></ul></div>
+  <div class="card"><div class="label">His ideas</div><ul class="list" id="mind-ideas"></ul></div>
+  <div class="card"><div class="label">Whole jobs</div><ul class="list" id="mind-jobs"></ul></div>
+  <div class="card"><div class="label">Following up</div><ul class="list" id="mind-loops"></ul></div>
+</div></div>
+
 <div class="sheet" id="sh-settings"><div class="head"><div class="grab"></div><div class="title"><h2>Settings</h2><button class="icon" aria-label="Close" onclick="closeSheet()">×</button></div></div><div class="body">
   <button class="primary" style="width:100%;margin:2px 0 12px" onclick="J.openSetup()">Keys, voice and permissions</button>
   <div class="card" id="health"><div class="label">Health check</div><ul class="list" id="health-list"></ul></div>
@@ -314,6 +337,8 @@ function addX() { const a = $('x-amt').value, w = $('x-what').value.trim(); if (
 function addJ() { const v = $('j-in').value.trim(); if (!v) return; J.addJournal(v); $('j-in').value = ''; }
 function earn(day) { const v = $('m-amt').value; if (!v) return; J.logEarn(v, day, false); $('m-amt').value = ''; }
 function setGoal() { const v = $('m-amt').value; if (!v) return; J.setGoal(v, D.goalName || 'the Macan'); $('m-amt').value = ''; }
+function mindAct(id, yes) { J.mindAct(String(id), yes); setTimeout(load, 150); }
+function mindNow() { const ok = J.mindNow(); $('mind-state').textContent = ok ? 'Thinking right now…' : 'He thought a few minutes ago; give him ten.'; setTimeout(load, 400); }
 function addMem() { const v = $('mem-in').value.trim(); if (!v) return; J.remember(v); $('mem-in').value = ''; }
 
 function load() {
@@ -422,6 +447,25 @@ function load() {
   $('life-list').innerHTML = life.length ? life.slice(0, 10).map(x => `<li><span class="t">${dayLbl(x.at)}</span><span>${esc(x.t)}${x.time ? ' <span class="faint">' + clock(x.at) + '</span>' : ''}</span></li>`).join('')
     : '<li class="empty">Nothing yet. Bills and Appointments find these in your texts on their own.</li>';
   const soon = life.find(x => x.at < Date.now() + 3 * 864e5);
+  // his own mind: what he noticed, did, suggests, and his ideas
+  { const M = D.mind || {}, T = M.thoughts || [], S = M.suggest || [], I = M.ideas || [], JB = M.jobs || [], L = M.loops || [];
+    const busy = M.thinking || !!M.job;
+    $('mind-dot').className = 'mdot' + (busy ? ' on' : '');
+    const lastT = T.length ? T[T.length - 1] : null;
+    $('t-mind').textContent = M.job ? 'Working on a job: ' + M.job : M.thinking ? 'Thinking things over…' : lastT ? lastT.thought + ' · ' + ago(lastT.at) : M.on === false ? 'Thinking on his own is off.' : 'He\'ll think things over on his own this morning, afternoon and evening.';
+    const sugHtml = (x, big) => `<div class="sug"><div style="font-size:14px;line-height:1.45">${esc(x.text)}${x.msg ? `<div class="faint" style="margin-top:4px">“${esc(x.msg)}”${x.who ? ' → ' + esc(x.who) : ''}</div>` : ''}</div><div class="acts"><button class="primary" onclick="mindAct('${x.id}',true)">${x.msg ? 'Open text' : 'Do it'}</button><button onclick="mindAct('${x.id}',false)">Not now</button></div></div>`;
+    $('t-mind-sug').innerHTML = S.length ? sugHtml(S[S.length - 1]) : '';
+    $('mind-state').textContent = M.on === false ? 'Off. He only acts when you ask.' : busy ? (M.job ? 'Working on: ' + M.job : 'Thinking right now…') : 'He thinks on his own in the morning, afternoon and evening, does the safe things himself, and asks you about the rest.';
+    $('mind-sw').textContent = M.on === false ? 'Turn on' : 'Turn off';
+    $('mind-now').disabled = busy || M.on === false;
+    $('mind-sug-card').style.display = S.length ? '' : 'none';
+    $('mind-sug').innerHTML = S.slice().reverse().map(x => `<li class="col" style="padding-top:0">${sugHtml(x)}</li>`).join('');
+    const slot = x => x.slot ? x.slot[0].toUpperCase() + x.slot.slice(1) : '';
+    $('mind-thoughts').innerHTML = T.slice().reverse().map(x => `<li class="col"><div class="faint">${esc(slot(x))} · ${ago(x.at)}</div><div style="margin-top:4px;line-height:1.45">${esc(x.thought)}</div>${(x.did || []).length ? `<div class="faint" style="margin-top:6px">${(x.did || []).map(esc).join('<br>')}</div>` : ''}</li>`).join('')
+      || '<li class="empty">Nothing yet. Tap Think now to watch him work.</li>';
+    $('mind-ideas').innerHTML = I.slice().reverse().map(x => `<li class="col"><div style="line-height:1.45">${esc(x.t)}</div><div class="faint" style="margin-top:4px">${ago(x.at)}</div></li>`).join('') || '<li class="empty">His first idea comes tonight.</li>';
+    $('mind-jobs').innerHTML = JB.slice().reverse().map(x => `<li class="col"><div>${esc(x.goal)}</div><div class="faint" style="margin-top:4px;line-height:1.45">${esc(x.summary)}</div><div class="faint" style="margin-top:4px">${(x.steps || []).length} steps · ${Math.round((x.ms || 0) / 1000)}s · ${ago(x.at)}</div></li>`).join('') || '<li class="empty">Say "Jarvis, handle my week" and watch.</li>';
+    $('mind-loops').innerHTML = L.map(x => `<li><div style="flex:1"><div>${esc(x.what)}</div><div class="faint">by ${new Date(x.due).toLocaleString('en-US', {weekday: 'short', hour: 'numeric', minute: '2-digit'})}</div></div><button class="x" aria-label="Close" onclick="J.loopDone('${x.id}')">×</button></li>`).join('') || '<li class="empty">Nothing to chase. "Let me know if Jesse doesn\'t answer" starts one.</li>'; }
   // meals, planned by their agent
   const MP = (D.mealPlan && D.mealPlan.meals) || {}, DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   const todayName = new Date().toLocaleDateString('en-US', {weekday: 'long'});

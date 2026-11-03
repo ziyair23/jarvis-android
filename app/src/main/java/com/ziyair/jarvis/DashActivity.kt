@@ -75,6 +75,7 @@ class DashActivity : Activity() {
                 .put("appts", Appts.json(ctx))
                 .put("packages", Packages.all(ctx))
                 .put("mealPlan", Meals.plan(ctx))
+                .put("mind", try { Mind.json(ctx) } catch (e: Exception) { Trace.log(ctx, "dash", "mind failed: ${e.message}"); org.json.JSONObject() })
                 .put("spendTx", Spending.all(ctx).let { a -> org.json.JSONArray().apply { for (i in maxOf(0, a.length() - 300) until a.length()) put(a.get(i)) } })
                 .put("supplies", Supplies.all(ctx))
                 .put("history", p.history())
@@ -106,6 +107,10 @@ class DashActivity : Activity() {
         @JavascriptInterface fun orb(): String = Orb.now().let { "${it.first},${it.second}" }
         @JavascriptInterface fun hush() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_HUSH)) }
         @JavascriptInterface fun agents(): String = try { Agents.json(ctx).toString() } catch (e: Exception) { Trace.log(ctx, "dash", "agents list failed: ${e.message}"); "[]" }
+        @JavascriptInterface fun mindAct(id: String, doIt: Boolean) { Mind.act(ctx, id.toLongOrNull() ?: 0L, doIt) }
+        @JavascriptInterface fun mindToggle(on: Boolean) { Mind.setEnabled(ctx, on) }
+        @JavascriptInterface fun mindNow(): Boolean = Mind.thinkNow(ctx).also { LogBus.changed() }
+        @JavascriptInterface fun loopDone(id: String) { Loops.done(ctx, id); LogBus.changed() }
         @JavascriptInterface fun jsError(msg: String) { Trace.log(ctx, "dash", "screen error: ${msg.take(200)}") }
         @JavascriptInterface fun agentToggle(id: String, on: Boolean) { Agents.setEnabled(ctx, id, on); LogBus.changed() }
         @JavascriptInterface fun agentTeach(id: String, text: String) { if (id == "jarvis") Memory.add(ctx, text) else if (id == "coach") Coach.addLesson(ctx, text, "marcus") else Agents.addNote(ctx, id, text); LogBus.changed() }
