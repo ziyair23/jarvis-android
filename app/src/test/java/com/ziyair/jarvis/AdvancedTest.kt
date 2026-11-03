@@ -111,4 +111,18 @@ class AdvancedTest {
         assertEquals(listOf("shopping list"), Mind.changed(before, mapOf("bills" to "a", "shopping list" to "milk, eggs")))
         assertEquals("first look never triggers a think", listOf<String>(), Mind.changed(JSONObject(), mapOf("bills" to "a")))
     }
+
+    @Test fun knowsWhichDaysHeDashes() {
+        fun day(y: Int, m: Int, d: Int) = java.util.Calendar.getInstance().apply { clear(); set(y, m - 1, d, 12, 0) }
+        val tue = day(2026, 11, 3)
+        // dashed the last three Tuesdays, plus one Monday
+        val h = mapOf("2026-10-27" to true, "2026-10-20" to true, "2026-10-13" to true, "2026-11-02" to true)
+        assertEquals(DashDays.Today.LIKELY, DashDays.state(h, tue))
+        assertEquals(DashDays.Today.NO, DashDays.state(h, day(2026, 11, 4)))
+        assertEquals(DashDays.Today.OFF, DashDays.state(h + ("2026-11-03" to false), tue))
+        assertEquals(DashDays.Today.ON, DashDays.state(h + ("2026-11-04" to true), day(2026, 11, 4)))
+        assertFalse("two of four isn't a habit", DashDays.usual(mapOf("2026-10-27" to true, "2026-10-20" to true), tue))
+        assertEquals("Tue", DashDays.usualDays(h, tue))
+        assertTrue("dash_day is a quick skill", "dash_day" in Agents.CORE)
+    }
 }

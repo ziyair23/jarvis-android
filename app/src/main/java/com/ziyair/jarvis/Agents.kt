@@ -24,7 +24,7 @@ object Agents {
         "log_baby", "baby_status", "log_earnings", "earnings_summary", "log_expense", "play_music", "navigate",
         "lights", "open_app", "set_alarm", "journal_add", "pursuit_add", "judge_offer", "draft_text", "meal_tonight",
         // the advanced ones: whole jobs, follow-through, and what his own mind has been up to
-        "run_job", "follow_up_add", "follow_ups_list", "follow_up_done", "mind_recent")
+        "dash_day", "run_job", "follow_up_add", "follow_ups_list", "follow_up_done", "mind_recent")
 
     /** Lights an agent up in the brain for a moment when its skill was used directly. */
     fun flash(id: String, ms: Long = 1600) { val t = System.currentTimeMillis(); active[id] = t; Thread { try { Thread.sleep(ms) } catch (_: Exception) {}; active.remove(id, t) }.start() }
@@ -48,7 +48,7 @@ object Agents {
 
     val PLANNER = Def("planner", "Planner", "Owns his time: calendar, reminders, alarms, the morning briefing and his protocols.",
         setOf("calendar_events", "add_event", "remind_me", "list_reminders", "cancel_reminders", "set_alarm", "briefing", "run_protocol", "set_timer"),
-        "Think about his whole day before answering: his dashes run 7 to 11 and 5 to 9, and there's a newborn at home. Check the calendar before adding things, " +
+        "Think about his whole day before answering: on days he dashes, his shifts usually run 7 to 11 and 5 to 9, but he does NOT dash every day (the team brief says whether today is a dash day), and there's a newborn at home. Check the calendar before adding things, " +
             "and say plainly if something clashes. Times you pass to tools are 24-hour local time.")
 
     val RESEARCH = Def("research", "Research", "Digs into questions that need more than one search: comparisons, how-tos, prices, plans.",

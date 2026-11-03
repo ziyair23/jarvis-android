@@ -117,7 +117,7 @@ class JarvisAccess : AccessibilityService() {
         val now = android.os.SystemClock.uptimeMillis()
         if (now - lastLook < 900) return
         lastLook = now
-        try { offerTexts()?.let { OfferJudge.check(this, it) } } catch (_: Exception) {}
+        try { offerTexts()?.let { DashDays.seen(this, "offer on screen"); OfferJudge.check(this, it) } } catch (_: Exception) {}
     }
 
     /** All the text of a Dasher offer on screen (even when it pops up over the map), or null if no offer is showing. */

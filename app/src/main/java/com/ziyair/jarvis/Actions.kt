@@ -121,6 +121,8 @@ class Actions(private val context: Context) {
         put(tool("journal_read", "Read back baby journal moments, optionally about something.", props("about" to str("Optional word to search")), listOf()))
         put(tool("answer_call", "Answer the phone call that's ringing right now.", props(), listOf()))
         put(tool("decline_call", "Decline the phone call that's ringing right now.", props(), listOf()))
+        put(tool("dash_day", "He's dashing or not on a given day: 'not dashing today', 'taking tomorrow off', 'I'm dashing tonight after all'. Jarvis only plans shifts and targets on dash days.",
+            props("on" to bool("true if he's dashing, false if it's a day off"), "tomorrow" to bool("About tomorrow instead of today")), listOf("on")))
         put(tool("run_job", "A whole job with several parts that needs planning across his life: 'handle my week', 'get us ready for tomorrow', 'sort out everything for Ziyair's checkup', 'what do I need to do before payday, and do it'. Runs in the background with all the agents and reports back when done.",
             props("goal" to str("The whole job, with every detail he gave")), listOf("goal")))
         put(tool("follow_up_add", "Keep something open and chase it over the next days: a reply he's waiting on, a delivery, something due by a date. Closes itself when the reply or package arrives; brings it up if it slips.",
@@ -268,6 +270,7 @@ class Actions(private val context: Context) {
             "answer_call" -> CallControl.answer(context)
             "decline_call" -> CallControl.decline(context)
             "judge_offer" -> OfferJudge.now(context)
+            "dash_day" -> DashDays.set(context, input.optBoolean("on", true), input.optBoolean("tomorrow"))
             "run_job" -> Jobs.start(context, input.optString("goal"))
             "follow_up_add" -> Loops.add(context, input)
             "follow_ups_list" -> Loops.list(context)

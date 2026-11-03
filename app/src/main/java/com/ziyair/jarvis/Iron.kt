@@ -102,6 +102,8 @@ object Shifts {
         var best: Long? = null
         for (dayAdd in 0..1) for (m in starts(Prefs(context))) {
             val c = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, dayAdd); set(Calendar.HOUR_OF_DAY, m / 60); set(Calendar.MINUTE, m % 60); set(Calendar.SECOND, 0) }
+            // only days he's dashing (he doesn't every day)
+            if (!(try { DashDays.dashing(context, c) } catch (_: Exception) { true })) continue
             if (c.timeInMillis > now.timeInMillis && (best == null || c.timeInMillis < best!!)) best = c.timeInMillis
         }
         return best
@@ -193,6 +195,7 @@ object Protocols {
             Regex("good ?night|sleep|bed").containsMatchIn(name) -> return goodnight(context)
             name.contains("dash") || name.contains("work") -> {
                 DriveMode.on = true; out.add("Driving mode on.")
+                try { DashDays.seen(context, "dash protocol") } catch (_: Exception) {}
                 step("Dasher") { Apps.open(context, "dasher") }
                 step("music") { Apps.media(context, "play") }
                 Weather.now(context)?.let { out.add("Weather: $it" + Weather.roadsNote(context)) }

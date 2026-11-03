@@ -43,6 +43,7 @@ object Team {
         val parts = ArrayList<String>()
         fun add(label: String, f: () -> String?) { try { f()?.trim()?.takeIf { it.isNotBlank() && it != "none" }?.let { parts.add("$label: ${it.take(500)}") } } catch (_: Exception) {} }
         add("About him") { p.notes.take(400) }
+        add("Dashing") { DashDays.line(c) }
         add("Ziyair") { Baby.status(c) }
         add("Earned today") { Earnings.money(Earnings.today(c)) }
         add("Earnings") { Earnings.summary(c) }
