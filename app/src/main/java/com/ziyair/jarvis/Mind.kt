@@ -109,8 +109,9 @@ object Mind {
         if (before.length() == 0) emptyList() else now.filter { (k, v) -> before.has(k) && before.optString(k) != v.hashCode().toString() }.keys.toList()
 
     /**
-     * Runs every ten minutes (and when he picks up the phone): refreshes the lock-screen plan, and if anything in his
-     * life changed since he last thought, thinks again about just that (capped per day so it stays inside his budget).
+     * Runs every ten minutes (and when he picks up the phone): refreshes the lock-screen plan for free. If anything in his
+     * life changed, he rethinks it, but at most every couple of hours (and never more than a few times a day), so it
+     * barely moves his bill. Changes in between add up and are all looked at together next time.
      */
     fun tick(c: Context) {
         try { DayPlan.save(c) } catch (_: Exception) {}
@@ -118,16 +119,18 @@ object Mind {
         val p = Prefs(c)
         val now = System.currentTimeMillis()
         val cur = parts(c)
+        fun remember() = p.sp.edit().putString("mind_parts", JSONObject().apply { cur.forEach { (k, v) -> put(k, v.hashCode().toString()) } }.toString()).apply()
         val before = try { JSONObject(p.sp.getString("mind_parts", "{}")) } catch (_: Exception) { JSONObject() }
+        if (before.length() == 0) { remember(); return }
         val diff = changed(before, cur)
-        val firstTime = before.length() == 0
-        p.sp.edit().putString("mind_parts", JSONObject().apply { cur.forEach { (k, v) -> put(k, v.hashCode().toString()) } }.toString()).apply()
-        if (firstTime || diff.isEmpty()) return   // nothing new: keep the same thoughts
+        if (diff.isEmpty()) return   // nothing new: keep the same thoughts
+        val cfg = Brain(c).config()
         val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val count = if (p.sp.getString("mind_upd_day", "") == day) p.sp.getInt("mind_upd_n", 0) else 0
-        if (h !in 6..22 || count >= Brain(c).config().optInt("mind_updates_max", 18) || Claude.nearBudget(c, 0.8)) return
-        if (now - p.sp.getLong("mind_think_at", 0L) < 9 * 60_000L) return
+        if (h !in 6..22 || count >= cfg.optInt("mind_updates_max", 6) || Claude.nearBudget(c, 0.8)) return
+        if (now - p.sp.getLong("mind_think_at", 0L) < cfg.optInt("mind_update_gap_min", 120) * 60_000L) return
+        remember()
         p.sp.edit().putString("mind_upd_day", day).putInt("mind_upd_n", count + 1).apply()
         Trace.log(c, "mind", "changed: ${diff.joinToString()}")
         think(c, slot(h) ?: "afternoon", diff)
