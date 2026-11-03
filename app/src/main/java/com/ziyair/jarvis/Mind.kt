@@ -101,6 +101,7 @@ object Mind {
         add("earnings") { Earnings.today(c).toString() }
         add("big purchases") { val a = Spending.all(c); (0 until a.length()).count { a.getJSONObject(it).optDouble("a") >= 40 }.toString() }
         add("team notes") { Team.notes(c).length().toString() }
+        add("dash day") { DashDays.on(c).name }
         return m
     }
 
@@ -163,7 +164,7 @@ object Mind {
                 "Think like the best chief of staff alive who also genuinely cares about him, his girlfriend and Ziyair.\n" +
                 "Do the safe things yourself: ask your agents (Meals to plan dinners, Bills to check what's due, Supplies to check prices, Planner for his day...), add to the list, set a reminder, start a follow-up, leave a team note. " +
                 "You cannot send, call, pay, buy, post or delete anything: for those use suggest (with the exact words for a text) and he decides.\n" +
-                "Rules: act only on real data below, never invent. Don't redo anything you or he already did. At most two reminders, and only for things that matter. Never touch his DoorDash offers. " +
+                "Rules: act only on real data below, never invent. Don't redo anything you or he already did. At most two reminders, and only for things that matter. Never touch his DoorDash offers. He doesn't dash every day: only plan around shifts on days the team brief says he's dashing. " +
                 "If nothing is worth doing, do nothing. Use tell_him for what he should hear (now=true only if it matters today).\n" +
                 (if (evening) "It's evening: also look at tomorrow (anything to get ready tonight?), and come up with ONE genuinely useful, specific idea of your own for his life (money toward his goal, Ziyair, Pursuit, his time, the house), grounded in the numbers below, new compared to your past ideas. Save it with share_idea.\n" else "") +
                 (if (changes != null) "This is a quick update: since you last thought, this changed: ${changes.joinToString()}. Look at what changed and how it affects his day; act only if it needs something new. Your earlier thoughts still stand otherwise.\n" else "") +

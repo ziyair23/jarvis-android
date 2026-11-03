@@ -65,8 +65,8 @@ object DayPlan {
             val last = (b.length() - 1 downTo 0).map { b.getJSONObject(it) }.firstOrNull { it.optString("k") == "feed" }
             if (last != null) { val next = last.optLong("at") + (Baby.feedHours(p) * 3600_000L).toLong(); if (next > now - 3 * 3600_000L) out.add(Item(maxOf(next, now), "Feed ${p.babyName.ifBlank { "the baby" }}")) }
         }
-        // his shifts
-        safe {
+        // his shifts, only on days he's dashing
+        if (try { DashDays.dashing(c) } catch (_: Exception) { false }) safe {
             val sh = Brain(c).config().optJSONArray("shifts") ?: JSONArray("[[\"07:00\",\"11:00\"],[\"17:00\",\"21:00\"]]")
             for (i in 0 until sh.length()) { val s = sh.getJSONArray(i); at(today, s.getString(0))?.let { t -> out.add(Item(t, "Dash until ${clock.format(Date(at(today, s.getString(1)) ?: t)).removeSuffix(":00 PM").removeSuffix(":00 AM")}")) } }
         }

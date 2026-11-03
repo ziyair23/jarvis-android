@@ -70,6 +70,8 @@ class MessageListener : NotificationListenerService() {
         if (sbn.packageName == packageName) return
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        // the Dasher app's ongoing "you're dashing" notification: today's a dash day (promos and ads don't count)
+        if (sbn.packageName == OfferJudge.DASHER && n.flags and Notification.FLAG_ONGOING_EVENT != 0) try { DashDays.seen(this, "Dasher app") } catch (_: Exception) {}
         if (n.category == Notification.CATEGORY_CALL || (sbn.packageName in DIALERS && n.fullScreenIntent != null)) { announceCall(n); return }
         // bills and appointments: keep the ones that look like one, for the Bills and Appointments agents
         try { n.extras?.let { e -> LifeWatch.capture(this, appName(sbn.packageName), e.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(),

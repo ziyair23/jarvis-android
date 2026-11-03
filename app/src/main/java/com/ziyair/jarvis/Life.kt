@@ -46,6 +46,7 @@ object Earnings {
     fun log(context: Context, amount: Double, whichDay: String?, replace: Boolean): String {
         val p = Prefs(context)
         val d = resolveDay(whichDay) ?: return "Couldn't tell which day that was."
+        if (amount > 0 && d == day.format(java.util.Date())) try { DashDays.seen(context, "earnings logged") } catch (_: Exception) {}
         val a = all(p)
         var total = amount
         val keep = JSONArray()
