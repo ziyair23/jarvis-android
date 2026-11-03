@@ -657,7 +657,7 @@ class JarvisService : Service() {
             if (quick != null) { brain.lastTools.clear(); Trace.log(this, "reflex", "handled on the phone: ${quick.reply}") }
             // live talking: a real two-way voice conversation takes it from here
             if (quick == null && liveOK(wasQuiet)) { main.post { live?.cancel(); stream = null; startLive(text, followUp, turn) }; return@thread }
-            else Trace.log(this, "ask", if (followUp) "follow-up to Claude" else "to Claude")
+            else if (quick == null) Trace.log(this, "ask", if (followUp) "follow-up to Claude" else "to Claude")
             // he asked Jarvis to DO something: say "On it" straight away so he knows it landed, then do it
             var acked = false
             if (quick == null && brain.config().optBoolean("instant_ack", true)) {
