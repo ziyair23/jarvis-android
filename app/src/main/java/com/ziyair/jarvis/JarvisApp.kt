@@ -61,6 +61,8 @@ object Crash {
         for (r in reasons.sortedBy { it.timestamp }) {
             if (r.timestamp <= seen) continue
             newest = maxOf(newest, r.timestamp)
+            // only Jarvis himself: helper processes (the screen's web view) are closed by Android all the time, harmlessly
+            if (r.processName != c.packageName || r.description.orEmpty().contains("isolated not needed", true)) continue
             val why = when (r.reason) {
                 ApplicationExitInfo.REASON_ANR -> "froze and Android closed it (not responding)"
                 ApplicationExitInfo.REASON_CRASH -> "crashed"
