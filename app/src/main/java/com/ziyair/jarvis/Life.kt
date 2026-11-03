@@ -125,7 +125,7 @@ object Baby {
             it.contains("diaper") || it.contains("poop") || it.contains("pee") -> "diaper"
             it.contains("wake") || it.contains("woke") -> "wake"
             it.contains("sleep") || it.contains("nap") -> "sleep"
-            else -> it
+            else -> it.trim().take(30)   // tummy time, bath, medicine...: kept as he said it
         } }
         val at = System.currentTimeMillis() - (minutesAgo.coerceAtLeast(0.0) * 60_000).toLong()
         val a = all(p)
