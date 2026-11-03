@@ -97,6 +97,8 @@ class JarvisService : Service() {
         }
         // whenever he unlocks the phone, see if there's a new build to slip in (checks GitHub at most hourly)
         registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT))
+        registerReceiver(screenOn, android.content.IntentFilter(Intent.ACTION_SCREEN_ON))
+        main.removeCallbacks(mindTick); main.postDelayed(mindTick, 60_000L)
         registerReceiver(batteryWatch, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         try { getSystemService(android.net.ConnectivityManager::class.java).registerNetworkCallback(
             android.net.NetworkRequest.Builder().addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI).build(), wifiWatch) } catch (_: Exception) {}
@@ -150,6 +152,30 @@ class JarvisService : Service() {
         if (now - warmedAt < 40_000) return
         warmedAt = now
         thread(name = "jarvis-prewarm") { brain.warmLine(); Piper.warm(this) }
+    }
+
+    // every ten minutes: his mind looks again (and rethinks only if something changed), and the lock-screen plan refreshes
+    @Volatile private var lastTick = 0L
+    private val mindTick = object : Runnable { override fun run() {
+        if (destroyed) return
+        tickNow()
+        main.postDelayed(this, 10 * 60_000L)
+    } }
+    private fun tickNow() {
+        lastTick = System.currentTimeMillis()
+        thread(name = "jarvis-mind") { try { Mind.tick(this) } catch (_: Exception) {}; main.post { refreshCard() } }
+    }
+    /** Screen on: the lock screen shows the plan as it is right now. */
+    private val screenOn = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            if (System.currentTimeMillis() - lastTick > 10 * 60_000L) tickNow()
+            else thread { try { DayPlan.save(this@JarvisService) } catch (_: Exception) {}; main.post { refreshCard() } }
+        }
+    }
+    /** The ongoing notification doubles as his day on the lock screen. */
+    private fun refreshCard() {
+        if (destroyed || !Brain(this).config().optBoolean("lock_card", true)) return
+        try { getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotif()) } catch (_: Exception) {}
     }
 
     private val unlocked = object : android.content.BroadcastReceiver() {
@@ -214,23 +240,36 @@ class JarvisService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null)
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Jarvis listening", NotificationManager.IMPORTANCE_LOW))
-        val open = PendingIntent.getActivity(this, 0, Intent(this, DashActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        val stop = PendingIntent.getService(this, 1, Intent(this, JarvisService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
-        val talk = PendingIntent.getService(this, 2, Intent(this, JarvisService::class.java).setAction(ACTION_LISTEN), PendingIntent.FLAG_IMMUTABLE)
-        val n = Notification.Builder(this, CHANNEL)
-            .setSmallIcon(R.drawable.ic_jarvis)
-            .setContentTitle("Jarvis is listening")
-            .setContentText("Say \"Hey Jarvis\" any time, sir.")
-            .setContentIntent(open)
-            .setOngoing(true)
-            .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Talk", talk).build())
-            .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Stop", stop).build())
-            .build()
+        val n = buildNotif()
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         else startForeground(NOTIF_ID, n)
     }
 
     @Volatile private var destroyed = false
+
+    private fun buildNotif(): Notification {
+        val open = PendingIntent.getActivity(this, 0, Intent(this, DashActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val stop = PendingIntent.getService(this, 1, Intent(this, JarvisService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
+        val talk = PendingIntent.getService(this, 2, Intent(this, JarvisService::class.java).setAction(ACTION_LISTEN), PendingIntent.FLAG_IMMUTABLE)
+        val card = try { if (brain.config().optBoolean("lock_card", true)) DayPlan.card(this) else null } catch (_: Exception) { null }
+        val items = card?.optJSONArray("items")
+        val lines = if (items == null) emptyList() else (0 until items.length()).map { items.getJSONObject(it).let { o -> o.optString("t") + "  " + o.optString("x") } }
+        val head = card?.optString("headline").orEmpty()
+        val b = Notification.Builder(this, CHANNEL)
+            .setSmallIcon(R.drawable.ic_jarvis)
+            .setContentIntent(open)
+            .setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Talk", talk).build())
+            .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Stop", stop).build())
+        if (head.isBlank() && lines.isEmpty()) b.setContentTitle("Jarvis is listening").setContentText("Say \"Hey Jarvis\" any time, sir.")
+        else {
+            b.setContentTitle(head.ifBlank { "Today" }).setContentText(lines.firstOrNull() ?: "Nothing else on today.")
+                .setSubText("On his mind")
+                .setStyle(Notification.BigTextStyle().bigText(lines.joinToString("\n").ifBlank { "Nothing else on today." }))
+        }
+        return b.build()
+    }
 
     private fun startWakeWord(whileSpeaking: Boolean = false) {
         main.post {
@@ -1039,6 +1078,7 @@ class JarvisService : Service() {
         destroyed = true
         main.removeCallbacksAndMessages(null)
         try { unregisterReceiver(unlocked) } catch (_: Exception) {}
+        try { unregisterReceiver(screenOn) } catch (_: Exception) {}
         try { unregisterReceiver(batteryWatch) } catch (_: Exception) {}
         try { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(wifiWatch) } catch (_: Exception) {}
         try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(carWatch) } catch (_: Exception) {}

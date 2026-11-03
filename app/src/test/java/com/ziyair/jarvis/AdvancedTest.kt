@@ -90,4 +90,25 @@ class AdvancedTest {
         val agents = File("src/main/java/com/ziyair/jarvis/Agents.kt").readText()
         assertTrue(agents.contains(".put(\"system\", system).put(\"tools\", tools).put(\"messages\", msgs)"))
     }
+
+    @Test fun lockScreenPlanShowsWhatsLeftOfToday() {
+        val now = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 14); set(java.util.Calendar.MINUTE, 0) }.timeInMillis
+        val items = listOf(DayPlan.Item(now + 3 * H, "Dash until 9"), DayPlan.Item(now - 3 * H, "Dash until 11"), DayPlan.Item(now + 30 * 60_000L, "Feed Ziyair"),
+            DayPlan.Item(now + 30 * 60_000L, "feed ziyair"), DayPlan.Item(now + 3 * 24 * H, "Dentist"), DayPlan.Item(now + 4 * H, "Dinner: tacos"))
+        assertEquals(listOf("Feed Ziyair", "Dash until 9", "Dinner: tacos"), DayPlan.pick(items, now).map { it.text })
+        assertEquals("Cash App due Friday.", DayPlan.headline(JSONObject().put("thought", "Cash App due Friday. Also planned meals.")))
+        assertEquals("Short one", DayPlan.headline(JSONObject().put("headline", "Short one").put("thought", "x")))
+        assertEquals("Your day, at a glance.", DayPlan.headline(null))
+    }
+
+    @Test fun mindSplitsHeadlineAndOnlyRethinksOnRealChanges() {
+        val (h, t) = Mind.split("Headline: Cash App due Friday; dinner planned\nNoticed the bill and planned dinners.")
+        assertEquals("Cash App due Friday; dinner planned", h); assertEquals("Noticed the bill and planned dinners.", t)
+        assertEquals("" to "Just a thought.", Mind.split("Just a thought."))
+        assertEquals("Bold", Mind.split("**Headline:** Bold\nRest").first)
+        val before = JSONObject().put("bills", "a".hashCode().toString()).put("shopping list", "milk".hashCode().toString())
+        assertEquals(listOf<String>(), Mind.changed(before, mapOf("bills" to "a", "shopping list" to "milk")))
+        assertEquals(listOf("shopping list"), Mind.changed(before, mapOf("bills" to "a", "shopping list" to "milk, eggs")))
+        assertEquals("first look never triggers a think", listOf<String>(), Mind.changed(JSONObject(), mapOf("bills" to "a")))
+    }
 }
