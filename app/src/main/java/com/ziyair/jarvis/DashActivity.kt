@@ -75,6 +75,7 @@ class DashActivity : Activity() {
                 .put("appts", Appts.json(ctx))
                 .put("packages", Packages.all(ctx))
                 .put("mealPlan", Meals.plan(ctx))
+                .put("scan", org.json.JSONObject().put("running", Scan.running).put("step", Scan.step).put("report", Scan.report(ctx)))
                 .put("dashToday", try { DashDays.on(ctx).name } catch (_: Exception) { "NO" })
                 .put("dayPlan", try { DayPlan.card(ctx).takeIf { System.currentTimeMillis() - it.optLong("at") < 60_000L } ?: DayPlan.save(ctx) } catch (_: Exception) { org.json.JSONObject() })
                 .put("mind", try { Mind.json(ctx) } catch (e: Exception) { Trace.log(ctx, "dash", "mind failed: ${e.message}"); org.json.JSONObject() })
@@ -109,6 +110,7 @@ class DashActivity : Activity() {
         @JavascriptInterface fun orb(): String = Orb.now().let { "${it.first},${it.second}" }
         @JavascriptInterface fun hush() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_HUSH)) }
         @JavascriptInterface fun agents(): String = try { Agents.json(ctx).toString() } catch (e: Exception) { Trace.log(ctx, "dash", "agents list failed: ${e.message}"); "[]" }
+        @JavascriptInterface fun scanStart(): String = Scan.start(ctx).also { LogBus.changed() }
         @JavascriptInterface fun dashDay(on: Boolean) { DashDays.set(ctx, on, false); DayPlan.save(ctx); LogBus.changed() }
         @JavascriptInterface fun mindAct(id: String, doIt: Boolean) { Mind.act(ctx, id.toLongOrNull() ?: 0L, doIt) }
         @JavascriptInterface fun mindToggle(on: Boolean) { Mind.setEnabled(ctx, on) }
