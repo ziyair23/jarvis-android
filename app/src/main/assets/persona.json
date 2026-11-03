@@ -112,6 +112,6 @@
   },
   "voice_default": "jarvis",
   "voice_fluent": true,
-  "voice_gather_ms": 450,
+  "voice_gather_ms": 120,
   "coach": true
 }
