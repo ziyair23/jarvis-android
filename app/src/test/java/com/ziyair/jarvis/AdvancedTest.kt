@@ -141,4 +141,14 @@ class AdvancedTest {
         assertEquals("Sir, 2 new messages: from Mom.", Inbox.bundle(listOf("Mom", "Mom")))
         assertTrue("scan is a quick skill", "scan_phone" in Agents.CORE)
     }
+
+    @Test fun sentencesJoinWithoutDeadAir() {
+        val rate = 24000
+        // 0.4 s of silence, 1 s of voice, 0.6 s of silence: what the engine hands back for one sentence
+        val s = FloatArray(rate * 2) { i -> if (i in (rate * 4 / 10) until (rate * 14 / 10)) 0.3f else 0f }
+        val t = SpeechStream.trimTail(SpeechStream.trimHead(s, rate), rate)
+        val seconds = t.size.toFloat() / rate
+        assertTrue("kept the voice plus a short natural edge: $seconds s", seconds in 1.05f..1.15f)
+        assertEquals("fades in", 0f, t[0], 0.0001f); assertEquals("fades out", 0f, t[t.size - 1], 0.05f)
+    }
 }

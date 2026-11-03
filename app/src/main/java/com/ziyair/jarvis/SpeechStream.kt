@@ -31,7 +31,7 @@ class SpeechStream(
     @Volatile private var onDone: (() -> Unit)? = null
     @Volatile private var track: AudioTrack? = null
     private val fluent = try { Brain(context).config().optBoolean("voice_fluent", true) } catch (_: Exception) { true }
-    private val gatherMs = try { Brain(context).config().optLong("voice_gather_ms", 450L) } catch (_: Exception) { 450L }
+    private val gatherMs = try { Brain(context).config().optLong("voice_gather_ms", 120L) } catch (_: Exception) { 120L }
 
     fun add(sentence: String) {
         if (cancelled) return
@@ -92,11 +92,11 @@ class SpeechStream(
                 try {
                     // ONE continuous audio stream for the whole reply: no restart (and no click) anywhere
                     if (t == null) { val tr = open(a.rate); t = tr; track = tr; Orb.voiceStart(a.rate) { tr.playbackHeadPosition.toLong() }; tr.play() }
-                    val pcm = when {
-                        first -> trimHead(a.pcm, a.rate)                              // start talking without dead air
-                        !fluent && a.newPiece -> { written += pause(t, a.rate); trimHead(a.pcm, a.rate) }
-                        else -> a.pcm                                                  // keep the voice's own natural spacing
-                    }
+                    // every sentence comes out of the voice engine wrapped in its own silence (a beat before, a longer one
+                    // after), and back to back that was the pause he heard between sentences. Trim both ends and join
+                    // them with one short, natural breath instead.
+                    if (!first) written += pause(t, a.rate)
+                    val pcm = trimTail(trimHead(a.pcm, a.rate), a.rate)
                     Orb.voiceAdd(pcm)
                     first = false
                     var off = 0
@@ -131,17 +131,6 @@ class SpeechStream(
             .setBufferSizeInBytes(maxOf(min, rate * 4 / 2)).build()   // half a second of buffer
     }
 
-    /** Cut the dead air before the first sound, with a soft fade-in so nothing clicks. */
-    private fun trimHead(s: FloatArray, rate: Int): FloatArray {
-        var a = 0; while (a < s.size && kotlin.math.abs(s[a]) < 0.012f) a++
-        a = maxOf(0, a - rate * 3 / 100)              // keep 30 ms before the first sound (soft "s" and "f" starts)
-        if (a >= s.size - 1) return s
-        val out = s.copyOfRange(a, s.size)
-        val fade = minOf(out.size / 4, rate / 200)
-        for (i in 0 until fade) out[i] *= i.toFloat() / fade
-        return out
-    }
-
     private fun pause(t: AudioTrack, rate: Int): Int {
         val n = rate * gapMs / 1000
         val z = FloatArray(n)
@@ -151,6 +140,28 @@ class SpeechStream(
     }
 
     companion object {
+        /** Cut the dead air after the last sound (keeping a natural tail), with a soft fade-out so nothing clicks. Pure. */
+        fun trimTail(s: FloatArray, rate: Int): FloatArray {
+            var b = s.size - 1; while (b > 0 && kotlin.math.abs(s[b]) < 0.012f) b--
+            b = minOf(s.size - 1, b + rate * 6 / 100)       // keep 60 ms after the last sound (word endings fade, not cut)
+            if (b <= 0 || b >= s.size - 1) return s
+            val out = s.copyOfRange(0, b + 1)
+            val fade = minOf(out.size / 4, rate / 60)
+            for (i in 0 until fade) out[out.size - 1 - i] *= i.toFloat() / fade
+            return out
+        }
+
+        /** Cut the dead air before the first sound, with a soft fade-in so nothing clicks. */
+        fun trimHead(s: FloatArray, rate: Int): FloatArray {
+            var a = 0; while (a < s.size && kotlin.math.abs(s[a]) < 0.012f) a++
+            a = maxOf(0, a - rate * 3 / 100)              // keep 30 ms before the first sound (soft "s" and "f" starts)
+            if (a >= s.size - 1) return s
+            val out = s.copyOfRange(a, s.size)
+            val fade = minOf(out.size / 4, rate / 200)
+            for (i in 0 until fade) out[i] *= i.toFloat() / fade
+            return out
+        }
+
         private val END = String(charArrayOf('\u0000'))
         private val DONE = Chunk(FloatArray(0), 0, false)
     }
