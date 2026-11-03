@@ -92,7 +92,8 @@ object DayPlan {
         val last = if (th.length() > 0) th.getJSONObject(th.length() - 1) else null
         val now = System.currentTimeMillis()
         val list = pick(items(c), now)
-        val card = JSONObject().put("at", now).put("headline", if (Mind.thinking) "Thinking things over…" else headline(last))
+        val shop = try { Lists.all(Prefs(c)).optJSONArray("list")?.let { a -> (0 until a.length()).map { a.getJSONObject(it) }.filter { !it.optBoolean("done") }.map { it.optString("t") } } } catch (_: Exception) { null }.orEmpty()
+        val card = JSONObject().put("at", now).put("list", JSONArray(shop.takeLast(12))).put("headline", if (Mind.thinking) "Thinking things over…" else headline(last))
             .put("thoughtAt", last?.optLong("at") ?: 0L)
             .put("items", JSONArray().apply { list.forEach { put(JSONObject().put("t", clock.format(Date(it.at))).put("x", it.text)) } })
         Prefs(c).sp.edit().putString("lock_card", card.toString()).apply()

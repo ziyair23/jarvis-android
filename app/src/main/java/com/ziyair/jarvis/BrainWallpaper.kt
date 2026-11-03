@@ -105,6 +105,7 @@ class BrainWallpaper : WallpaperService() {
         private var cardOn = true
         private var head = ""; private var updated = ""
         private var times = arrayOf<String>(); private var whats = arrayOf<String>()
+        private var shop = ""; private var shopLines = arrayOf<String>()
         private var headLines = arrayOf<String>()
         private var headW = 0f
         private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 10.5f * dens; letterSpacing = 0.18f; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL) }
@@ -123,8 +124,10 @@ class BrainWallpaper : WallpaperService() {
                 head = if (Mind.thinking) "Thinking things over…" else c.optString("headline")
                 updated = c.optLong("thoughtAt").takeIf { it > 0 }?.let { java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(it)) }.orEmpty()
                 val a = c.optJSONArray("items") ?: org.json.JSONArray()
-                times = Array(minOf(a.length(), 5)) { a.getJSONObject(it).optString("t") }
-                whats = Array(minOf(a.length(), 5)) { a.getJSONObject(it).optString("x") }
+                times = Array(minOf(a.length(), 4)) { a.getJSONObject(it).optString("t") }
+                whats = Array(minOf(a.length(), 4)) { a.getJSONObject(it).optString("x") }
+                val l = c.optJSONArray("list") ?: org.json.JSONArray()
+                shop = (0 until l.length()).joinToString(", ") { l.getString(it) }
                 headW = 0f
             } catch (_: Exception) {}
         }
@@ -143,16 +146,16 @@ class BrainWallpaper : WallpaperService() {
         }
 
         private fun drawCard(cv: Canvas, W: Float, H: Float) {
-            if (head.isBlank() && whats.isEmpty()) return
+            if (head.isBlank() && whats.isEmpty() && shop.isBlank()) return
             val left = 28f * dens; val w = W - 2 * left
-            val top = H * 0.655f
+            val top = H * (if (shop.isBlank()) 0.655f else 0.615f)
             if (shadeH != H) { shadeH = H; shade.shader = LinearGradient(0f, top - 60 * dens, 0f, H, intArrayOf(Color.argb(0, 11, 11, 12), Color.argb(215, 11, 11, 12), Color.argb(235, 11, 11, 12)), floatArrayOf(0f, 0.35f, 1f), Shader.TileMode.CLAMP) }
             cv.drawRect(0f, top - 60 * dens, W, H, shade)
             var y = top
             label.color = col(201, 102, 92, 0.95f); cv.drawText("ON HIS MIND", left, y, label)
             if (updated.isNotBlank()) { label.color = col(162, 157, 149, 0.7f); val tw = label.measureText(updated.uppercase()); cv.drawText(updated.uppercase(), left + w - tw, y, label) }
             y += 27f * dens
-            if (headW != w) { headW = w; headLines = wrap(head, headP, w, 2) }
+            if (headW != w) { headW = w; headLines = wrap(head, headP, w, 2); shopLines = wrap(shop, itemP, w, 2) }
             headP.color = col(239, 235, 228, 0.96f)
             for (l in headLines) { cv.drawText(l, left, y, headP); y += 25f * dens }
             y += 8f * dens
@@ -163,6 +166,14 @@ class BrainWallpaper : WallpaperService() {
                 val t = whats[i]; val fit = itemP.breakText(t, true, w - col1, null)
                 cv.drawText(if (fit < t.length) t.substring(0, maxOf(0, fit - 1)).trimEnd() + "…" else t, left + col1, y, itemP)
                 y += 22f * dens
+            }
+            // the shopping list
+            if (shopLines.isNotEmpty()) {
+                y += 10f * dens
+                label.color = col(201, 102, 92, 0.95f); cv.drawText("LIST", left, y, label)
+                y += 22f * dens
+                itemP.color = col(239, 235, 228, 0.84f)
+                for (l in shopLines) { cv.drawText(l, left, y, itemP); y += 21f * dens }
             }
         }
 
@@ -203,8 +214,8 @@ class BrainWallpaper : WallpaperService() {
         private fun render(cv: Canvas, dt: Float) {
             val W = cv.width.toFloat(); val H = cv.height.toFloat()
             if (SystemClock.elapsedRealtime() - cardAt > 4000) readCard()
-            val withCard = cardOn && (head.isNotBlank() || whats.isNotEmpty())
-            val cx = W / 2; val cy = H * (if (withCard) 0.43f else 0.56f)
+            val withCard = cardOn && (head.isNotBlank() || whats.isNotEmpty() || shop.isNotBlank())
+            val cx = W / 2; val cy = H * (if (!withCard) 0.56f else if (shop.isBlank()) 0.43f else 0.4f)
             val S = min(W, H * 0.6f) * 0.36f * (1 + 0.012f * sin(t * 0.9f))   // the whole brain breathes, very slightly
 
             // what Jarvis is doing right now

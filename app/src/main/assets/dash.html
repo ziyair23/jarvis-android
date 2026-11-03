@@ -264,10 +264,10 @@ input::placeholder{color:#5f5b56}
 
 <div class="sheet" id="sh-mind"><div class="head"><div class="grab"></div><div class="title"><h2>His mind</h2><button class="icon" aria-label="Close" onclick="closeSheet()">×</button></div></div><div class="body">
   <div class="card">
-    <p class="dim" id="mind-state" style="margin:0 0 12px">He looks over everything every ten minutes, rethinks when something changes, does the safe things himself, and asks you about the rest.</p>
+    <p class="dim" id="mind-state" style="margin:0 0 12px">He thinks things over every couple of hours when something's changed (and morning, afternoon and evening), does the safe things himself, and asks you about the rest.</p>
     <div class="grid2" style="grid-template-columns:1fr 1fr"><button class="primary" id="mind-now" onclick="mindNow()">Think now</button><button id="mind-sw" onclick="J.mindToggle(!(D.mind && D.mind.on))">Turn off</button></div>
   </div>
-  <div class="card"><div class="label">Today, on your lock screen</div><div id="mind-head" style="font:400 19px/1.35 var(--serif);margin:0 0 6px"></div><ul class="list" id="mind-plan"></ul></div>
+  <div class="card"><div class="label">Today, on your lock screen</div><div id="mind-head" style="font:400 19px/1.35 var(--serif);margin:0 0 6px"></div><ul class="list" id="mind-plan"></ul><div class="label" style="margin:14px 0 6px">List</div><div class="dim" id="mind-list" style="line-height:1.5"></div></div>
   <div class="card" id="mind-sug-card"><div class="label">Waiting for your yes</div><ul class="list" id="mind-sug"></ul></div>
   <div class="card"><div class="label">Thoughts</div><ul class="list" id="mind-thoughts"></ul></div>
   <div class="card"><div class="label">His ideas</div><ul class="list" id="mind-ideas"></ul></div>
@@ -457,7 +457,7 @@ function load() {
     $('t-mind').textContent = M.job ? 'Working on a job: ' + M.job : M.thinking ? 'Thinking things over…' : lastT ? lastT.thought + ' · ' + ago(lastT.at) : M.on === false ? 'Thinking on his own is off.' : 'He\'ll think things over on his own this morning, afternoon and evening.';
     const sugHtml = (x, big) => `<div class="sug"><div style="font-size:14px;line-height:1.45">${esc(x.text)}${x.msg ? `<div class="faint" style="margin-top:4px">“${esc(x.msg)}”${x.who ? ' → ' + esc(x.who) : ''}</div>` : ''}</div><div class="acts"><button class="primary" onclick="mindAct('${x.id}',true)">${x.msg ? 'Open text' : 'Do it'}</button><button onclick="mindAct('${x.id}',false)">Not now</button></div></div>`;
     $('t-mind-sug').innerHTML = S.length ? sugHtml(S[S.length - 1]) : '';
-    $('mind-state').textContent = M.on === false ? 'Off. He only acts when you ask.' : busy ? (M.job ? 'Working on: ' + M.job : 'Thinking right now…') : 'He looks over everything every ten minutes, rethinks when something changes, does the safe things himself, and asks you about the rest.';
+    $('mind-state').textContent = M.on === false ? 'Off. He only acts when you ask.' : busy ? (M.job ? 'Working on: ' + M.job : 'Thinking right now…') : 'He thinks things over every couple of hours when something\'s changed (and morning, afternoon and evening), does the safe things himself, and asks you about the rest.';
     $('mind-sw').textContent = M.on === false ? 'Turn on' : 'Turn off';
     $('mind-now').disabled = busy || M.on === false;
     $('mind-sug-card').style.display = S.length ? '' : 'none';
@@ -467,6 +467,7 @@ function load() {
       || '<li class="empty">Nothing yet. Tap Think now to watch him work.</li>';
     const DP = D.dayPlan || {}; $('mind-head').textContent = DP.headline || '';
     $('mind-plan').innerHTML = (DP.items || []).map(x => `<li><span class="t" style="min-width:70px;color:var(--ink-faint)">${esc(x.t)}</span><span>${esc(x.x)}</span></li>`).join('') || '<li class="empty">Nothing else on today.</li>';
+    $('mind-list').textContent = (DP.list || []).join(', ') || 'Nothing on the list.';
     $('mind-ideas').innerHTML = I.slice().reverse().map(x => `<li class="col"><div style="line-height:1.45">${esc(x.t)}</div><div class="faint" style="margin-top:4px">${ago(x.at)}</div></li>`).join('') || '<li class="empty">His first idea comes tonight.</li>';
     $('mind-jobs').innerHTML = JB.slice().reverse().map(x => `<li class="col"><div>${esc(x.goal)}</div><div class="faint" style="margin-top:4px;line-height:1.45">${esc(x.summary)}</div><div class="faint" style="margin-top:4px">${(x.steps || []).length} steps · ${Math.round((x.ms || 0) / 1000)}s · ${ago(x.at)}</div></li>`).join('') || '<li class="empty">Say "Jarvis, handle my week" and watch.</li>';
     $('mind-loops').innerHTML = L.map(x => `<li><div style="flex:1"><div>${esc(x.what)}</div><div class="faint">by ${new Date(x.due).toLocaleString('en-US', {weekday: 'short', hour: 'numeric', minute: '2-digit'})}</div></div><button class="x" aria-label="Close" onclick="J.loopDone('${x.id}')">×</button></li>`).join('') || '<li class="empty">Nothing to chase. "Let me know if Jesse doesn\'t answer" starts one.</li>'; }
