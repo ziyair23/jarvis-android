@@ -789,6 +789,7 @@ class JarvisService : Service() {
 
     private fun liveOK(quietMode: Boolean): Boolean =
         !quietMode && Live.ready(this) && Cast.mode(prefs) != "everything" && !inCall() &&
+            prefs.sp.getInt("live_dead_key", 0) != prefs.geminiKey.hashCode() &&
             System.currentTimeMillis() - liveFailedAt > 10 * 60_000L && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
     /** Hands the conversation to live talking. The one ear lets go of the mic until it's over. */
@@ -820,7 +821,11 @@ class JarvisService : Service() {
                     startLive(text, followUp, turn, models[next])
                     return@onEnd
                 }
-                if (quota) Problems.log(this, "live talking: Google says his Gemini key has no quota left for live voice. It needs billing turned on in Google AI Studio (pay as you go, about 2 cents a minute).")
+                if (quota) {
+                    Problems.log(this, "live talking: Google says his Gemini key has no quota for live voice (it needs billing turned on in Google AI Studio). Using the normal voice; live talking stays off for this key.")
+                    // don't keep trying (each try made him wait a couple of seconds): a new key turns it back on
+                    prefs.sp.edit().putInt("live_dead_key", prefs.geminiKey.hashCode()).apply()
+                }
                 // live talking isn't working right now: answer this one the usual way, and skip live for a while
                 liveFailedAt = System.currentTimeMillis() + (if (quota) 3 * 3600_000L else 0L)
                 Trace.log(this, "live", "falling back to the normal voice: $reason")
