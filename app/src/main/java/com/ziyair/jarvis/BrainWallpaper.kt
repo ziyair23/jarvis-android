@@ -106,6 +106,9 @@ class BrainWallpaper : WallpaperService() {
         private var head = ""; private var updated = ""
         private var times = arrayOf<String>(); private var whats = arrayOf<String>()
         private var shop = ""; private var shopLines = arrayOf<String>()
+        // the mood of his day: 0 calm (deep oxblood, slow) to 1 pressing (warm ember, quicker)
+        private var mood = 0f; private var moodShown = 0f; private var moodWord = ""
+        private var aR = 201; private var aG = 102; private var aB = 92
         private var headLines = arrayOf<String>()
         private var headW = 0f
         private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 10.5f * dens; letterSpacing = 0.18f; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL) }
@@ -128,6 +131,8 @@ class BrainWallpaper : WallpaperService() {
                 whats = Array(minOf(a.length(), 4)) { a.getJSONObject(it).optString("x") }
                 val l = c.optJSONArray("list") ?: org.json.JSONArray()
                 shop = (0 until l.length()).joinToString(", ") { l.getString(it) }
+                mood = c.optDouble("mood", 0.0).toFloat().coerceIn(0f, 1f)
+                moodWord = if (c.has("mood")) Mood.word(mood) else ""
                 headW = 0f
             } catch (_: Exception) {}
         }
@@ -152,7 +157,7 @@ class BrainWallpaper : WallpaperService() {
             if (shadeH != H) { shadeH = H; shade.shader = LinearGradient(0f, top - 60 * dens, 0f, H, intArrayOf(Color.argb(0, 11, 11, 12), Color.argb(215, 11, 11, 12), Color.argb(235, 11, 11, 12)), floatArrayOf(0f, 0.35f, 1f), Shader.TileMode.CLAMP) }
             cv.drawRect(0f, top - 60 * dens, W, H, shade)
             var y = top
-            label.color = col(201, 102, 92, 0.95f); cv.drawText("ON HIS MIND", left, y, label)
+            label.color = col(aR, aG, aB, 0.95f); cv.drawText(if (moodWord.isNotBlank()) "ON HIS MIND · ${moodWord.uppercase()}" else "ON HIS MIND", left, y, label)
             if (updated.isNotBlank()) { label.color = col(162, 157, 149, 0.7f); val tw = label.measureText(updated.uppercase()); cv.drawText(updated.uppercase(), left + w - tw, y, label) }
             y += 27f * dens
             if (headW != w) { headW = w; headLines = wrap(head, headP, w, 2); shopLines = wrap(shop, itemP, w, 2) }
@@ -170,7 +175,7 @@ class BrainWallpaper : WallpaperService() {
             // the shopping list
             if (shopLines.isNotEmpty()) {
                 y += 10f * dens
-                label.color = col(201, 102, 92, 0.95f); cv.drawText("LIST", left, y, label)
+                label.color = col(aR, aG, aB, 0.95f); cv.drawText("LIST", left, y, label)
                 y += 22f * dens
                 itemP.color = col(239, 235, 228, 0.84f)
                 for (l in shopLines) { cv.drawText(l, left, y, itemP); y += 21f * dens }
@@ -216,7 +221,11 @@ class BrainWallpaper : WallpaperService() {
             if (SystemClock.elapsedRealtime() - cardAt > 4000) readCard()
             val withCard = cardOn && (head.isNotBlank() || whats.isNotEmpty() || shop.isNotBlank())
             val cx = W / 2; val cy = H * (if (!withCard) 0.56f else if (shop.isBlank()) 0.43f else 0.4f)
-            val S = min(W, H * 0.6f) * 0.36f * (1 + 0.012f * sin(t * 0.9f))   // the whole brain breathes, very slightly
+            // ease toward the day's mood (over a few seconds) and tint the whole brain with it
+            moodShown += (mood - moodShown) * (1f - Math.pow(0.6, dt.toDouble()).toFloat())
+            aR = (176 + 52 * moodShown).toInt(); aG = (82 + 36 * moodShown).toInt(); aB = (74 + 0 * moodShown).toInt()
+            val pace = 1f + 0.7f * moodShown
+            val S = min(W, H * 0.6f) * 0.36f * (1 + (0.012f + 0.01f * moodShown) * sin(t * 0.9f * pace))   // the whole brain breathes, very slightly
 
             // what Jarvis is doing right now
             val st = if (Orb.state == Orb.HIDDEN && Mind.thinking) Orb.THINK else Orb.state
@@ -242,7 +251,7 @@ class BrainWallpaper : WallpaperService() {
                 wasBusy[i] = agentBusy[i]
             }
 
-            yaw += dt * (0.14f + 0.3f * shown)
+            yaw += dt * (0.14f + 0.3f * shown) * pace
 
             // background: near-black with an oxblood bloom behind the brain
             cv.drawColor(Color.rgb(11, 11, 12))
@@ -266,10 +275,10 @@ class BrainWallpaper : WallpaperService() {
                 val buf = lineBuf[bucket]; var o = lineN[bucket]
                 buf[o++] = px[a]; buf[o++] = py[a]; buf[o++] = px[b]; buf[o++] = py[b]; lineN[bucket] = o
             }
-            for (b in 0 until B) { line.color = col(201, 102, 92, 0.06f + 0.16f * (b + 0.5f) / B + 0.12f * shown); cv.drawLines(lineBuf[b], 0, lineN[b], line) }
+            for (b in 0 until B) { line.color = col(aR, aG, aB, 0.06f + 0.16f * (b + 0.5f) / B + 0.12f * shown); cv.drawLines(lineBuf[b], 0, lineN[b], line) }
 
             // sparks: always some firing; many more while he listens, talks or thinks
-            sparkDebt += dt * (16f + 70f * shown + (if (st == Orb.THINK) 50f else 0f))
+            sparkDebt += dt * (16f * pace + 70f * shown + (if (st == Orb.THINK) 50f else 0f))
             while (sparkDebt >= 1f) { spark(rnd.nextInt(ne)); sparkDebt -= 1f }
             for (i in ids.indices) if (agentBusy[i]) m.near[ids[i]]?.takeIf { it.isNotEmpty() }?.let { nr -> if (rnd.nextFloat() < dt * 40f) spark(nr[rnd.nextInt(nr.size)]) }
 
@@ -315,7 +324,7 @@ class BrainWallpaper : WallpaperService() {
                 dot.color = when (kind) {
                     0 -> col(239, 235, 228, 0.1f + 0.42f * d + 0.15f * shown)
                     1 -> col(226, 180, 170, 0.14f + 0.4f * d)
-                    else -> col(201, 102, 92, 0.06f + 0.12f * d)
+                    else -> col(aR, aG, aB, 0.06f + 0.12f * d)
                 }
                 cv.drawPoints(dotBuf[kind * B + b], 0, dotN[kind * B + b], dot)
             }
@@ -328,7 +337,7 @@ class BrainWallpaper : WallpaperService() {
                 val x0 = cos(dA[i]) * dR[i]; val z0 = sin(dA[i]) * dR[i]; val y0 = dY[i] + 0.04f * sin(t * 0.7f + i)
                 val x = x0 * cyw + z0 * syw; var z = -x0 * syw + z0 * cyw; val y = y0 * cp - z * sp; z = y0 * sp + z * cp
                 val f = 3.2f / (3.2f - z)
-                fill.color = col(201, 102, 92, 0.08f + 0.22f * (z + 1) / 2)
+                fill.color = col(aR, aG, aB, 0.08f + 0.22f * (z + 1) / 2)
                 cv.drawCircle(cx + x * S * f, cy - y * S * f, 1.4f * dens * f, fill)
             }
 
@@ -343,7 +352,7 @@ class BrainWallpaper : WallpaperService() {
                 order[cnt++] = i
                 path.reset(); path.moveTo(nx[i], ny[i]); path.quadTo((nx[i] + cx) / 2, (ny[i] + cy) / 2 - 24 * dens, cx, cy)
                 ring.strokeWidth = (if (agentBusy[i]) 2f else 1f) * dens
-                ring.color = if (agentBusy[i]) col(236, 170, 160, 0.9f) else col(201, 102, 92, 0.2f + 0.14f * (z + 1) / 2)
+                ring.color = if (agentBusy[i]) col(236, 170, 160, 0.9f) else col(aR, aG, aB, 0.2f + 0.14f * (z + 1) / 2)
                 cv.drawPath(path, ring)
             }
             // soft pulses now and then, so there's always a little traffic between his agents and him
@@ -364,7 +373,7 @@ class BrainWallpaper : WallpaperService() {
                 val i = order[o]; val busy = agentBusy[i]
                 val r = (if (busy) 7f else 4.5f) * dens * nf[i]
                 circle(cv, unitGlow, nx[i], ny[i], r * 3.4f, if (busy) 0.65f else 0.22f + 0.06f * sin(t * 1.7f + i))
-                fill.color = if (busy) Color.rgb(240, 195, 186) else col(201, 102, 92, 0.55f + 0.35f * (nz[i] + 1) / 2)
+                fill.color = if (busy) Color.rgb(240, 195, 186) else col(aR, aG, aB, 0.55f + 0.35f * (nz[i] + 1) / 2)
                 cv.drawCircle(nx[i], ny[i], r, fill)
                 // only a working agent shows its name, so the lock screen stays clean
                 if (busy) { text.color = col(239, 235, 228, 0.9f); cv.drawText(names[i], nx[i], ny[i] - r - 9 * dens, text) }
@@ -374,7 +383,7 @@ class BrainWallpaper : WallpaperService() {
             val R = 22f * dens * (1 + 0.12f * shown)
             circle(cv, unitHalo, cx, cy, R * 2.6f, 0.25f + 0.55f * shown)
             fill.color = Color.rgb(21, 21, 23); cv.drawCircle(cx, cy, R * 0.96f, fill)
-            ring.strokeWidth = 2f * dens; ring.color = col(201, 102, 92, 0.55f + 0.45f * shown); cv.drawCircle(cx, cy, R, ring)
+            ring.strokeWidth = 2f * dens; ring.color = col(aR, aG, aB, 0.55f + 0.45f * shown); cv.drawCircle(cx, cy, R, ring)
             if (st == Orb.THINK) { ring.strokeWidth = 3f * dens; ring.color = col(236, 170, 160, 0.95f)
                 cv.drawArc(cx - R, cy - R, cx + R, cy + R, (t * 160f) % 360f, 70f, false, ring) }
             circle(cv, unitCore, cx, cy, R * 0.9f, 0.08f + 0.45f * shown)
