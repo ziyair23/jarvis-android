@@ -17,7 +17,7 @@ class FollowUpTest {
     @Test fun peopleTalkingNearbyIsIgnored() {
         assertNotNull("long after he spoke", FollowUp.reject("U Rlying, okay, Ben", 40 * 60_000L, 0))
         assertNotNull("long chatter", FollowUp.reject("gay gay, That's just what Yeah we can try and prevent it. I want to be a grandma. He get another dog. We're having another. Yeah. You already made that very clear. Yeah. If I want do or not, you basically just told me.", 5_000, 0))
-        assertNotNull("endless back and forth", FollowUp.reject("dude I would like", 3_000, 4))
+        assertNotNull("endless back and forth", FollowUp.reject("dude I would like", 3_000, 8))
         assertNull("a long request that names him is fine", FollowUp.reject("Jarvis I need you to help me plan the week, we have the doctor on Tuesday and I want to dash Wednesday and Thursday and then rest on the weekend if we can", 4_000, 0))
     }
 

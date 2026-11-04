@@ -229,7 +229,7 @@ object FollowUp {
         val named = Regex("(?i)\\b(jarvis|jervis|jarvas)\\b").containsMatchIn(text)
         return when {
             msSinceHeSpoke > 25_000 -> "too long since he spoke"
-            inRow >= 4 -> "four follow-ups in a row"
+            inRow >= 8 -> "eight follow-ups in a row"
             words > 30 && !named -> "long chatter, sounds like people talking"
             else -> null
         }

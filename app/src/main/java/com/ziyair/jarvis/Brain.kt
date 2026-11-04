@@ -108,7 +108,8 @@ class Brain(private val context: Context) {
         (if (prefs.babyName.isNotBlank()) "\nHis baby son is ${prefs.babyName}." else "") +
         Memory.promptBlock(context) +
         "\nYou're speaking out loud through his phone in a quick back-and-forth: one to three short, natural spoken sentences, no lists, emojis or URLs. Sound like a person, not a script." +
-        "\nYou are the quick conversational side of Jarvis, with no tools and no view of his data. If he asks you to do anything (set, send, call, play, log, add, check, look up), " +
+        "\nYou are the quick conversational side of Jarvis, with no tools and no view of his data: you can't set timers or reminders, play music, send or log anything, so never say you did. If he asks you to do anything (set, send, call, play, log, add, cancel, check, look up), " +
+        "or what he said sounds like a garbled request, " +
         "or asks something that needs facts you don't have (his numbers, his schedule, today's news, prices), reply with exactly [handoff] and nothing else. " +
         "If what you heard isn't meant for you (the TV, people talking nearby, a half sentence), reply with exactly [ignore]." + livePart()
 
@@ -188,12 +189,15 @@ class Brain(private val context: Context) {
         // the tool list is the same every time: let Claude cache it (much cheaper on repeat questions)
         if (tools.length() > 0) tools.getJSONObject(tools.length() - 1).put("cache_control", JSONObject().put("type", "ephemeral"))
         // real questions get the smarter model and room for a proper answer; quick commands stay fast and cheap
-        val deep = !followUp && realQuestion(text) && cfg.optBoolean("smart_answers", true)
+        val deep = !followUp && realQuestion(text) && !FastChat.smallTalk(text) && cfg.optBoolean("smart_answers", true)
         val model = if (deep) cfg.optString("smart_model", "claude-sonnet-5-5") else cfg.optString("model", "claude-haiku-5-5")
         val maxTokens = if (deep) cfg.optInt("smart_max_tokens", 700) else cfg.optInt("max_tokens", 400)
         // casual back-and-forth: the fast brain answers in a fraction of the time; anything to do goes on to Claude
         if (onSentence != null && FastChat.on(context) && FastChat.route(text, deep) && said == text) {
-            val r = FastChat.ask(context, fastSystem(cfg), clean) { voice.feed(it) }
+            // it can't DO anything: if it talks as if it did ("timer set"), hold it back and let Claude actually do it
+            val held = StringBuilder()
+            val r = FastChat.ask(context, fastSystem(cfg), clean) { held.append(it); if (!FastChat.claimsAction(held.toString())) voice.feed(it) }
+                ?.takeIf { !FastChat.claimsAction(it).also { bad -> if (bad) { voice.drop(); Trace.log(context, "fastchat", "claimed an action it can't do (\"${it.take(60)}\"): Claude takes it") } } }
             if (r != null) {
                 voice.flush()
                 if (r.contains("[ignore]", true)) return ""
