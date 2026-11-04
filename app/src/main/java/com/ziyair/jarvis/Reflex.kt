@@ -69,7 +69,10 @@ object Reflex {
                 is Fast.Direct.Nav -> { val out = a.run("navigate", org.json.JSONObject().put("destination", d.to))
                     if (out.startsWith("Directions")) { Agents.flash("phone"); return Hit("Directions to ${d.to} are up.", true) } }
                 is Fast.Direct.Play -> { val out = a.run("play_music", org.json.JSONObject().put("query", d.what))
-                    if (!Regex("(?i)no music app|couldn't|can't").containsMatchIn(out)) { Agents.flash("phone"); return Hit(out, true) } }
+                    // said on the phone: never read out the notes meant for Claude ("Tell him...")
+                    if (out.startsWith("Playing")) { Agents.flash("phone"); return Hit(out, true) }
+                    if (!Regex("(?i)no music app|couldn't|can't").containsMatchIn(out) || out.contains("wouldn't start"))
+                        return Hit(Fast.spokenMusic(out, d.what), out.startsWith("Opened")) }
                 Fast.Direct.Yes -> {
                     val h = Prefs(c).history()
                     val last = (h.length() - 1 downTo 0).map { h.getJSONObject(it) }.firstOrNull { it.optString("role") == "assistant" }?.optString("content").orEmpty()

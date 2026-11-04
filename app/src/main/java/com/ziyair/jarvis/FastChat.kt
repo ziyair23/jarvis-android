@@ -30,7 +30,12 @@ object FastChat {
     /** The fast brain decided Claude should take it. Pure. */
     fun handsOff(start: String) = start.trimStart().startsWith("[handoff", true) || start.trimStart().startsWith("[hand off", true)
 
-    fun on(c: Context) = Prefs(c).groqKey.isNotBlank() && Brain(c).config().optBoolean("fast_chat", true)
+    fun on(c: Context): Boolean {
+        val ok = Prefs(c).groqKey.isNotBlank() && Brain(c).config().optBoolean("fast_chat", true)
+        if (!ok && System.currentTimeMillis() - warnedAt > 6 * 3600_000L) { warnedAt = System.currentTimeMillis(); Trace.log(c, "fastchat", if (Prefs(c).groqKey.isBlank()) "off: no Groq key saved in setup" else "off in settings") }
+        return ok
+    }
+    @Volatile private var warnedAt = 0L
 
     /**
      * Streams a reply in Jarvis's voice. Returns the full reply, or null to hand it to Claude (he asked for something,
