@@ -119,7 +119,11 @@ class Brain(private val context: Context) {
     } catch (_: Exception) { "" }
 
     /** Ask Jarvis something. Returns the spoken reply, or a short in-character error line. */
-    fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, onAck: (() -> Unit)? = null): String {
+    /**
+     * [gate]: thinking ahead. Called before anything is actually done (a tool run, the turn saved); it waits until his
+     * final words confirm this was what he said. False = drop it all, nothing happened.
+     */
+    fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, onAck: (() -> Unit)? = null, gate: (() -> Boolean)? = null): String {
         val voice = Sentences(onSentence, config().optBoolean("speak_early", true))
         val key = prefs.claudeKey
         if (key.isBlank()) return "I need my Claude key first, sir. Open the Jarvis app and add it."
@@ -149,7 +153,7 @@ class Brain(private val context: Context) {
         }
         // he's correcting Jarvis: remember it for Coach, and remind Jarvis to own it and learn from it
         var said = text
-        if (Coach.on(context) && Coach.isCorrection(text)) {
+        if (gate == null && Coach.on(context) && Coach.isCorrection(text)) {
             val prev = (h.length() - 1 downTo maxOf(0, h.length() - 3)).map { h.getJSONObject(it) }.firstOrNull { it.optString("role") == "assistant" }?.optString("content").orEmpty()
             if (prev.isNotBlank()) {
                 Coach.noteCorrection(context, prev, text)
@@ -234,6 +238,8 @@ class Brain(private val context: Context) {
             Spend.record(context, cfg, model, j.optJSONObject("usage"))
             val content = j.getJSONArray("content")
             // a long web search can pause mid-turn: hand it straight back so it finishes
+            // thinking ahead: nothing is done until his final words confirm it
+            if (gate != null && !gate()) return ""
             if (j.optString("stop_reason") == "pause_turn" && rounds < 10) {
                 rounds++
                 clean.put(JSONObject().put("role", "assistant").put("content", content))

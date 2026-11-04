@@ -345,6 +345,7 @@ class JarvisService : Service() {
             }
             handle(text, followUp = !earFirst)
         }
+        override fun onEarly(text: String) { try { thinkAhead(text) } catch (e: Exception) { Problems.log(this@JarvisService, "think ahead: ${e.message}") } }
         override fun onNoise() {
             if (!earListening) return
             Trace.log(this@JarvisService, "noise", "sound but no words")
@@ -367,6 +368,7 @@ class JarvisService : Service() {
         val e = ear ?: return listen(firstTurn)
         earFirst = firstTurn
         earListening = true
+        aheadCount = 0
         if (firstTurn) followUpsInRow = 0
         val listenStarted = System.currentTimeMillis()
         val session = ++listenSession
@@ -654,6 +656,52 @@ class JarvisService : Service() {
     /** A short pause after Jarvis talks so the mic doesn't hear the end of his own voice. */
     private fun afterSpeaking(fn: () -> Unit) { main.postDelayed(fn, 350) }
 
+    // ---------------- thinking ahead ----------------
+    /**
+     * The moment he pauses, Jarvis starts thinking about what he's said so far. If his final words match, the answer is
+     * already on its way (often half a second or more sooner); if not, it's dropped before anything was done.
+     */
+    private class Ahead(val text: String, val followUp: Boolean, val brain: Brain) {
+        private val lock = Object()
+        @Volatile private var state = 0          // 0 waiting for his final words, 1 go, -1 drop
+        private val held = ArrayList<String>()
+        @Volatile private var sink: ((String) -> Unit)? = null
+        @Volatile var reply: String? = null
+        val done = java.util.concurrent.CountDownLatch(1)
+        fun gate(): Boolean = synchronized(lock) {
+            val until = System.currentTimeMillis() + 15_000
+            while (state == 0 && System.currentTimeMillis() < until) lock.wait(500)
+            if (state == 0) state = -1
+            state == 1
+        }
+        fun decide(go: Boolean) = synchronized(lock) { if (state == 0) state = if (go) 1 else -1; lock.notifyAll() }
+        fun said(line: String) = synchronized(held) { sink?.invoke(line) ?: held.add(line); Unit }
+        fun attach(k: (String) -> Unit) = synchronized(held) { held.forEach(k); held.clear(); sink = k }
+    }
+    @Volatile private var ahead: Ahead? = null
+    private var aheadCount = 0
+    private fun dropAhead() { ahead?.decide(false); ahead = null }
+
+    /** Same words, ignoring capitals, punctuation and "Jarvis". Pure. */
+    private fun sameWords(a: String, b: String) = Reflex.norm(a) == Reflex.norm(b)
+
+    private fun thinkAhead(text0: String) {
+        if (!earListening || thinking || !brain.config().optBoolean("think_ahead", true)) return
+        val text = text0.replace(Regex("^\\s*((hey|hi|ok|okay|yo)[,.!]?\\s+)?jarvis[,.!?]*\\s*", RegexOption.IGNORE_CASE), "").trim()
+        val t = Reflex.norm(text)
+        // only what would go to Claude anyway (quick phone commands are already instant)
+        if (t.split(" ").size < 3 || isStop(text) || goodbyeRe.containsMatchIn(t) || t.contains("timer") || Fast.direct(t) != null ||
+            Fast.parse(t, prefs.babyName.lowercase()) != null || Fast.reminder(t, java.util.Calendar.getInstance()) != null || Coach.isCorrection(text)) return
+        if (Stealth.on(prefs) || !Piper.installed(this) || prefs.ttsKey.isNotBlank() || Cast.mode(prefs) == "everything" || liveOK(false)) return
+        if (!earFirst && FollowUp.reject(text, System.currentTimeMillis() - lastSpokeEnd, followUpsInRow) != null) return
+        ahead?.let { if (sameWords(it.text, text)) return; it.decide(false) }
+        if (aheadCount >= 2) return
+        aheadCount++
+        val a = Ahead(text, !earFirst, Brain(this)); ahead = a
+        Trace.log(this, "ahead", "thinking ahead on \"$text\"")
+        thread(name = "jarvis-ahead") { a.reply = try { a.brain.ask(text, a.followUp, { line -> a.said(line) }, null, gate = { a.gate() }) } catch (_: Exception) { "" }; a.done.countDown() }
+    }
+
     private fun handle(text0: String, followUp: Boolean = false) {
         val text = text0.replace(Regex("^\\s*((hey|hi|ok|okay|yo)[,.!]?\\s+)?jarvis[,.!?]*\\s*", RegexOption.IGNORE_CASE), "").trim()
         if (text.isBlank()) { Trace.log(this, "wake", "just his name, listening"); openWindow(convoSeconds()); listen(firstTurn = !followUp); return }
@@ -688,6 +736,11 @@ class JarvisService : Service() {
             val t0 = System.currentTimeMillis()
             val quick = Reflex.handle(this, text)
             if (quick != null) { brain.lastTools.clear(); Trace.log(this, "reflex", "handled on the phone: ${quick.reply}") }
+            // was he already being thought about? use it if his final words match, otherwise drop it
+            val prior = ahead; ahead = null
+            val use = prior?.takeIf { quick == null && !liveOK(wasQuiet) && it.followUp == followUp && sameWords(it.text, text) }
+            if (prior != null && use == null) prior.decide(false)
+            val bt = use?.brain ?: brain
             // live talking: a real two-way voice conversation takes it from here
             if (quick == null && liveOK(wasQuiet)) { main.post { live?.cancel(); stream = null; startLive(text, followUp, turn) }; return@thread }
             else if (quick == null) Trace.log(this, "ask", if (followUp) "follow-up to Claude" else "to Claude")
@@ -697,8 +750,13 @@ class JarvisService : Service() {
                 val last = try { prefs.history().let { h -> (h.length() - 1 downTo 0).map { h.getJSONObject(it) }.firstOrNull { it.optString("role") == "assistant" }?.optString("content").orEmpty() } } catch (_: Exception) { "" }
                 Fast.ackFor(Reflex.norm(text), last)?.let { line -> acked = true; main.post { ack(line) } }
             }
-            val reply = quick?.reply ?: brain.ask(text, followUp, live?.let { s -> { line: String -> main.post { quiet(false); Orb.set(this@JarvisService, Orb.SPEAK) }; s.add(line) } }) { if (!acked) main.post { ack() } }
-            Trace.log(this, "reply", "${System.currentTimeMillis() - t0}ms, tools ${brain.lastTools.joinToString(",").ifBlank { "none" }}: \"${reply.take(160)}\"")
+            val toVoice: ((String) -> Unit)? = live?.let { s -> { line: String -> main.post { quiet(false); Orb.set(this@JarvisService, Orb.SPEAK) }; s.add(line) } }
+            val reply = quick?.reply ?: if (use != null) {
+                Trace.log(this, "ahead", "used: the answer was already on its way")
+                use.attach(toVoice ?: { _ -> }); use.decide(true)
+                use.done.await(90, java.util.concurrent.TimeUnit.SECONDS); use.reply.orEmpty()
+            } else brain.ask(text, followUp, toVoice, onAck = { if (!acked) main.post { ack() } })
+            Trace.log(this, "reply", "${System.currentTimeMillis() - t0}ms, tools ${bt.lastTools.joinToString(",").ifBlank { "none" }}: \"${reply.take(160)}\"")
             main.post {
                 if (turn != turnId) { live?.cancel(); Trace.log(this, "dropped", "cancelled while thinking"); return@post }   // he cancelled while it was thinking
                 if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { live?.cancel(); inConvo = false; finishTurn(); return@post }
@@ -707,7 +765,7 @@ class JarvisService : Service() {
                 ignoredInRow = 0
                 if (quick?.endConvo == true) inConvo = false
                 // he asked for music: let it play instead of listening over it
-                if (brain.lastTools.any { it == "play_music" } || (brain.lastTools.contains("media_control") && !reply.contains("paus", true))) inConvo = false
+                if (bt.lastTools.any { it == "play_music" } || (bt.lastTools.contains("media_control") && !reply.contains("paus", true))) inConvo = false
                 // in quiet mode his answers arrive as a silent notification instead of out loud
                 if (wasQuiet && Stealth.on(prefs)) { live?.cancel(); Stealth.silentNote(this, reply); LogBus.changed(); finishTurn(); return@post }
                 LogBus.changed()
@@ -887,6 +945,7 @@ class JarvisService : Service() {
     }
 
     private fun finishTurn() {
+        dropAhead()
         Orb.set(this, Orb.HIDDEN)
         earListening = false
         if (ringHushedForEar) { ringHushedForEar = false; ringHush(false) }
