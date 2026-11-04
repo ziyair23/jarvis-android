@@ -169,6 +169,7 @@ object Bills {
     fun same(a: String, b: String) = key(a).isNotEmpty() && (key(a) == key(b) || key(a).startsWith(key(b)) || key(b).startsWith(key(a)))
 
     @Synchronized fun upsert(c: Context, name0: String, amount: Double?, due: Long, repeat: String): String {
+        Timeline.add(c, "bill", "$name0${amount?.let { " " + money(it) } ?: ""} due ${SimpleDateFormat("EEE MMM d", Locale.US).format(Date(due))}")
         val name = name0.trim().replaceFirstChar { it.uppercase() }.take(40)
         if (name.length < 2) return "Needs a name."
         val a = all(c); var hit: JSONObject? = null
@@ -270,6 +271,7 @@ object Appts {
     private fun words(s: String) = s.lowercase().split(Regex("\\W+")).filter { it.length > 2 }.toSet()
 
     @Synchronized fun upsert(c: Context, what0: String, at: Long, hasTime: Boolean, where: String?): String {
+        Timeline.add(c, "appointment", "$what0 on ${SimpleDateFormat("EEE MMM d h:mm a", Locale.US).format(Date(at))}${where?.let { " at $it" } ?: ""}")
         val what = what0.trim().take(60); if (what.length < 2) return "Needs a name."
         val a = all(c); var hit: JSONObject? = null
         for (i in 0 until a.length()) { val o = a.getJSONObject(i)

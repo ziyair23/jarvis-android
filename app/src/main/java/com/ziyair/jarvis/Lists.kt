@@ -27,6 +27,7 @@ object Lists {
 
     fun add(context: Context, items: String, list: String?): String {
         val p = Prefs(context); val o = all(p); val k = key(list)
+        Timeline.add(context, "list", "Added to ${label(k)}: $items")
         val a = o.optJSONArray(k) ?: JSONArray()
         val added = mutableListOf<String>()
         for (it in split(items)) {
@@ -89,6 +90,7 @@ object Expenses {
 
     fun log(context: Context, amount: Double, what: String?, whichDay: String?): String {
         val p = Prefs(context); val a = all(p)
+        Timeline.add(context, "expense", "Spent ${Earnings.money(amount)} on ${what.orEmpty().ifBlank { "something" }}")
         val d = when (whichDay?.trim()?.lowercase()) { "yesterday" -> Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }.let { day.format(it.time) }
             null, "", "today", "tonight" -> day.format(Date()); else -> whichDay.takeIf { Regex("\\d{4}-\\d{2}-\\d{2}").matches(it) } ?: day.format(Date()) }
         val w = what?.trim()?.lowercase().orEmpty().ifBlank { "other" }

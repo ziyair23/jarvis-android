@@ -269,6 +269,11 @@ input::placeholder{color:#5f5b56}
   </div>
   <div class="card"><div class="label">Today, on your lock screen</div>
     <div class="grid2" style="grid-template-columns:1fr 1fr;margin:0 0 14px"><button id="dash-on" onclick="J.dashDay(true);setTimeout(load,150)">Dashing today</button><button id="dash-off" onclick="J.dashDay(false);setTimeout(load,150)">Day off</button></div><div id="mind-head" style="font:400 19px/1.35 var(--serif);margin:0 0 6px"></div><ul class="list" id="mind-plan"></ul><div class="label" style="margin:14px 0 6px">List</div><div class="dim" id="mind-list" style="line-height:1.5"></div></div>
+  <div class="card"><div class="label">Upgrading himself</div>
+    <p class="dim" id="up-line" style="margin:0 0 12px;line-height:1.5"></p>
+    <ul class="list" id="up-list"></ul>
+    <button id="up-btn" style="width:100%;margin-top:10px" onclick="upNow()">Look for upgrades now</button>
+    <div class="label" style="margin:16px 0 6px">Skills he built</div><ul class="list" id="skill-list"></ul></div>
   <div class="card"><div class="label">Getting to know you</div>
     <p class="dim" id="scan-line" style="margin:0 0 12px;line-height:1.5"></p>
     <button class="primary" id="scan-btn" style="width:100%" onclick="scanGo()">Get to know me</button>
@@ -344,6 +349,8 @@ function addX() { const a = $('x-amt').value, w = $('x-what').value.trim(); if (
 function addJ() { const v = $('j-in').value.trim(); if (!v) return; J.addJournal(v); $('j-in').value = ''; }
 function earn(day) { const v = $('m-amt').value; if (!v) return; J.logEarn(v, day, false); $('m-amt').value = ''; }
 function setGoal() { const v = $('m-amt').value; if (!v) return; J.setGoal(v, D.goalName || 'the Macan'); $('m-amt').value = ''; }
+function upDo(id, yes) { J.upgradeDecide(String(id), yes); setTimeout(load, 200); }
+function upNow() { J.upgradeNow(); setTimeout(load, 300); }
 function scanGo() { J.scanStart(); setTimeout(load, 300); }
 function mindAct(id, yes) { J.mindAct(String(id), yes); setTimeout(load, 150); }
 function mindNow() { const ok = J.mindNow(); $('mind-state').textContent = ok ? 'Thinking right now…' : 'He thought a few minutes ago; give him ten.'; setTimeout(load, 400); }
@@ -476,6 +483,11 @@ function load() {
     const dd = D.dashToday || 'NO';
     $('dash-on').className = dd === 'ON' ? 'primary' : ''; $('dash-off').className = dd === 'OFF' ? 'primary' : '';
     $('dash-on').textContent = dd === 'LIKELY' ? 'Dashing today (usual)' : 'Dashing today';
+    { const U = D.upgrades || [], SK = Array.from({length: (D.skills || []).length}, (_, i) => D.skills[i]);
+      $('up-line').textContent = D.upgrading ? 'Looking back over the week…' : (U.length ? 'Waiting for your OK. Nothing changes until you approve.' : 'Every Sunday evening he looks back over the week and proposes upgrades for himself. He remembers ' + (D.recallCount || 0).toLocaleString() + ' moments so far.');
+      $('up-list').innerHTML = U.map(u => `<li class="col"><div style="font-weight:500">${esc(u.title)} <span class="faint">· ${esc(u.kind)}</span></div><div class="faint" style="margin-top:4px;line-height:1.45">${esc(u.why || '')}</div>${u.phrases ? `<div class="faint" style="margin-top:4px">Say: “${esc((u.phrases || [])[0] || '')}”</div>` : ''}<div class="sug"><div class="acts"><button class="primary" onclick="upDo('${u.id}',true)">Approve</button><button onclick="upDo('${u.id}',false)">No</button></div></div></li>`).join('');
+      $('up-btn').disabled = !!D.upgrading;
+      $('skill-list').innerHTML = SK.map(s => `<li><div style="flex:1"><div>${esc(s.name)}</div><div class="faint">“${esc((s.phrases || [])[0] || '')}” · used ${s.uses || 0}×</div></div><button class="x" aria-label="Remove" onclick="J.skillRemove('${esc(s.name).replace(/'/g, '')}');setTimeout(load,150)">×</button></li>`).join('') || '<li class="empty">None yet. He builds them from what you do every week.</li>'; }
     { const SC = D.scan || {}, R = SC.report || {};
       $('scan-btn').disabled = !!SC.running; $('scan-btn').textContent = SC.running ? (SC.step || 'Working') + '…' : R.at ? 'Scan again' : 'Get to know me';
       $('scan-line').textContent = SC.running ? 'Reading back through your phone. If he opens your shopping apps, leave the phone be for a minute.'

@@ -121,6 +121,13 @@ class Actions(private val context: Context) {
         put(tool("journal_read", "Read back baby journal moments, optionally about something.", props("about" to str("Optional word to search")), listOf()))
         put(tool("answer_call", "Answer the phone call that's ringing right now.", props(), listOf()))
         put(tool("decline_call", "Decline the phone call that's ringing right now.", props(), listOf()))
+        put(tool("run_skill", "Run one of the skills you built for yourself, by name.", props("name" to str("The skill's name")), listOf("name")))
+        put(tool("upgrade_now", "Look back over the week and propose upgrades for yourself (new skills, lessons, things to build) for him to approve. When he says 'upgrade yourself' or 'get better'.", props(), listOf()))
+        put(tool("upgrades_list", "The upgrades waiting for his OK, and the skills you've built.", props(), listOf()))
+        put(tool("upgrade_decide", "He approved or turned down a waiting upgrade.", props("which" to str("Words from its title, or its id"), "approve" to bool("true to approve, false to drop")), listOf("which", "approve")))
+        put(tool("recall", "Search his whole life timeline: everything said between you two, feeds, diapers and sleep, money in and out, bills, appointments, deliveries, messages that came in, reminders, jobs, your own thoughts. For any question about the past: 'when did...', 'last time...', 'what did X say about...', 'how many times...', 'have I ever...'.",
+            props("query" to str("Key words to look for, with synonyms (e.g. 'fever temperature sick')"), "from" to str("Only from this day, yyyy-MM-dd"), "to" to str("Only up to this day, yyyy-MM-dd"),
+                "kinds" to str("Optional, comma separated: him, jarvis, baby, earned, expense, purchase, bill, appointment, package, message, reminder, journal, list, job, thought")), listOf("query")))
         put(tool("scan_phone", "Get to know him from his own phone: reads back through his texts from businesses, calendar, birthdays, apps and his shopping apps' order history (like Walmart), and learns his bills, what he buys, his routines and who matters. Takes a few minutes in the background. Only when he asks.",
             props("screens" to bool("Also walk through shopping apps' order history on screen (default true)")), listOf()))
         put(tool("dash_day", "He's dashing or not on a given day: 'not dashing today', 'taking tomorrow off', 'I'm dashing tonight after all'. Jarvis only plans shifts and targets on dash days.",
@@ -272,6 +279,11 @@ class Actions(private val context: Context) {
             "answer_call" -> CallControl.answer(context)
             "decline_call" -> CallControl.decline(context)
             "judge_offer" -> OfferJudge.now(context)
+            "recall" -> Timeline.recall(context, input)
+            "run_skill" -> Skills.byName(context, input.optString("name"))?.let { Skills.run(context, it) } ?: "No skill called that."
+            "upgrade_now" -> Upgrade.start(context)
+            "upgrades_list" -> Upgrade.list(context)
+            "upgrade_decide" -> Upgrade.decide(context, input.optString("which"), input.optBoolean("approve", true))
             "scan_phone" -> Scan.start(context, input.optBoolean("screens", true))
             "dash_day" -> DashDays.set(context, input.optBoolean("on", true), input.optBoolean("tomorrow"))
             "run_job" -> Jobs.start(context, input.optString("goal"))

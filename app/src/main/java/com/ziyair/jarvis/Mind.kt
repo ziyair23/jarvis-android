@@ -197,6 +197,7 @@ object Mind {
                 .put("why", changes?.joinToString() ?: ""))
             put(c, "mind_thoughts", th, 30)
             Trace.log(c, "mind", "$s: ${thought.take(200)} | did ${did.size}")
+            Timeline.add(c, "thought", thought + if (did.isNotEmpty()) " Did: " + did.joinToString("; ") else "")
         } catch (e: Exception) {
             Problems.log(c, "mind: ${e.message}")
         } finally { thinking = false; try { DayPlan.save(c) } catch (_: Exception) {}; LogBus.changed() }
@@ -230,6 +231,9 @@ object Mind {
         }
         val a = tells(c); a.put(JSONObject().put("at", System.currentTimeMillis()).put("t", t).put("said", false)); put(c, "mind_tell", a, 12)
     }
+
+    /** Something for Jarvis to mention the next time he talks to Marcus. */
+    fun tellLater(c: Context, text: String) = tell(c, text, false)
 
     @Synchronized private fun idea(c: Context, text: String): String {
         val a = ideas(c); a.put(JSONObject().put("at", System.currentTimeMillis()).put("t", text.trim().take(300))); put(c, "mind_ideas", a, 30)

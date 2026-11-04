@@ -27,6 +27,7 @@ object Scheduler {
 
     fun add(context: Context, at: Long, text: String, loud: Boolean, label: String): Int {
         val prefs = Prefs(context)
+        Timeline.add(context, "reminder", "Set for ${java.text.SimpleDateFormat("EEE h:mm a", java.util.Locale.US).format(java.util.Date(at))}: $label")
         val list = prefs.reminders()
         val id = 10_000 + (System.currentTimeMillis() % 100_000_000).toInt()
         list.put(JSONObject().put("id", id).put("at", at).put("text", text).put("loud", loud).put("label", label))
