@@ -54,7 +54,7 @@ class MainActivity : Activity() {
             prefs.herName = her.text.toString(); prefs.notes = notes.text.toString()
             prefs.city = city.text.toString(); prefs.lunch = lunch.text.toString()
             prefs.dinner = dinner.text.toString(); prefs.bedtime = bed.text.toString()
-            prefs.carName = car.text.toString(); prefs.goveeKey = govee.text.toString(); prefs.geminiKey = gemini.text.toString(); prefs.githubToken = github.text.toString()
+            prefs.carName = car.text.toString(); prefs.goveeKey = govee.text.toString(); prefs.geminiKey = gemini.text.toString(); prefs.sp.edit().remove("live_dead_key").apply(); prefs.githubToken = github.text.toString()
             prefs.ttsKey = ttsKey.text.toString(); prefs.voiceName = voiceName.text.toString()
             Scheduler.scheduleDaily(this)
             status.text = "Saved, sir."
