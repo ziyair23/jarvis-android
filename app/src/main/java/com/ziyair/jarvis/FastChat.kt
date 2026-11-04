@@ -21,11 +21,19 @@ object FastChat {
 
     /** Casual talk the fast brain can take: short, no action words, not a real question for Claude. Pure, unit-tested. */
     fun route(t: String, deep: Boolean): Boolean {
-        if (deep) return false
+        if (deep && !smallTalk(t)) return false
         val n = Reflex.norm(t)
+        if (deep && smallTalk(t)) return true
         if (n.isBlank() || n.split(" ").size > 25) return false
         return !NEEDS_CLAUDE.containsMatchIn(n)
     }
+
+    /** Small talk ("how's it going", "what's up"): the fast brain takes it even though it's phrased as a question. Pure. */
+    fun smallTalk(t: String) = Regex("^(how'?s it going|how are you( doing)?|how you doing|what'?s up|whats good|what'?s good|how was your day|how'?s your day( going)?|how have you been|good (morning|evening|night|afternoon)|hey|hi|hello|yo|sup|you good|you there|are you there)( jarvis)?$")
+        .matches(Reflex.norm(t))
+
+    /** The fast brain claimed it DID something (it can't do anything): never let that be said. Pure, unit-tested. */
+    fun claimsAction(r: String) = Regex("(?i)\\b(timer|reminder|alarm)\\b.*\\b(set|on|started|cancel+ed|stopped|off)\\b|\\b(set|cancel+ed|started|added|logged|sent|texted|called|playing|opened|scheduled|saved|turned (on|off))\\b.*\\b(for you|sir|now|it|that|the)\\b|^(done|all set|got it,? (it'?s|i'?ve))").containsMatchIn(r)
 
     /** The fast brain decided Claude should take it. Pure. */
     fun handsOff(start: String) = start.trimStart().startsWith("[handoff", true) || start.trimStart().startsWith("[hand off", true)

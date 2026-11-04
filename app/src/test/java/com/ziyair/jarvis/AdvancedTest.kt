@@ -286,4 +286,13 @@ class AdvancedTest {
         assertTrue(EarlyRead.complete("Play Happy by NF")); assertTrue(EarlyRead.complete("pause the music"))
         assertEquals("I opened aad, but it won't start on its own. Tap play this once.", Fast.spokenMusic("Opened aad in YouTube Music but it wouldn't start, even after I pressed play. Tell him plainly he'll need to tap it this once.", "aad"))
     }
+
+    @Test fun fastBrainNeverPretendsToAct() {
+        assertTrue(FastChat.claimsAction("Timer set for two minutes, sir.")); assertTrue(FastChat.claimsAction("Timer cancelled, sir."))
+        assertTrue(FastChat.claimsAction("Done, sir.")); assertFalse(FastChat.claimsAction("Good evening, sir. How can I assist?"))
+        assertFalse(FastChat.claimsAction("Right, just us then. Anything on your mind, sir?"))
+        assertTrue(FastChat.smallTalk("How's it going?")); assertTrue(FastChat.route("How's it going?", true))
+        assertFalse(EarlyRead.complete("Can you dis")); assertFalse(EarlyRead.complete("I need")); assertFalse(EarlyRead.complete("Can you do?"))
+        assertTrue(EarlyRead.complete("No")); assertTrue(EarlyRead.complete("How's it going?"))
+    }
 }
