@@ -126,6 +126,7 @@ object Upgrade {
                 .put("line", JSONObject().put("type", "string").put("description", "For a skill: what Jarvis says when it's done")))
                 .put("required", JSONArray(listOf("kind", "title", "why")))))
         var n = 0
+        val auto = ArrayList<String>()
         val system = "You are Jarvis, looking back over your week with Marcus to upgrade yourself. Find what went wrong, what he had to repeat or correct, what you couldn't do, " +
             "and what he does over and over that could be one phrase. Propose at most three upgrades with propose, the most valuable first:\n" +
             "- skill: a new phrase that runs several of your existing tools in one go (only these tools: ${Skills.SAFE_STEPS.joinToString()}). Real inputs, 24-hour times.\n" +
@@ -133,18 +134,40 @@ object Upgrade {
             "- build: something that needs new code (describe it plainly for the developer).\n" +
             "Only propose what this week's data supports. Never anything that sends, calls, pays, buys, posts or deletes. Nothing already covered by an existing skill or lesson. If nothing is worth it, propose nothing.\n" +
             "Finish with one sentence summing up what you proposed."
-        val material = "Tools a skill can use:\n$toolsList\n\nSkills you already have:\n$skills\n\nLessons you already follow:\n$lessons\n\nThis week's problems from your flight log:\n$log\n\nThis week's conversations:\n$convo"
         val cfg = Brain(c).config()
+        // replays: how his suggestions and plans actually turned out, so he advises better
+        val outcomes = try {
+            val sug = Mind.suggestions(c).let { s -> (0 until s.length()).map { s.getJSONObject(it) }.filter { now - it.optLong("at") < 14 * 86_400_000L } }
+            val loops = Loops.all(c).let { s -> (0 until s.length()).map { s.getJSONObject(it) }.filter { now - it.optLong("at") < 14 * 86_400_000L } }
+            "Suggestions you made: " + sug.joinToString("; ") { "${it.optString("text").take(80)} -> ${it.optString("status")}" } +
+                "\nFollow-ups: " + loops.joinToString("; ") { "${it.optString("what").take(60)} -> ${it.optString("status")}${it.optString("why").takeIf { w -> w.isNotBlank() }?.let { w -> " ($w)" } ?: ""}" } +
+                "\nSkills used: " + Skills.all(c).let { s -> (0 until s.length()).joinToString("; ") { s.getJSONObject(it).let { k -> "${k.optString("name")} ${k.optInt("uses")}x" } } } +
+                "\nYour speed last night: " + SelfCare.report(c).optJSONObject("speed")
+        } catch (_: Exception) { "" }
+        val material = "How your advice and plans turned out (replay these: what did he take, ignore or undo, and why?):\n$outcomes\n\nTools a skill can use:\n$toolsList\n\nSkills you already have:\n$skills\n\nLessons you already follow:\n$lessons\n\nThis week's problems from your flight log:\n$log\n\nThis week's conversations:\n$convo"
         val out = Claude.work(c, cfg.optString("upgrade_model", "claude-sonnet-5-5"), system, material.take(60000), tools, "medium", 6000, 6) { name, input ->
             if (name != "propose" || n >= 3) return@work "That's enough for this week."
             n++
             val a = all(c)
-            a.put(JSONObject(input.toString()).put("id", System.currentTimeMillis() + n).put("at", System.currentTimeMillis()).put("status", "waiting"))
+            val id = System.currentTimeMillis() + n
+            a.put(JSONObject(input.toString()).put("id", id).put("at", System.currentTimeMillis()).put("status", "waiting"))
             save(c, a)
-            "Saved for his OK."
+            // small, safe upgrades (a new skill, a lesson) he adds himself and mentions after; anything needing code waits for Marcus
+            if (input.optString("kind") != "build" && cfg.optBoolean("auto_small_upgrades", true)) { auto.add(input.optString("title")); decide(c, id.toString(), true).also { markAuto(c, id) } } else "Saved for his OK."
         }
-        Trace.log(c, "upgrade", "proposed $n: ${out?.first?.take(160)}")
-        if (n > 0) try { Mind.tellLater(c, "Sir, I looked back over the week and have $n upgrade${if (n == 1) "" else "s"} for myself waiting for your OK in His mind.") } catch (_: Exception) {}
+        Trace.log(c, "upgrade", "proposed $n (applied ${auto.size} myself): ${out?.first?.take(160)}")
+        val waitingNow = n - auto.size
+        if (n > 0) try { Mind.tellLater(c, "Sir, I looked back over the week and upgraded myself" +
+            (if (auto.isNotEmpty()) ": ${auto.joinToString(" and ")}" else "") +
+            (if (waitingNow > 0) ". $waitingNow bigger one${if (waitingNow == 1) "" else "s"} need${if (waitingNow == 1) "s" else ""} your OK in His mind." else ".")) } catch (_: Exception) {}
+    }
+
+    /** A fix or idea found on its own (overnight checks). False if the same one is already waiting. */
+    @Synchronized fun addProposal(c: Context, kind: String, title: String, why: String): Boolean {
+        val a = all(c)
+        if ((0 until a.length()).any { a.getJSONObject(it).let { o -> o.optString("status") == "waiting" && o.optString("title").equals(title, true) } }) return false
+        a.put(JSONObject().put("id", System.currentTimeMillis()).put("at", System.currentTimeMillis()).put("kind", kind).put("title", title.take(80)).put("why", why.take(300)).put("status", "waiting"))
+        save(c, a); return true
     }
 
     /** He approved or turned down an upgrade (by id, or by words from its title). */
@@ -158,12 +181,20 @@ object Upgrade {
         val r = when (u.optString("kind")) {
             "skill" -> Skills.add(c, JSONObject().put("name", u.optString("title")).put("phrases", u.optJSONArray("phrases") ?: JSONArray()).put("steps", u.optJSONArray("steps") ?: JSONArray()).put("line", u.optString("line")))
             "lesson" -> Coach.addLesson(c, u.optString("lesson").ifBlank { u.optString("why") }, "upgrade")
-            else -> "Saved for building: tell Claude in chat \"build the ${u.optString("title")} upgrade\"."
+            else -> if (Builder.codeAllowed(c)) {
+                // the Builder writes the fix and makes a TEST version; it only installs after he says yes
+                val task = "${u.optString("title")}: ${u.optString("why")}. Find the cause in the code, make the smallest safe fix, and start a test build."
+                thread(name = "jarvis-selffix") { val r = try { Agents.run(c, "builder", task, false) } catch (e: Exception) { "The fix hit a problem: ${e.message}" }
+                    Mind.tellLater(c, "Sir, about the ${u.optString("title")} fix: $r") }
+                "On it: I'm writing the fix and building a test version. I'll ask before installing it."
+            } else "Saved for building: tell Claude in chat \"build the ${u.optString("title")} upgrade\", or add a GitHub token in setup and I'll build fixes myself."
         }
         u.put("status", if (u.optString("kind") == "build") "to build" else "approved").put("result", r); save(c, a)
         Timeline.add(c, "upgrade", "Approved: ${u.optString("title")}")
         return r
     }
+
+    private fun markAuto(c: Context, id: Long) { val a = all(c); for (i in 0 until a.length()) { val o = a.getJSONObject(i); if (o.optLong("id") == id) o.put("auto", true) }; save(c, a) }
 
     fun list(c: Context): String {
         val w = waiting(c)

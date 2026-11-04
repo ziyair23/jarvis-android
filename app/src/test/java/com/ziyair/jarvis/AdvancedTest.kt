@@ -245,4 +245,39 @@ class AdvancedTest {
         assertTrue(BabyInsights.insights(listOf(now), now, "Ziyair")[0].contains("about a week"))
     }
     private val D = 86_400_000L
+
+    @Test fun watchesHisOwnSpeed() {
+        val log = listOf(
+            "11-03 19:56:02.1 +3.60 heard     \"how's it going\" (1.4s of speech, 0ms to read)",
+            "11-03 19:56:03.3 +4.80 voice     first word out",
+            "11-03 20:10:00.0 +1.00 heard     \"tell me a joke\" (1s of speech, 0ms to read)",
+            "11-03 20:10:02.0 +3.00 voice     first word out",
+            "11-03 20:11:00.0 +5.00 interrupt he talked over me: stopped and listening",
+            "11-03 20:11:09.0 +9.00 silence   nothing said, going back to sleep",
+            "11-03 20:12:00.0 +1.00 ear       finished early (complete sentence after 450ms)",
+            "11-03 20:12:01.0 +2.00 speech    he started talking")
+        val s = SelfCare.speed(log)
+        assertEquals(2, s.optInt("turns")); assertEquals(2000, s.optInt("medianMs"))
+        assertEquals(1, s.optInt("falseBarge")); assertEquals(1, s.optInt("cutOffs"))
+    }
+
+    @Test fun rehearsesTheDay() {
+        val t = 1_700_000_000_000L
+        val c = SelfCare.clashes(listOf(DayPlan.Item(t, "Dash until 9"), DayPlan.Item(t + 10 * 60_000L, "Feed Ziyair"), DayPlan.Item(t + 3 * H, "Dinner: tacos")))
+        assertEquals(1, c.size); assertTrue(c[0], c[0].startsWith("Feed ziyair lands right on dash until 9"))
+        assertTrue("two loose things don't clash", SelfCare.clashes(listOf(DayPlan.Item(t, "Feed Ziyair"), DayPlan.Item(t + 60_000L, "Follow up: Jesse"))).isEmpty())
+    }
+
+    @Test fun warnsAboutATightWeekEarly() {
+        val now = 1_700_000_000_000L; val d = 86_400_000L
+        val weeks = Forecast.weeks(500.0, 200.0, listOf((now + 9 * d) to 650.0, (now + 2 * d) to 50.0), now)
+        val w = Forecast.tight(weeks)!!
+        assertEquals((now + 7 * d).toDouble(), w[0], 1.0)
+        assertNull(Forecast.tight(Forecast.weeks(500.0, 200.0, listOf((now + 2 * d) to 50.0), now)))
+    }
+
+    @Test fun secondOpinionOnHealthAndMoney() {
+        assertTrue(SecondOpinion.careful("why is he throwing up so much")); assertTrue(SecondOpinion.careful("can I afford a 1400 rent"))
+        assertFalse(SecondOpinion.careful("what's the best pizza place"))
+    }
 }

@@ -77,6 +77,9 @@ class Brain(private val context: Context) {
             Memory.promptBlock(context) +
             Coach.promptBlock(context) +
             Skills.promptBlock(context) +
+            Dream.promptBlock(context) +
+            "\nKnow what you don't know: if you're not sure of something, say so plainly or check first (recall, search, ask him) instead of sounding sure. Never make up a number, a date or a fact." +
+            "\nFor 'what if' questions about his life (what if I dash more, move, buy something, change a bill, when will I reach my goal), use simulate: it runs his real numbers. When he asks you to check yourself or find what's broken, use self_check." +
             "\nYou upgrade yourself: when he says 'upgrade yourself' or 'get better', use upgrade_now; when he approves or turns down an upgrade, use upgrade_decide; upgrades_list says what's waiting." +
             LifeWatch.promptBlock(context) +
             "\nMessages you read out are his private business: read them, then drop them. Never bring a message up again, never lecture or check in about it, unless he asks. If something in one genuinely worries you, say so once, in one short sentence, and then leave it completely; jokes between him and the people close to him are theirs." +
@@ -137,7 +140,9 @@ class Brain(private val context: Context) {
      * final words confirm this was what he said. False = drop it all, nothing happened.
      */
     fun ask(text: String, followUp: Boolean = false, onSentence: ((String) -> Unit)? = null, onAck: (() -> Unit)? = null, gate: (() -> Boolean)? = null): String {
-        val voice = Sentences(onSentence, config().optBoolean("speak_early", true))
+        // his son's health or his money: no speaking early, a second opinion checks the answer before he hears it
+        val careful = !followUp && config().optBoolean("second_opinion", true) && SecondOpinion.careful(text) && isRealQuestion(text)
+        val voice = Sentences(if (careful) null else onSentence, config().optBoolean("speak_early", true))
         val key = prefs.claudeKey
         if (key.isBlank()) return "I need my Claude key first, sir. Open the Jarvis app and add it."
         val cfg = config()
@@ -317,10 +322,11 @@ class Brain(private val context: Context) {
                 continue
             }
             // speak one final answer only; strip any "correction" second-guessing
-            val reply = sb.toString().trim().ifBlank { earlierText.ifBlank { "Done, sir." } }
+            var reply = sb.toString().trim().ifBlank { earlierText.ifBlank { "Done, sir." } }
                 .replace(Regex("^(correction|actually|apologies|my apologies|sorry)[,.:!]?\\s*(sir[,.]?\\s*)?", RegexOption.IGNORE_CASE), "")
                 .replaceFirstChar { it.uppercase() }
             if (reply.contains("[ignore]", true)) return ""
+            if (careful && results.length() == 0) reply = SecondOpinion.check(context, text, reply)
             prefs.addTurn("user", text)
             prefs.addTurn("assistant", reply)
             Coach.morningSaid(context)

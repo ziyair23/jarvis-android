@@ -164,7 +164,7 @@ class JarvisService : Service() {
     } }
     private fun tickNow() {
         lastTick = System.currentTimeMillis()
-        thread(name = "jarvis-mind") { try { Mind.tick(this) } catch (_: Exception) {} }
+        thread(name = "jarvis-mind") { try { Mind.tick(this) } catch (_: Exception) {}; try { SelfCare.maybeNight(this) } catch (_: Exception) {} }
     }
     /** Screen on: the lock screen shows the plan as it is right now. */
     private val screenOn = object : android.content.BroadcastReceiver() {
@@ -175,7 +175,7 @@ class JarvisService : Service() {
     }
 
     private val unlocked = object : android.content.BroadcastReceiver() {
-        override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy); Coach.maybeReview(this@JarvisService); LifeWatch.maybeSweep(this@JarvisService); Supplies.maybeCheck(this@JarvisService); Meals.maybePlanWeek(this@JarvisService); Mind.maybeThink(this@JarvisService); Upgrade.maybeReview(this@JarvisService)
+        override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy); Coach.maybeReview(this@JarvisService); LifeWatch.maybeSweep(this@JarvisService); Supplies.maybeCheck(this@JarvisService); Meals.maybePlanWeek(this@JarvisService); Mind.maybeThink(this@JarvisService); Upgrade.maybeReview(this@JarvisService); SelfCare.maybeMorning(this@JarvisService)
             Loops.sweep(this@JarvisService)?.let { line -> main.postDelayed({ sayFirst(line, thenListen = line.endsWith("?")) }, 2500) } } }
     }
 
