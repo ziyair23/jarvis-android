@@ -177,4 +177,25 @@ class AdvancedTest {
         assertFalse(EarlyRead.complete("So yeah")); assertTrue(EarlyRead.complete("okay thanks"))
         assertTrue(EarlyRead.complete("Can you set a timer for ten minutes"))
     }
+
+    @Test fun fastBrainOnlyTakesCasualTalk() {
+        assertTrue(FastChat.route("How are you doing, Jarvis", false)); assertTrue(FastChat.route("haha that's funny", false))
+        assertFalse(FastChat.route("set a reminder for 5", false)); assertFalse(FastChat.route("text Toby are you still coming", false))
+        assertFalse(FastChat.route("how much did I make today", false)); assertFalse("real questions go to Claude", FastChat.route("why is the sky blue", true))
+        assertTrue(FastChat.handsOff("[handoff]")); assertTrue(FastChat.handsOff("  [Handoff]")); assertFalse(FastChat.handsOff("Doing well, sir."))
+    }
+
+    @Test fun hearsHimTalkOverJarvisButNotTheEcho() {
+        val b = Barge(80)
+        // the first moment: only Jarvis's own voice coming back (echo about 0.1 of his level)
+        repeat(12) { assertFalse(b.step(0.05f, 0.5f)) }
+        // echo carries on: never counts
+        repeat(20) { assertFalse(b.step(0.055f, 0.5f)) }
+        // Marcus talks over him, clearly louder than the echo, for a third of a second
+        var cut = false; repeat(5) { if (b.step(0.3f, 0.5f)) cut = true }
+        assertTrue(cut)
+        // a single loud bump (a cough, a door) doesn't
+        val b2 = Barge(80); repeat(12) { b2.step(0.05f, 0.5f) }
+        assertFalse(b2.step(0.3f, 0.5f)); assertFalse(b2.step(0.05f, 0.5f))
+    }
 }

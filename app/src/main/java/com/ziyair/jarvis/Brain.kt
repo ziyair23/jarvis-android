@@ -96,6 +96,17 @@ class Brain(private val context: Context) {
             (if (Agents.on(context)) "\nSpeed matters: do quick one-step jobs yourself with your own skills (logging feeds, diapers, earnings and expenses, lists, music, directions, lights, alarms, timers; calls and texts always go through agent_phone). Hand a job to an agent only when it needs several steps or their judgment.\nYour agents: some skills named above now live with your specialist agents. Hand the job over with one sentence holding every detail he gave: agent_phone (calls, texts, DMs, apps, music, directions, anything on screen), agent_money (earnings, expenses, the Macan goal, his budget), agent_family (Ziyair's feeds, diapers and sleep, the baby journal, lights and the house), agent_planner (his calendar, reminder lists, alarms, the morning briefing, protocols, planning his day or week), agent_research (questions that need real digging: comparisons, how-tos, prices, plans; quick facts you can still search yourself), agent_pursuit (his clothing brand: ideas, the shoot list, launch to-dos, orders), agent_memory (what you know about him: 'what do you know about me', corrections, tidying, forgetting; quick saves you can still do yourself with remember), agent_builder (when he wants you to change how you work or build something new into yourself), agent_bills (his bills: what's due, adding one, marking one paid), agent_appts (his and Ziyair's appointments and checkups), agent_packages (his deliveries), agent_supplies (prices on groceries, diapers, wipes, formula and other things he rebuys), agent_meals (planning meals, what's for dinner, turning the plan into a grocery list, cheapest store). Where his money went and repeat charges go to agent_money. Your agents work as a team and can ask each other, so one hand-off is enough even when a job touches two areas. Then say what they did, in your own words, in one line. The confirm-before-sending rule still applies: pass confirmed=true only after his clear yes." else "")
     }
 
+    /** Jarvis's personality for the fast brain: who he is and who Marcus is, but no tools (it hands anything to do to Claude). */
+    private fun fastSystem(cfg: JSONObject): String = cfg.optString("system") +
+        (if (prefs.notes.isNotBlank()) "\n\nAbout him and his day: " + prefs.notes else "") +
+        (if (prefs.herName.isNotBlank()) "\nHis partner's name: " + prefs.herName + "." else "") +
+        (if (prefs.babyName.isNotBlank()) "\nHis baby son is ${prefs.babyName}." else "") +
+        Memory.promptBlock(context) +
+        "\nYou're speaking out loud through his phone in a quick back-and-forth: one to three short, natural spoken sentences, no lists, emojis or URLs. Sound like a person, not a script." +
+        "\nYou are the quick conversational side of Jarvis, with no tools and no view of his data. If he asks you to do anything (set, send, call, play, log, add, check, look up), " +
+        "or asks something that needs facts you don't have (his numbers, his schedule, today's news, prices), reply with exactly [handoff] and nothing else. " +
+        "If what you heard isn't meant for you (the TV, people talking nearby, a half sentence), reply with exactly [ignore]." + livePart()
+
     /** The personality for live talking: the same Jarvis, plus how to sound on a live call, plus the recent conversation. */
     fun livePrompt(cfg: JSONObject): String {
         val h = prefs.history()
@@ -173,6 +184,18 @@ class Brain(private val context: Context) {
         val deep = !followUp && realQuestion(text) && cfg.optBoolean("smart_answers", true)
         val model = if (deep) cfg.optString("smart_model", "claude-sonnet-5-5") else cfg.optString("model", "claude-haiku-5-5")
         val maxTokens = if (deep) cfg.optInt("smart_max_tokens", 700) else cfg.optInt("max_tokens", 400)
+        // casual back-and-forth: the fast brain answers in a fraction of the time; anything to do goes on to Claude
+        if (onSentence != null && FastChat.on(context) && FastChat.route(text, deep) && said == text) {
+            val r = FastChat.ask(context, fastSystem(cfg), clean) { voice.feed(it) }
+            if (r != null) {
+                voice.flush()
+                if (r.contains("[ignore]", true)) return ""
+                if (gate != null && !gate()) return ""
+                prefs.addTurn("user", text); prefs.addTurn("assistant", r)
+                Coach.morningSaid(context); Spending.mondaySaid(context); Mind.said(context)
+                return r
+            }
+        }
         // search, then read the reliable pages (never Yelp-style sites); a real question may read a few more pages
         fun webTools() = Web.tools(context, cfg.optInt("web_search_max", 3), if (deep) cfg.optInt("web_fetch_deep", 3) else cfg.optInt("web_fetch_max", 2))
         if (cfg.optBoolean("web_search", true)) { val w = webTools(); for (i in 0 until w.length()) tools.put(w.get(i)) }

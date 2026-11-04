@@ -77,6 +77,9 @@ class Prefs(context: Context) {
         get() = sp.getString("github_token", "") ?: ""
         set(v) = sp.edit().putString("github_token", v.trim()).apply()
     /** Google Gemini key (free from aistudio.google.com) for live, natural back-and-forth talking. */
+    var groqKey: String
+        get() = sp.getString("groq_key", "") ?: ""
+        set(v) = sp.edit().putString("groq_key", v.trim()).apply()
     var geminiKey: String
         get() = sp.getString("gemini_key", "") ?: ""
         set(v) = sp.edit().putString("gemini_key", v.trim()).apply()
