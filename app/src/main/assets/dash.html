@@ -216,6 +216,10 @@ input::placeholder{color:#5f5b56}
     </div>
   </div>
   <div class="card">
+    <div class="label">Patterns</div>
+    <ul class="list" id="b-patterns"></ul>
+  </div>
+  <div class="card">
     <div class="label">Journal</div>
     <div class="grid2"><input id="j-in" placeholder="He smiled today…"><button class="primary" onclick="addJ()">Save</button></div>
     <ul class="list" id="j-list" style="margin-top:8px"></ul>
@@ -493,6 +497,7 @@ function load() {
       $('scan-line').textContent = SC.running ? 'Reading back through your phone. If he opens your shopping apps, leave the phone be for a minute.'
         : R.summary ? R.summary + ' (' + ago(R.at) + ')' : 'He reads back through your texts from businesses, calendar, birthdays and your shopping apps\' order history, and learns your bills, what you buy and your routines. What friends and family say is never read.';
       $('scan-list').innerHTML = SC.running ? '' : (R.learned || []).map(x => `<li style="font-size:14px">${esc(x)}</li>`).join(''); }
+    $('b-patterns').innerHTML = ((D.babyPatterns || {}).lines || []).map(l => `<li style="display:block;line-height:1.5">${esc(l)}</li>`).join('') || '<li class="empty">Patterns show up after about a week of logged feeds.</li>';
     const DP = D.dayPlan || {}; $('mind-head').textContent = DP.headline || '';
     $('mind-plan').innerHTML = (DP.items || []).map(x => `<li><span class="t" style="min-width:70px;color:var(--ink-faint)">${esc(x.t)}</span><span>${esc(x.x)}</span></li>`).join('') || '<li class="empty">Nothing else on today.</li>';
     $('mind-list').textContent = (DP.list || []).join(', ') || 'Nothing on the list.';

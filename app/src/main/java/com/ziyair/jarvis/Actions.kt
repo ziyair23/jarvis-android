@@ -121,6 +121,7 @@ class Actions(private val context: Context) {
         put(tool("journal_read", "Read back baby journal moments, optionally about something.", props("about" to str("Optional word to search")), listOf()))
         put(tool("answer_call", "Answer the phone call that's ringing right now.", props(), listOf()))
         put(tool("decline_call", "Decline the phone call that's ringing right now.", props(), listOf()))
+        put(tool("baby_patterns", "Ziyair's patterns from his logged feeds and sleep: how often he eats now vs last week, his longest night stretch and where it's heading, signs of a growth spurt, the next checkup.", props(), listOf()))
         put(tool("run_skill", "Run one of the skills you built for yourself, by name.", props("name" to str("The skill's name")), listOf("name")))
         put(tool("upgrade_now", "Look back over the week and propose upgrades for yourself (new skills, lessons, things to build) for him to approve. When he says 'upgrade yourself' or 'get better'.", props(), listOf()))
         put(tool("upgrades_list", "The upgrades waiting for his OK, and the skills you've built.", props(), listOf()))
@@ -280,6 +281,7 @@ class Actions(private val context: Context) {
             "decline_call" -> CallControl.decline(context)
             "judge_offer" -> OfferJudge.now(context)
             "recall" -> Timeline.recall(context, input)
+            "baby_patterns" -> BabyInsights.forJarvis(context)
             "run_skill" -> Skills.byName(context, input.optString("name"))?.let { Skills.run(context, it) } ?: "No skill called that."
             "upgrade_now" -> Upgrade.start(context)
             "upgrades_list" -> Upgrade.list(context)

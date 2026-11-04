@@ -70,10 +70,13 @@ object HomeNet {
         val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         var ask = false
         if (earned > 0) parts.add("You've made ${Earnings.money(earned)} today.")
-        else if (h >= 10 && h <= 22) { parts.add("How'd the shift go?"); ask = true }
+        else if (h >= 10 && h <= 22 && (try { DashDays.on(context) == DashDays.Today.ON } catch (_: Exception) { false })) { parts.add("How'd the shift go?"); ask = true }
         lastFeedLine(p)?.let { parts.add(it) }
         val todo = HomeReminders.take(context)
         if (todo.isNotEmpty()) parts.add("You asked me to remind you: " + todo.joinToString(", and ") + ".")
+        // what's next today, from his plan
+        try { DayPlan.pick(DayPlan.items(context), System.currentTimeMillis(), 3).firstOrNull { it.at > System.currentTimeMillis() + 10 * 60_000L && !it.text.startsWith("Dash") }
+            ?.let { parts.add("Next up: ${it.text.replaceFirstChar { c -> c.lowercase() }} at ${Scheduler.clock(it.at)}.") } } catch (_: Exception) {}
         if (ask) { parts.remove("How'd the shift go?"); parts.add("How'd the shift go?") }
         return parts.joinToString(" ") to ask
     }
