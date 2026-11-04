@@ -151,4 +151,24 @@ class AdvancedTest {
         assertTrue("kept the voice plus a short natural edge: $seconds s", seconds in 1.05f..1.15f)
         assertEquals("fades in", 0f, t[0], 0.0001f); assertEquals("fades out", 0f, t[t.size - 1], 0.05f)
     }
+
+    @Test fun remindersSetOnThePhone() {
+        val now = java.util.Calendar.getInstance().apply { clear(); set(2026, 10, 3, 17, 22) }   // Tue 5:22 PM
+        fun at(t: String) = Fast.reminder(t, now)?.let { (ms, what) -> java.text.SimpleDateFormat("EEE HH:mm", java.util.Locale.US).format(java.util.Date(ms)) + " " + what }
+        assertEquals("Tue 19:00 call mom", at("remind me to call mom at 7"))
+        assertEquals("Tue 17:30 grab diapers", at("remind me at 5 30 pm to grab diapers"))
+        assertEquals("Tue 17:42 flip the laundry", at("remind me in 20 minutes to flip the laundry"))
+        assertEquals("Wed 09:00 call the doctor", at("remind me tomorrow at 9 to call the doctor"))
+        assertEquals("Tue 20:00 take out the trash", at("remind me tonight at 8 to take out the trash"))
+        assertEquals("both 5s passed: tomorrow evening", "Wed 17:00 pay the phone bill", at("remind me to pay the phone bill at 5"))
+        assertNull("no time: Claude asks", at("remind me to call mom"))
+        assertNull("repeating: Claude handles", at("remind me every day at 9 to take vitamins"))
+    }
+
+    @Test fun knowsWhenHesFinishedTalking() {
+        assertTrue(EarlyRead.complete("Set a reminder for 5 PM.")); assertTrue(EarlyRead.complete("yeah"))
+        assertTrue(EarlyRead.complete("What's the weather like"))
+        assertFalse(EarlyRead.complete("Remind me to")); assertFalse(EarlyRead.complete("Can you text my")); assertFalse(EarlyRead.complete("so um"))
+        assertFalse(EarlyRead.complete("I was thinking,")); assertFalse(EarlyRead.complete("hmm"))
+    }
 }

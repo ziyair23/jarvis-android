@@ -93,6 +93,8 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
             var speechAt = 0L
             // early read: the moment he pauses, start reading what he said; if he was done, the words are ready when the pause is confirmed
             val earlyMs = cfg.optInt("ear_early_ms", 260)
+            val fastEndMs = cfg.optInt("ear_fast_end_ms", 450)
+            var endedEarly = false
             var utt = FloatArray(RATE * 8); var uttN = 0
             var quietMs = 0; var floor = 0.01f
             val pre = FloatArray(CHUNK * 8); var preN = 0   // the last ~0.6 s before he started, so the first word is never clipped
@@ -151,9 +153,21 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                                         val snap = utt.copyOf(uttN); specN = uttN
                                         spec = asr.submit<String> { decode(snap) }
                                     }
+                                    // he's clearly finished (a complete thought, not "remind me to... um"): answer now instead of
+                                    // waiting out the full second of silence
+                                    val sp = spec
+                                    if (sp != null && sp.isDone && quietMs >= fastEndMs) {
+                                        val text = try { sp.get() } catch (_: Exception) { "" }
+                                        if (EarlyRead.complete(text)) {
+                                            mode = Mode.HOLD; last = Mode.HOLD; vad.reset()
+                                            val n = specN; resetUtt(); endedEarly = true
+                                            deliver(text, n * 1000L / RATE, 0, true)
+                                            main.post { Trace.log(context, "ear", "finished early (complete sentence after ${fastEndMs}ms)") }
+                                        }
+                                    }
                                 }
                             }
-                            if (!vad.empty()) {
+                            if (endedEarly) { endedEarly = false } else if (!vad.empty()) {
                                 val seg = vad.front()
                                 while (!vad.empty()) vad.pop()
                                 mode = Mode.HOLD; last = Mode.HOLD
@@ -313,6 +327,17 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
 
 /** The early-read rules, kept pure so they're unit-tested. */
 object EarlyRead {
+    private val TRAIL = setOf("and", "or", "but", "so", "to", "the", "a", "an", "for", "with", "my", "at", "about", "of", "in", "on", "is", "if",
+        "because", "cause", "um", "uh", "uhm", "hmm", "then", "can", "could", "would", "should", "will", "i", "we", "you", "he", "she", "they",
+        "it's", "i'm", "what", "when", "where", "how", "why", "which", "who", "from", "into", "by", "was", "are", "be", "just", "maybe", "also", "her", "his", "your", "our", "their", "this", "some", "any")
+    /** Does this sound like he's finished, rather than pausing mid-thought? Pure, unit-tested. */
+    fun complete(text: String): Boolean {
+        val t = text.trim().lowercase().replace(Regex("[^a-z0-9' ]"), " ").replace(Regex("\\s+"), " ").trim()
+        if (t.isEmpty() || text.trim().endsWith("...") || text.trim().endsWith(",")) return false
+        val last = t.substringAfterLast(' ')
+        if (last in TRAIL) return false
+        return t.split(' ').size >= 2 || Regex("^(yes|yeah|yep|no|nope|nah|sure|okay|ok|thanks|stop|done|perfect|cool|right|correct)$").matches(t)
+    }
     /** Is this bit of audio him talking (well above the room's background)? */
     fun voiced(rms: Float, floor: Float) = rms > maxOf(0.012f, floor * 2.5f)
     /** Use the early read only if the confirmed stretch isn't meaningfully longer than what was read (no words after the pause). */

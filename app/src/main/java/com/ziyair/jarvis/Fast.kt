@@ -36,6 +36,63 @@ object Fast {
         return null
     }
 
+    // ---------------- reminders, set right on the phone ----------------
+    private val NUMW = mapOf("a" to 1, "an" to 1, "one" to 1, "two" to 2, "three" to 3, "four" to 4, "five" to 5, "six" to 6, "seven" to 7, "eight" to 8,
+        "nine" to 9, "ten" to 10, "eleven" to 11, "twelve" to 12, "fifteen" to 15, "twenty" to 20, "thirty" to 30, "forty" to 40, "forty five" to 45, "half an" to 0, "half a" to 0)
+
+    /**
+     * "remind me to call mom at 5", "remind me at 5 30 pm to grab diapers", "remind me in 20 minutes to flip the laundry",
+     * "remind me tomorrow at 9 to call the doctor". When it fires, and what. Null if there's no clear time (Claude asks).
+     * [t] is normalised text. Pure, unit-tested.
+     */
+    fun reminder(t: String, now: java.util.Calendar): Pair<Long, String>? {
+        if (!t.startsWith("remind me ")) return null
+        if (Regex("\\b(every|each|daily|weekly)\\b").containsMatchIn(t)) return null   // repeating reminders go to Claude
+        var s = t.removePrefix("remind me ").trim()
+        val tomorrow = Regex("\\btomorrow\\b").containsMatchIn(s); val tonight = Regex("\\b(tonight|this evening)\\b").containsMatchIn(s)
+        s = s.replace(Regex("\\b(tomorrow|tonight|this evening|today)\\b"), " ").replace(Regex("\\s+"), " ").trim()
+        val at = (now.clone() as java.util.Calendar).apply { set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }
+        var what: String
+        val inRe = Regex("\\bin (\\d{1,3}|${NUMW.keys.joinToString("|")}) ?(minutes?|mins?|hours?|hrs?)\\b")
+        val atRe = Regex("\\bat (\\d{1,2})(?: ?(\\d{2}))?(?: ?(am|pm|a m|p m|o'?clock))?\\b")
+        val i = inRe.find(s); val a = atRe.find(s)
+        when {
+            i != null && !tomorrow -> {
+                val q = i.groupValues[1]; val n = q.toIntOrNull() ?: NUMW[q] ?: return null
+                val mins = if (i.groupValues[2].startsWith("h")) (if (q.startsWith("half")) 30 else n * 60) else (if (q.startsWith("half")) 0 else n)
+                if (mins <= 0 || mins > 24 * 60) return null
+                at.add(java.util.Calendar.MINUTE, mins); what = s.removeRange(i.range)
+            }
+            a != null -> {
+                var h = a.groupValues[1].toInt(); val m = a.groupValues[2].toIntOrNull() ?: 0
+                val ap = a.groupValues[3].replace(" ", "")
+                if (h !in 1..23 || m !in 0..59) return null
+                when {
+                    ap == "pm" && h < 12 -> h += 12
+                    ap == "am" && h == 12 -> h = 0
+                    ap.isEmpty() || ap.startsWith("o") -> if (h <= 12) {
+                        // no am or pm: tonight means evening; tomorrow means a sensible daytime hour; otherwise the next time it comes round
+                        if (tonight && h < 12) h += 12
+                        else if (tomorrow) { if (h <= 6) h += 12 }
+                        else {
+                            // the next time it comes round today (morning, then evening); if both have passed, tomorrow
+                            val am = h % 12
+                            val hit = listOf(am, am + 12).firstOrNull { hh -> (at.clone() as java.util.Calendar).apply { set(java.util.Calendar.HOUR_OF_DAY, hh); set(java.util.Calendar.MINUTE, m) }.timeInMillis > now.timeInMillis }
+                            h = hit ?: if (am in 7..11) am else am + 12
+                        }
+                    }
+                }
+                at.set(java.util.Calendar.HOUR_OF_DAY, h % 24); at.set(java.util.Calendar.MINUTE, m)
+                if (tomorrow) at.add(java.util.Calendar.DAY_OF_YEAR, 1) else if (at.timeInMillis <= now.timeInMillis) at.add(java.util.Calendar.DAY_OF_YEAR, 1)
+                what = s.removeRange(a.range)
+            }
+            else -> return null
+        }
+        what = what.replace(Regex("\\s+"), " ").trim().removePrefix("to ").removePrefix("that ").removeSuffix(" to").trim()
+        if (what.split(" ").size < 2 || what.length < 4) return null
+        return at.timeInMillis to what
+    }
+
     // ---------------- actions done right on the phone, no trip to Claude ----------------
     sealed class Direct {
         data class Open(val app: String) : Direct()
