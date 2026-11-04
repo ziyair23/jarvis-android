@@ -171,4 +171,10 @@ class AdvancedTest {
         assertFalse(EarlyRead.complete("Remind me to")); assertFalse(EarlyRead.complete("Can you text my")); assertFalse(EarlyRead.complete("so um"))
         assertFalse(EarlyRead.complete("I was thinking,")); assertFalse(EarlyRead.complete("hmm"))
     }
+
+    @Test fun doesntCutHimOffWhileHesGettingGoing() {
+        assertFalse(EarlyRead.complete("Okay, so it")); assertFalse(EarlyRead.complete("and then he"))
+        assertFalse(EarlyRead.complete("So yeah")); assertTrue(EarlyRead.complete("okay thanks"))
+        assertTrue(EarlyRead.complete("Can you set a timer for ten minutes"))
+    }
 }

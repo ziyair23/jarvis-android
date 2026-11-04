@@ -58,6 +58,8 @@ object Music {
         JarvisService.musicFocus?.invoke(false)
         Thread.sleep(250)
         Trace.log(context, "music", "was on \"$before\", asking for \"$query\"")
+        // look up the exact song in the background meanwhile, so the next way is ready at once if the first one stalls
+        val idAhead = if (pkg == Actions.YT_MUSIC) java.util.concurrent.Executors.newSingleThreadExecutor().let { ex -> ex.submit<String?> { Apps.youtubeId(query) }.also { ex.shutdown() } } else null
         // 0. the same "play this" request Google Assistant sends: the app searches and plays the top result itself
         if (Settings.canDrawOverlays(context)) try {
             val i = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).setPackage(pkg)
@@ -68,7 +70,7 @@ object Music {
             if (i.resolveActivity(context.packageManager) != null) {
                 context.startActivity(i)
                 Trace.log(context, "music", "asked $name to play \"$query\" (assistant request)")
-                if (started(context, pkg, before, 7000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
+                if (started(context, pkg, before, 4000, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
                 Trace.log(context, "music", "still playing \"${title(Apps.player(context, pkg))}\", trying the next way")
             }
         } catch (e: Exception) { Trace.log(context, "music", "assistant request failed: ${e.message}") }
@@ -91,7 +93,7 @@ object Music {
         // 2. open the exact song; needs the phone unlocked
         if (!Settings.canDrawOverlays(context)) return Actions.NEED_OPEN_APPS
         Trace.log(context, "music", "opening the song directly")
-        val id = if (pkg == Actions.YT_MUSIC) Apps.youtubeId(query) else null
+        val id = try { idAhead?.get(4, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) { null }
         val uri = when {
             id != null -> Uri.parse("https://music.youtube.com/watch?v=$id")
             pkg == Actions.SPOTIFY -> Uri.parse("spotify:search:" + Uri.encode(query))

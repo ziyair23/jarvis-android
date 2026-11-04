@@ -336,8 +336,13 @@ object EarlyRead {
     fun complete(text: String): Boolean {
         val t = text.trim().lowercase().replace(Regex("[^a-z0-9' ]"), " ").replace(Regex("\\s+"), " ").trim()
         if (t.isEmpty() || text.trim().endsWith("...") || text.trim().endsWith(",")) return false
-        val last = t.substringAfterLast(' ')
+        val words = t.split(' ')
+        val last = words.last()
         if (last in TRAIL) return false
+        // "okay, so it", "and then he": still getting going
+        if (words.size >= 2 && words[words.size - 2] in setOf("so", "and", "but", "because", "then", "if", "when")) return false
+        if (words.size < 5 && Regex("^(okay|ok|so|well|alright|all right|um|uh|yeah so|and)\\b").containsMatchIn(t) && words.size > 1 &&
+            !Regex("^(okay|ok|alright|all right) (thanks|thank you|cool|perfect|good|great|bet|got it)$").matches(t)) return false
         return t.split(' ').size >= 2 || Regex("^(yes|yeah|yep|no|nope|nah|sure|okay|ok|thanks|stop|done|perfect|cool|right|correct)$").matches(t)
     }
     /** Is this bit of audio him talking (well above the room's background)? */

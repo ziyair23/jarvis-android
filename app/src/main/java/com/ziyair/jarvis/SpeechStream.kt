@@ -98,6 +98,7 @@ class SpeechStream(
                     if (!first) written += pause(t, a.rate)
                     val pcm = trimTail(trimHead(a.pcm, a.rate), a.rate)
                     Orb.voiceAdd(pcm)
+                    if (first) Trace.log(context, "voice", "first word out")
                     first = false
                     var off = 0
                     while (off < pcm.size && !cancelled) {
