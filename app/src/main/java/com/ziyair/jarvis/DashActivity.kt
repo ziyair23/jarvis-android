@@ -77,6 +77,7 @@ class DashActivity : Activity() {
                 .put("mealPlan", Meals.plan(ctx))
                 .put("upgrades", org.json.JSONArray(Upgrade.waiting(ctx))).put("upgrading", Upgrade.running).put("skills", Skills.all(ctx)).put("recallCount", Timeline.count(ctx))
                 .put("scan", org.json.JSONObject().put("running", Scan.running).put("step", Scan.step).put("report", Scan.report(ctx)))
+                .put("babyPatterns", try { BabyInsights.json(ctx) } catch (_: Exception) { org.json.JSONObject() })
                 .put("dashToday", try { DashDays.on(ctx).name } catch (_: Exception) { "NO" })
                 .put("dayPlan", try { DayPlan.card(ctx).takeIf { System.currentTimeMillis() - it.optLong("at") < 60_000L } ?: DayPlan.save(ctx) } catch (_: Exception) { org.json.JSONObject() })
                 .put("mind", try { Mind.json(ctx) } catch (e: Exception) { Trace.log(ctx, "dash", "mind failed: ${e.message}"); org.json.JSONObject() })

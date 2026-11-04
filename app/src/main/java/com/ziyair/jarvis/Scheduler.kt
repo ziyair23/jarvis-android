@@ -137,6 +137,8 @@ object Scheduler {
 
     fun momentLine(context: Context, m: String): String {
         val s = if (Math.random() < .75) "sir" else "boss"
+        // shift heads-ups only on days he's actually dashing
+        if (m.startsWith("lunch") || m.startsWith("dinner")) { if (!(try { DashDays.dashing(context) } catch (_: Exception) { true })) return "" }
         val roads = if (m.endsWith("_soon") && m != "bed_soon") Weather.roadsNote(context) else ""
         return when (m) {
             "lunch_soon" -> "Lunch rush starts in fifteen minutes, $s.$roads"

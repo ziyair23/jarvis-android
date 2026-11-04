@@ -24,7 +24,7 @@ object Agents {
         "log_baby", "baby_status", "log_earnings", "earnings_summary", "log_expense", "play_music", "navigate",
         "lights", "open_app", "set_alarm", "journal_add", "pursuit_add", "judge_offer", "draft_text", "meal_tonight",
         // the advanced ones: whole jobs, follow-through, and what his own mind has been up to
-        "dash_day", "scan_phone", "recall", "run_skill", "upgrade_now", "upgrades_list", "upgrade_decide", "run_job", "follow_up_add", "follow_ups_list", "follow_up_done", "mind_recent")
+        "dash_day", "scan_phone", "recall", "baby_patterns", "run_skill", "upgrade_now", "upgrades_list", "upgrade_decide", "run_job", "follow_up_add", "follow_ups_list", "follow_up_done", "mind_recent")
 
     /** Lights an agent up in the brain for a moment when its skill was used directly. */
     fun flash(id: String, ms: Long = 1600) { val t = System.currentTimeMillis(); active[id] = t; Thread { try { Thread.sleep(ms) } catch (_: Exception) {}; active.remove(id, t) }.start() }
@@ -42,7 +42,7 @@ object Agents {
         "Be exact with numbers. Log what he says, then answer with the figure that matters (today, the week, how far to the goal).")
 
     val FAMILY = Def("family", "Family and home", "Ziyair's feeds, diapers and sleep, the baby journal, the lights and the house.",
-        setOf("log_baby", "baby_status", "set_feed_interval", "journal_add", "journal_read", "remind_at_home", "lights",
+        setOf("log_baby", "baby_status", "baby_patterns", "set_feed_interval", "journal_add", "journal_read", "remind_at_home", "lights",
             "house_speaker", "set_home_wifi"),
         "Log baby events the moment he mentions them. Speech-to-text often mangles the baby's name: it's always Ziyair.")
 

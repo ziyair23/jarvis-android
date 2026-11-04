@@ -45,6 +45,7 @@ object Team {
         add("About him") { p.notes.take(400) }
         add("Dashing") { DashDays.line(c) }
         add("Ziyair") { Baby.status(c) }
+        add("Ziyair's patterns") { BabyInsights.forJarvis(c).substringBefore(" (Patterns") }
         add("Earned today") { Earnings.money(Earnings.today(c)) }
         add("Earnings") { Earnings.summary(c) }
         add("Goal") { Earnings.goal(p).takeIf { it > 0 }?.let { "${Earnings.money(it)} for ${Earnings.goalName(p)}" } }

@@ -232,4 +232,17 @@ class AdvancedTest {
         assertEquals("pressing", Mood.word(Mood.score(2, 2, 2, 5, true).first))
         assertTrue(Mood.score(5, 5, 5, 9, true).first <= 1f)
     }
+
+    @Test fun learnsZiyairsPatterns() {
+        val now = java.util.Calendar.getInstance().apply { clear(); set(2026, 10, 3, 12, 0) }.timeInMillis
+        // last week every 3 hours, this week every 2.4 hours: feeds bunching up
+        val feeds = ArrayList<Long>()
+        var t = now - 14 * D; while (t < now - 7 * D) { feeds.add(t); t += (3 * H) }
+        t = now - 7 * D; while (t < now) { feeds.add(t); t += (2.4 * H).toLong() }
+        val l = BabyInsights.insights(feeds, now, "Ziyair")
+        assertTrue(l.toString(), l[0].startsWith("Ziyair's eating about 10.0 times a day"))
+        assertTrue(l.toString(), l.any { it.contains("growth spurt") })
+        assertTrue(BabyInsights.insights(listOf(now), now, "Ziyair")[0].contains("about a week"))
+    }
+    private val D = 86_400_000L
 }
