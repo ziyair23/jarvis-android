@@ -36,6 +36,14 @@ object Fast {
         return null
     }
 
+    /** A music result as Jarvis says it out loud (the raw result has notes for Claude in it). Pure. */
+    fun spokenMusic(out: String, what: String): String = when {
+        out.contains("wouldn't start it from the lock screen") -> "Unlock your phone and ask again, sir; the music app won't start from the lock screen."
+        out.contains("without screen control") -> "I opened $what, but I need screen control to press play. Turn on Allow screen control in the Jarvis app."
+        out.contains("wouldn't start") -> "I opened $what, but it won't start on its own. Tap play this once."
+        else -> out.substringBefore(" Tell him").substringBefore(" Ask him").trim()
+    }
+
     // ---------------- reminders, set right on the phone ----------------
     private val NUMW = mapOf("a" to 1, "an" to 1, "one" to 1, "two" to 2, "three" to 3, "four" to 4, "five" to 5, "six" to 6, "seven" to 7, "eight" to 8,
         "nine" to 9, "ten" to 10, "eleven" to 11, "twelve" to 12, "fifteen" to 15, "twenty" to 20, "thirty" to 30, "forty" to 40, "forty five" to 45, "half an" to 0, "half a" to 0)

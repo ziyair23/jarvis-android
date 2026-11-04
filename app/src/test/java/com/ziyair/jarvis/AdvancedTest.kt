@@ -280,4 +280,10 @@ class AdvancedTest {
         assertTrue(SecondOpinion.careful("why is he throwing up so much")); assertTrue(SecondOpinion.careful("can I afford a 1400 rent"))
         assertFalse(SecondOpinion.careful("what's the best pizza place"))
     }
+
+    @Test fun waitsWhenTheSongHasntBeenNamedYet() {
+        assertFalse(EarlyRead.complete("Can you play?")); assertFalse(EarlyRead.complete("text my")); assertFalse(EarlyRead.complete("remind me"))
+        assertTrue(EarlyRead.complete("Play Happy by NF")); assertTrue(EarlyRead.complete("pause the music"))
+        assertEquals("I opened aad, but it won't start on its own. Tap play this once.", Fast.spokenMusic("Opened aad in YouTube Music but it wouldn't start, even after I pressed play. Tell him plainly he'll need to tap it this once.", "aad"))
+    }
 }

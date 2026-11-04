@@ -383,6 +383,9 @@ object EarlyRead {
         val words = t.split(' ')
         val last = words.last()
         if (last in TRAIL) return false
+        // "can you play", "text my", "remind me to": the thing he wants hasn't come yet
+        if (last in setOf("play", "text", "call", "open", "set", "add", "remind", "send", "tell", "show", "put", "turn", "get", "find", "check", "navigate",
+                "message", "start", "search", "ask", "buy", "order", "make", "give", "take", "me", "us")) return false
         // "okay, so it", "and then he": still getting going
         if (words.size >= 2 && words[words.size - 2] in setOf("so", "and", "but", "because", "then", "if", "when")) return false
         if (words.size < 5 && Regex("^(okay|ok|so|well|alright|all right|um|uh|yeah so|and)\\b").containsMatchIn(t) && words.size > 1 &&

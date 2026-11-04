@@ -94,6 +94,7 @@ object Music {
         if (!Settings.canDrawOverlays(context)) return Actions.NEED_OPEN_APPS
         Trace.log(context, "music", "opening the song directly")
         val id = try { idAhead?.get(4, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) { null }
+        if (pkg == Actions.YT_MUSIC) Trace.log(context, "music", if (id != null) "found the exact song" else "couldn't find the song's link, searching in the app")
         val uri = when {
             id != null -> Uri.parse("https://music.youtube.com/watch?v=$id")
             pkg == Actions.SPOTIFY -> Uri.parse("spotify:search:" + Uri.encode(query))
@@ -114,7 +115,8 @@ object Music {
             round++
             val c = Apps.player(context, pkg)
             val t = title(c)
-            val his = c != null && t.isNotBlank() && (looksLike(nowSong(c), query) || (before.isNotBlank() && t != before) || before.isBlank())
+            // only HIS song counts: when we don't know what was on before, the title has to look like what he asked for
+            val his = c != null && t.isNotBlank() && (looksLike(nowSong(c), query) || (before.isNotBlank() && t != before))
             if (playing(c) && his) {
                 Trace.log(context, "music", "playing \"$t\" after $round tries")
                 return "Playing ${titleNow(context, pkg, query)} on $name."
