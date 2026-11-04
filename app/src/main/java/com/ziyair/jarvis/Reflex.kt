@@ -35,6 +35,16 @@ object Reflex {
     fun handle(c: Context, text: String): Hit? {
         if (!Brain(c).config().optBoolean("reflexes", true)) return null
         val t = norm(text)
+        // "remind me to ... at 5": set right here, however long the sentence
+        if (Brain(c).config().optBoolean("fast_actions", true)) try { Fast.reminder(t, Calendar.getInstance())?.let { (at, what) ->
+            val label = what.replaceFirstChar { it.uppercase() }
+            Scheduler.add(c, at, "Sir, a reminder: $what", loud = false, label = label)
+            Agents.flash("planner")
+            val day = if (Calendar.getInstance().apply { timeInMillis = at }.get(Calendar.DAY_OF_YEAR) != Calendar.getInstance().get(Calendar.DAY_OF_YEAR)) " tomorrow" else ""
+            val hit = Hit("Done. I'll remind you at ${Scheduler.clock(at)}$day.")
+            val p = Prefs(c); p.addTurn("user", text); p.addTurn("assistant", hit.reply)
+            return hit
+        } } catch (e: Exception) { Problems.log(c, "reminder reflex: ${e.message}") }
         if (t.isEmpty() || t.split(" ").size > 9) return null
         val hit = try { match(c, t) } catch (e: Exception) { Problems.log(c, "reflex: ${e.message}"); null } ?: return null
         // Claude still sees it in the conversation, so "and turn it up a bit" afterwards makes sense to him
