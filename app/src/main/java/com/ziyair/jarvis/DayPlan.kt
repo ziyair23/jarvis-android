@@ -93,7 +93,8 @@ object DayPlan {
         val now = System.currentTimeMillis()
         val list = pick(items(c), now)
         val shop = try { Lists.all(Prefs(c)).optJSONArray("list")?.let { a -> (0 until a.length()).map { a.getJSONObject(it) }.filter { !it.optBoolean("done") }.map { it.optString("t") } } } catch (_: Exception) { null }.orEmpty()
-        val card = JSONObject().put("at", now).put("list", JSONArray(shop.takeLast(12))).put("headline", if (Mind.thinking) "Thinking things over…" else headline(last))
+        val mood = Mood.now(c)
+        val card = JSONObject().put("at", now).put("list", JSONArray(shop.takeLast(12))).put("mood", mood.first.toDouble()).put("moodWhy", JSONArray(mood.second)).put("headline", if (Mind.thinking) "Thinking things over…" else headline(last))
             .put("thoughtAt", last?.optLong("at") ?: 0L)
             .put("items", JSONArray().apply { list.forEach { put(JSONObject().put("t", clock.format(Date(it.at))).put("x", it.text)) } })
         Prefs(c).sp.edit().putString("lock_card", card.toString()).apply()
@@ -101,4 +102,35 @@ object DayPlan {
     }
 
     fun card(c: Context): JSONObject = try { JSONObject(Prefs(c).sp.getString("lock_card", "{}")) } catch (_: Exception) { JSONObject() }
+}
+
+/**
+ * The brain's mood: how his day actually feels, from what Jarvis already knows. Calm and deep when things are on
+ * track; warmer and quicker when a bill is due, something slipped, the night was rough or the day is packed.
+ */
+object Mood {
+    /** 0 = calm, 1 = pressing, and the reasons. Pure, unit-tested. */
+    fun score(billsSoon: Int, overdue: Int, nightFeeds: Int, eventsToday: Int, behindGoal: Boolean): Pair<Float, List<String>> {
+        var m = 0f; val why = ArrayList<String>()
+        if (billsSoon > 0) { m += minOf(0.5f, 0.25f * billsSoon); why.add("bill due soon") }
+        if (overdue > 0) { m += minOf(0.3f, 0.15f * overdue); why.add("something slipped") }
+        if (nightFeeds >= 2) { m += 0.2f; why.add("rough night") }
+        if (eventsToday >= 4) { m += 0.15f; why.add("packed day") }
+        if (behindGoal) { m += 0.1f; why.add("behind today") }
+        return m.coerceIn(0f, 1f) to why
+    }
+
+    fun word(m: Float) = when { m < 0.2f -> "steady"; m < 0.5f -> "busy"; else -> "pressing" }
+
+    fun now(c: Context): Pair<Float, List<String>> = try {
+        val now = System.currentTimeMillis()
+        val bills = Bills.all(c).let { a -> (0 until a.length()).map { a.getJSONObject(it) }.count { !it.optBoolean("paid") && it.optLong("due") in (now - 86_400_000L)..(now + 2 * 86_400_000L) } }
+        val overdue = Loops.open(Loops.all(c)).count { it.optLong("due") < now }
+        val midnight = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }.timeInMillis
+        val feeds = Baby.all(Prefs(c)).let { a -> (0 until a.length()).map { a.getJSONObject(it) }.count { it.optString("k") == "feed" && it.optLong("at") in midnight..(midnight + 5 * 3600_000L) } }
+        val events = DayPlan.pick(DayPlan.items(c), now, 20).size
+        val p = Prefs(c)
+        val behind = DashDays.dashing(c) && Calendar.getInstance().get(Calendar.HOUR_OF_DAY) >= 20 && Earnings.today(c) < p.sp.getFloat("daily_target", 120f) * 0.7
+        score(bills, overdue, feeds, events, behind)
+    } catch (_: Exception) { 0f to emptyList() }
 }

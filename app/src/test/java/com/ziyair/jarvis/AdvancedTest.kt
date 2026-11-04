@@ -223,4 +223,13 @@ class AdvancedTest {
         assertNull(Skills.match(list, "heading out to the store later"))
         for (t in listOf("send_text", "reply_message", "call", "phone_task", "bill_paid", "forget")) assertFalse(t in Skills.SAFE_STEPS)
     }
+
+    @Test fun brainMoodFollowsHisDay() {
+        assertEquals(0f, Mood.score(0, 0, 0, 1, false).first, 0.001f)
+        assertEquals("steady", Mood.word(Mood.score(0, 0, 0, 1, false).first))
+        val busy = Mood.score(1, 0, 2, 0, false)
+        assertEquals("busy", Mood.word(busy.first)); assertTrue(busy.second.contains("rough night"))
+        assertEquals("pressing", Mood.word(Mood.score(2, 2, 2, 5, true).first))
+        assertTrue(Mood.score(5, 5, 5, 9, true).first <= 1f)
+    }
 }
