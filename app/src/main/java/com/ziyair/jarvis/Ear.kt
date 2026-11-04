@@ -38,6 +38,8 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
         fun onHeard(text: String, speechMs: Long, decodeMs: Long)
         fun onNoise()
         fun onEarFailed(why: String)
+        /** His words so far, read the moment he paused (he may still be going). */
+        fun onEarly(text: String) {}
     }
 
     enum class Mode { SLEEP, LISTEN, SPEAKING, MUTE, HOLD }
@@ -151,7 +153,7 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                                     quietMs += CHUNK * 1000 / RATE
                                     if (spec == null && quietMs >= earlyMs && uttN > RATE * 3 / 10) {
                                         val snap = utt.copyOf(uttN); specN = uttN
-                                        spec = asr.submit<String> { decode(snap) }
+                                        spec = asr.submit<String> { decode(snap).also { t -> if (t.isNotBlank()) main.post { events.onEarly(t) } } }
                                     }
                                     // he's clearly finished (a complete thought, not "remind me to... um"): answer now instead of
                                     // waiting out the full second of silence
