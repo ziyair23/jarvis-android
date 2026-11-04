@@ -40,6 +40,8 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
         fun onEarFailed(why: String)
         /** His words so far, read the moment he paused (he may still be going). */
         fun onEarly(text: String) {}
+        /** He started talking over Jarvis: stop and listen (the ear is already listening, with his first words kept). */
+        fun onBargeIn() {}
     }
 
     enum class Mode { SLEEP, LISTEN, SPEAKING, MUTE, HOLD }
@@ -96,6 +98,9 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
             // early read: the moment he pauses, start reading what he said; if he was done, the words are ready when the pause is confirmed
             val earlyMs = cfg.optInt("ear_early_ms", 260)
             val fastEndMs = cfg.optInt("ear_fast_end_ms", 450)
+            val bargeOn = cfg.optBoolean("barge_in", true)
+            val barge = Barge(CHUNK * 1000 / RATE, cfg.optDouble("barge_ratio", 3.0).toFloat(), cfg.optInt("barge_ms", 320))
+            val ring = FloatArray(RATE); var ringPos = 0
             var endedEarly = false
             var utt = FloatArray(RATE * 8); var uttN = 0
             var quietMs = 0; var floor = 0.01f
@@ -119,8 +124,24 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                         modeChanged = false
                         if (m == Mode.LISTEN) { vad.reset(); speechAt = 0L; resetUtt() }
                         if ((m == Mode.SLEEP || m == Mode.SPEAKING) && last != Mode.SLEEP && last != Mode.SPEAKING) { wake.reset(); wake.gate.reset() }
+                        if (m == Mode.SPEAKING) barge.reset()
                         wake.sensitive(m != Mode.SPEAKING)
                         last = m
+                    }
+                    // talking over him: while he speaks, listen for Marcus's own voice rising clearly above the echo of his
+                    if (m == Mode.SPEAKING && bargeOn) {
+                        var sum = 0.0
+                        for (i in 0 until CHUNK) { val v = chunk[i] / 32768f; f[i] = v; sum += v * v; ring[ringPos] = v; ringPos = (ringPos + 1) % ring.size }
+                        val play = Orb.voiceLevel()
+                        if (play >= 0f && barge.step(sqrt(sum / CHUNK).toFloat(), play)) {
+                            // keep the last moment of what he said so his first words aren't lost
+                            val n = minOf(pre.size, ring.size)
+                            for (i in 0 until n) pre[i] = ring[(ringPos - n + i + ring.size) % ring.size]
+                            mode = Mode.LISTEN; last = Mode.LISTEN; speechStarted = false; vad.reset(); speechAt = 0L
+                            uttN = 0; quietMs = 0; spec = null; specN = 0; preN = n
+                            main.post { events.onBargeIn() }
+                            continue
+                        }
                     }
                     when (m) {
                         Mode.SLEEP, Mode.SPEAKING -> if ((if (m == Mode.SLEEP) wake.gate.feed(chunk) else wake.feed(chunk))) {
@@ -328,6 +349,29 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
 }
 
 /** The early-read rules, kept pure so they're unit-tested. */
+/**
+ * Hearing him talk over Jarvis, with the mic as it is (no call-style audio). Jarvis knows how loud his own voice is at
+ * every moment, so it learns how much of it comes back into the mic, and only a voice clearly louder than that echo,
+ * held for about a third of a second, counts as Marcus cutting in. Pure, unit-tested.
+ */
+class Barge(private val chunkMs: Int, private val ratio: Float = 3f, private val holdMs: Int = 320) {
+    private var t = 0; private var gain = 0f; private var run = 0
+    fun reset() { t = 0; gain = 0f; run = 0 }
+    /** [rms] is the mic level, [play] how loud Jarvis is right now (0 to 1). True = he's cutting in. */
+    fun step(rms: Float, play: Float): Boolean {
+        t += chunkMs
+        if (play >= 0.1f) {
+            val r = rms / play
+            // the first moment of each answer teaches the echo level; after that it adjusts slowly, ignoring his voice
+            if (t <= 900 || gain == 0f) gain = maxOf(gain, r) else if (r < gain * 2f) gain = gain * 0.95f + r * 0.05f
+        }
+        if (t <= 900) return false
+        val loud = rms > maxOf(0.035f, gain * play * ratio + 0.02f)
+        run = if (loud) run + chunkMs else 0
+        return run >= holdMs
+    }
+}
+
 object EarlyRead {
     private val TRAIL = setOf("and", "or", "but", "so", "to", "the", "a", "an", "for", "with", "my", "at", "about", "of", "in", "on", "is", "if",
         "because", "cause", "um", "uh", "uhm", "hmm", "then", "can", "could", "would", "should", "will", "i", "we", "you", "he", "she", "they",

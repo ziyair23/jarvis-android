@@ -345,6 +345,18 @@ class JarvisService : Service() {
             }
             handle(text, followUp = !earFirst)
         }
+        override fun onBargeIn() {
+            if (!speaking) { if (!busy) ear?.set(Ear.Mode.SLEEP); return }
+            Trace.log(this@JarvisService, "interrupt", "he talked over me: stopped and listening")
+            speaking = false
+            hush()
+            thinking = false
+            inConvo = true
+            turnId++
+            lastSpokeEnd = System.currentTimeMillis()
+            openWindow(30)
+            earListen(false)
+        }
         override fun onEarly(text: String) { try { thinkAhead(text) } catch (e: Exception) { Problems.log(this@JarvisService, "think ahead: ${e.message}") } }
         override fun onNoise() {
             if (!earListening) return
