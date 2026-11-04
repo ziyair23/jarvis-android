@@ -198,4 +198,29 @@ class AdvancedTest {
         val b2 = Barge(80); repeat(12) { b2.step(0.05f, 0.5f) }
         assertFalse(b2.step(0.3f, 0.5f)); assertFalse(b2.step(0.05f, 0.5f))
     }
+
+    @Test fun totalRecallFindsThePast() {
+        val d = 86_400_000L; val now = 1_700_000_000_000L
+        fun e(daysAgo: Int, k: String, t: String) = JSONObject().put("at", now - daysAgo * d).put("k", k).put("t", t)
+        val ev = listOf(e(20, "him", "Ziyair feels hot, I think he has a temperature"), e(3, "baby", "Ziyair: feed"), e(2, "message", "From Jesse (Messages): Saturday is cancelled, sorry man"),
+            e(1, "baby", "Ziyair: feed"), e(1, "purchase", "Paid $42.10 Shell (gas)"), e(0, "him", "how was your day"))
+        assertEquals("fever finds 'temperature'", "him", Timeline.search(ev, "when did he last have a fever").first().optString("k"))
+        assertTrue(Timeline.search(ev, "what did Jesse say about Saturday").first().optString("t").contains("cancelled"))
+        assertEquals("newest first among equals", now - d, Timeline.search(ev, "feeds").first().optLong("at"))
+        assertEquals(1, Timeline.search(ev, "feed", from = now - d - 1000).size)
+        assertTrue(Timeline.search(ev, "gas").first().optString("t").contains("Shell"))
+        assertEquals("feed", Timeline.stem("feeding")); assertEquals("feed", Timeline.stem("feeds"))
+    }
+
+    @Test fun skillsOnlyUseSafeSteps() {
+        val steps = JSONArray().put(JSONObject().put("tool", "driving_mode").put("input", JSONObject().put("on", true)))
+            .put(JSONObject().put("tool", "send_text").put("input", JSONObject())).put(JSONObject().put("tool", "call"))
+        val ok = Skills.clean(steps)!!
+        assertEquals(1, ok.length()); assertEquals("driving_mode", ok.getJSONObject(0).optString("tool"))
+        assertNull(Skills.clean(JSONArray().put(JSONObject().put("tool", "phone_task"))))
+        val list = JSONArray().put(JSONObject().put("name", "Heading out").put("phrases", JSONArray().put("heading out").put("i'm heading out")))
+        assertEquals("Heading out", Skills.match(list, "Jarvis, I'm heading out.")?.optString("name"))
+        assertNull(Skills.match(list, "heading out to the store later"))
+        for (t in listOf("send_text", "reply_message", "call", "phone_task", "bill_paid", "forget")) assertFalse(t in Skills.SAFE_STEPS)
+    }
 }

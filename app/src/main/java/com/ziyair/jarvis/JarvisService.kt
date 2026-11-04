@@ -98,6 +98,7 @@ class JarvisService : Service() {
         // whenever he unlocks the phone, see if there's a new build to slip in (checks GitHub at most hourly)
         registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT))
         registerReceiver(screenOn, android.content.IntentFilter(Intent.ACTION_SCREEN_ON))
+        thread { try { Timeline.backfill(this) } catch (_: Exception) {} }
         main.removeCallbacks(mindTick); main.postDelayed(mindTick, 60_000L)
         registerReceiver(batteryWatch, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         try { getSystemService(android.net.ConnectivityManager::class.java).registerNetworkCallback(
@@ -174,7 +175,7 @@ class JarvisService : Service() {
     }
 
     private val unlocked = object : android.content.BroadcastReceiver() {
-        override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy); Coach.maybeReview(this@JarvisService); LifeWatch.maybeSweep(this@JarvisService); Supplies.maybeCheck(this@JarvisService); Meals.maybePlanWeek(this@JarvisService); Mind.maybeThink(this@JarvisService)
+        override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy); Coach.maybeReview(this@JarvisService); LifeWatch.maybeSweep(this@JarvisService); Supplies.maybeCheck(this@JarvisService); Meals.maybePlanWeek(this@JarvisService); Mind.maybeThink(this@JarvisService); Upgrade.maybeReview(this@JarvisService)
             Loops.sweep(this@JarvisService)?.let { line -> main.postDelayed({ sayFirst(line, thenListen = line.endsWith("?")) }, 2500) } } }
     }
 

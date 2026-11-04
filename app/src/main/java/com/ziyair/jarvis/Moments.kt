@@ -15,6 +15,7 @@ object Journal {
 
     fun add(context: Context, text: String): String {
         val p = Prefs(context); val a = all(p)
+        Timeline.add(context, "journal", text)
         a.put(JSONObject().put("at", System.currentTimeMillis()).put("t", text.trim()))
         val keep = JSONArray(); for (i in maxOf(0, a.length() - 1000) until a.length()) keep.put(a.get(i))
         p.sp.edit().putString("journal", keep.toString()).apply()

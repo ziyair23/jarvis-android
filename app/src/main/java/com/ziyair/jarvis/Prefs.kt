@@ -8,6 +8,7 @@ import org.json.JSONObject
 /** Everything Jarvis keeps lives only on this phone, in the app's private storage. */
 class Prefs(context: Context) {
     val sp: SharedPreferences = context.getSharedPreferences("jarvis", Context.MODE_PRIVATE)
+    private val app: Context = context.applicationContext ?: context
 
     var claudeKey: String
         get() = sp.getString("claude_key", "") ?: ""
@@ -117,6 +118,7 @@ class Prefs(context: Context) {
     fun history(): JSONArray = try { JSONArray(sp.getString("history", "[]")) } catch (e: Exception) { JSONArray() }
 
     fun addTurn(role: String, content: String) {
+        Timeline.add(app, if (role == "user") "him" else "jarvis", content)
         val h = history()
         h.put(JSONObject().put("role", role).put("content", content).put("at", System.currentTimeMillis()))
         val trimmed = JSONArray()

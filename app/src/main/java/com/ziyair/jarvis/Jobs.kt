@@ -71,6 +71,7 @@ object Jobs {
             else "Sir, I did part of it: " + steps.filter { it.tool != "team_note" }.takeLast(3).joinToString(" ") { it.out.take(120) }
         val ms = System.currentTimeMillis() - t0
         save(c, goal, steps, summary, ms)
+        Timeline.add(c, "job", "$goal: $summary")
         Trace.log(c, "job", "\"${goal.take(100)}\" -> ${steps.size} steps, ${ms}ms: ${summary.take(200)}")
         return summary
     }

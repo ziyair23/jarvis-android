@@ -35,6 +35,8 @@ object Reflex {
     fun handle(c: Context, text: String): Hit? {
         if (!Brain(c).config().optBoolean("reflexes", true)) return null
         val t = norm(text)
+        // a skill he built: run it right here
+        try { Skills.match(Skills.all(c), t)?.let { s -> val r = Skills.run(c, s); val p = Prefs(c); p.addTurn("user", text); p.addTurn("assistant", r); return Hit(r) } } catch (_: Exception) {}
         // "remind me to ... at 5": set right here, however long the sentence
         if (Brain(c).config().optBoolean("fast_actions", true)) try { Fast.reminder(t, Calendar.getInstance())?.let { (at, what) ->
             val label = what.replaceFirstChar { it.uppercase() }

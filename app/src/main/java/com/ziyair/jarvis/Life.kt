@@ -47,6 +47,7 @@ object Earnings {
         val p = Prefs(context)
         val d = resolveDay(whichDay) ?: return "Couldn't tell which day that was."
         if (amount > 0 && d == day.format(java.util.Date())) try { DashDays.seen(context, "earnings logged") } catch (_: Exception) {}
+        Timeline.add(context, "earned", "${if (replace) "Day total set to" else "Earned"} ${money(amount)} dashing ($d)")
         val a = all(p)
         var total = amount
         val keep = JSONArray()
@@ -121,6 +122,7 @@ object Baby {
 
     fun log(context: Context, kindIn: String, minutesAgo: Double, note: String): String {
         val p = Prefs(context)
+        Timeline.add(context, "baby", "${p.babyName.ifBlank { "Baby" }}: $kindIn${if (note.isNotBlank()) " ($note)" else ""}", System.currentTimeMillis() - (minutesAgo * 60_000).toLong())
         val kind = kindIn.lowercase().let { when {
             it.startsWith("feed") || it.contains("bottle") || it.contains("ate") || it.contains("nurs") -> "feed"
             it.contains("diaper") || it.contains("poop") || it.contains("pee") -> "diaper"

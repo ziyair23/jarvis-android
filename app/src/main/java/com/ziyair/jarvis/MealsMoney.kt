@@ -143,6 +143,7 @@ object Spending {
         // banks often send "pending" then "posted": same amount and place within an hour is one purchase
         for (i in a.length() - 1 downTo maxOf(0, a.length() - 20)) { val o = a.getJSONObject(i)
             if (now - o.optLong("at") < 3600_000L && o.optDouble("a") == tx.amount && o.optString("m").equals(tx.merchant, true)) return }
+        Timeline.add(c, "purchase", "${if (tx.spend) "Paid" else "Money in"} ${money(tx.amount)} ${tx.merchant}")
         a.put(JSONObject().put("at", now).put("a", tx.amount).put("m", tx.merchant).put("c", if (tx.spend) category(tx.merchant) else "income").put("app", app.take(30)))
         val keep = JSONArray(); for (i in maxOf(0, a.length() - 1500) until a.length()) keep.put(a.get(i))
         Prefs(c).sp.edit().putString("spend_tx", keep.toString()).apply()
