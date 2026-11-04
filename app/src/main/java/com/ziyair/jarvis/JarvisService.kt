@@ -755,7 +755,7 @@ class JarvisService : Service() {
                 Trace.log(this, "ahead", "used: the answer was already on its way")
                 use.attach(toVoice ?: { _ -> }); use.decide(true)
                 use.done.await(90, java.util.concurrent.TimeUnit.SECONDS); use.reply.orEmpty()
-            } else brain.ask(text, followUp, toVoice) { if (!acked) main.post { ack() } }
+            } else brain.ask(text, followUp, toVoice, onAck = { if (!acked) main.post { ack() } })
             Trace.log(this, "reply", "${System.currentTimeMillis() - t0}ms, tools ${bt.lastTools.joinToString(",").ifBlank { "none" }}: \"${reply.take(160)}\"")
             main.post {
                 if (turn != turnId) { live?.cancel(); Trace.log(this, "dropped", "cancelled while thinking"); return@post }   // he cancelled while it was thinking
