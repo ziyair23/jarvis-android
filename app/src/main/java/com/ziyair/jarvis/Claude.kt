@@ -79,7 +79,8 @@ object Claude {
         val sys = org.json.JSONArray().put(JSONObject().put("type", "text").put("text", system).put("cache_control", JSONObject().put("type", "ephemeral")))
         val msgs = org.json.JSONArray().put(JSONObject().put("role", "user").put("content", task))
         for (round in 1..maxRounds) {
-            val body = JSONObject().put("model", model).put("max_tokens", maxTokens).put("system", sys).put("tools", tools).put("messages", msgs)
+            val body = JSONObject().put("model", model).put("max_tokens", maxTokens).put("system", sys).put("messages", msgs)
+            if (tools.length() > 0) body.put("tools", tools)
             if (effort != null) smart(body, effort) else body.put("thinking", JSONObject().put("type", "disabled"))
             val resp = send(c, body) ?: return if (steps.isEmpty()) null else "" to steps
             Spend.record(c, cfg, model, resp.optJSONObject("usage"))

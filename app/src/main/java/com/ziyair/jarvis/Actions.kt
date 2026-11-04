@@ -121,6 +121,8 @@ class Actions(private val context: Context) {
         put(tool("journal_read", "Read back baby journal moments, optionally about something.", props("about" to str("Optional word to search")), listOf()))
         put(tool("answer_call", "Answer the phone call that's ringing right now.", props(), listOf()))
         put(tool("decline_call", "Decline the phone call that's ringing right now.", props(), listOf()))
+        put(tool("simulate", "Run a life simulation against his real numbers and days: 'what if I dash Saturdays too', 'what if we move to a 1,400 a month place', 'when do I get the Macan if I save 50 more a week'. Runs in the background and reports back.", props("question" to str("The what-if, with every detail he gave")), listOf("question")))
+        put(tool("self_check", "Check yourself now: your voice, ears, brain, reminders and permissions; fix what you can and report.", props(), listOf()))
         put(tool("baby_patterns", "Ziyair's patterns from his logged feeds and sleep: how often he eats now vs last week, his longest night stretch and where it's heading, signs of a growth spurt, the next checkup.", props(), listOf()))
         put(tool("run_skill", "Run one of the skills you built for yourself, by name.", props("name" to str("The skill's name")), listOf("name")))
         put(tool("upgrade_now", "Look back over the week and propose upgrades for yourself (new skills, lessons, things to build) for him to approve. When he says 'upgrade yourself' or 'get better'.", props(), listOf()))
@@ -282,6 +284,8 @@ class Actions(private val context: Context) {
             "judge_offer" -> OfferJudge.now(context)
             "recall" -> Timeline.recall(context, input)
             "baby_patterns" -> BabyInsights.forJarvis(context)
+            "simulate" -> Simulator.start(context, input.optString("question"))
+            "self_check" -> SelfCare.now(context)
             "run_skill" -> Skills.byName(context, input.optString("name"))?.let { Skills.run(context, it) } ?: "No skill called that."
             "upgrade_now" -> Upgrade.start(context)
             "upgrades_list" -> Upgrade.list(context)

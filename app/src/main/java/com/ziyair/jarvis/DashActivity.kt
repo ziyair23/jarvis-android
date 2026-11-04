@@ -75,6 +75,7 @@ class DashActivity : Activity() {
                 .put("appts", Appts.json(ctx))
                 .put("packages", Packages.all(ctx))
                 .put("mealPlan", Meals.plan(ctx))
+                .put("night", SelfCare.report(ctx)).put("youModel", Dream.model(ctx)).put("checking", SelfCare.running)
                 .put("upgrades", org.json.JSONArray(Upgrade.waiting(ctx))).put("upgrading", Upgrade.running).put("skills", Skills.all(ctx)).put("recallCount", Timeline.count(ctx))
                 .put("scan", org.json.JSONObject().put("running", Scan.running).put("step", Scan.step).put("report", Scan.report(ctx)))
                 .put("babyPatterns", try { BabyInsights.json(ctx) } catch (_: Exception) { org.json.JSONObject() })
@@ -113,6 +114,7 @@ class DashActivity : Activity() {
         @JavascriptInterface fun hush() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_HUSH)) }
         @JavascriptInterface fun agents(): String = try { Agents.json(ctx).toString() } catch (e: Exception) { Trace.log(ctx, "dash", "agents list failed: ${e.message}"); "[]" }
         @JavascriptInterface fun upgradeDecide(id: String, yes: Boolean) { Upgrade.decide(ctx, id, yes); LogBus.changed() }
+        @JavascriptInterface fun selfCheck(): String = SelfCare.now(ctx).also { LogBus.changed() }
         @JavascriptInterface fun upgradeNow(): String = Upgrade.start(ctx)
         @JavascriptInterface fun skillRemove(name: String) { Skills.remove(ctx, name) }
         @JavascriptInterface fun scanStart(): String = Scan.start(ctx).also { LogBus.changed() }

@@ -273,6 +273,12 @@ input::placeholder{color:#5f5b56}
   </div>
   <div class="card"><div class="label">Today, on your lock screen</div>
     <div class="grid2" style="grid-template-columns:1fr 1fr;margin:0 0 14px"><button id="dash-on" onclick="J.dashDay(true);setTimeout(load,150)">Dashing today</button><button id="dash-off" onclick="J.dashDay(false);setTimeout(load,150)">Day off</button></div><div id="mind-head" style="font:400 19px/1.35 var(--serif);margin:0 0 6px"></div><ul class="list" id="mind-plan"></ul><div class="label" style="margin:14px 0 6px">List</div><div class="dim" id="mind-list" style="line-height:1.5"></div></div>
+  <div class="card"><div class="label">Looking after himself</div>
+    <p class="dim" id="night-line" style="margin:0 0 10px;line-height:1.5"></p>
+    <ul class="list" id="night-list"></ul>
+    <button id="check-btn" style="width:100%;margin-top:10px" onclick="J.selfCheck();setTimeout(load,300)">Check yourself now</button></div>
+  <div class="card"><div class="label">How he sees you</div>
+    <div class="dim" id="you-model" style="white-space:pre-line;line-height:1.5;font-size:14px"></div></div>
   <div class="card"><div class="label">Upgrading himself</div>
     <p class="dim" id="up-line" style="margin:0 0 12px;line-height:1.5"></p>
     <ul class="list" id="up-list"></ul>
@@ -487,8 +493,13 @@ function load() {
     const dd = D.dashToday || 'NO';
     $('dash-on').className = dd === 'ON' ? 'primary' : ''; $('dash-off').className = dd === 'OFF' ? 'primary' : '';
     $('dash-on').textContent = dd === 'LIKELY' ? 'Dashing today (usual)' : 'Dashing today';
+    { const N = D.night || {}, T = N.tests || [], bad = T.filter(t => !t.ok);
+      $('night-line').textContent = D.checking ? 'Checking himself now…' : N.at ? `Overnight check ${ago(N.at)}: ${T.length - bad.length} of ${T.length} fine.` + ((N.tuned || []).length ? ' Tuned himself: ' + N.tuned.join(', ') + '.' : '') + (N.speed && N.speed.turns ? ` Answered in about ${(N.speed.medianMs / 1000).toFixed(1)}s on average.` : '') : 'Every night he tests his voice, ears and brain, fixes what he can, and tunes himself.';
+      $('night-list').innerHTML = bad.map(t => `<li style="display:block"><div>${esc(t.n)}${t.fixed ? ' <span class="faint">· fixed</span>' : ''}</div><div class="faint">${esc(t.d)}</div></li>`).join('');
+      $('check-btn').disabled = !!D.checking;
+      $('you-model').textContent = D.youModel || 'After his first night of dreaming, his picture of you shows up here.'; }
     { const U = D.upgrades || [], SK = Array.from({length: (D.skills || []).length}, (_, i) => D.skills[i]);
-      $('up-line').textContent = D.upgrading ? 'Looking back over the week…' : (U.length ? 'Waiting for your OK. Nothing changes until you approve.' : 'Every Sunday evening he looks back over the week and proposes upgrades for himself. He remembers ' + (D.recallCount || 0).toLocaleString() + ' moments so far.');
+      $('up-line').textContent = D.upgrading ? 'Looking back over the week…' : (U.length ? 'Bigger changes wait for your OK. Small ones (new skills, lessons) he adds himself and tells you after.' : 'Every Sunday evening he looks back over the week and upgrades himself. He remembers ' + (D.recallCount || 0).toLocaleString() + ' moments so far.');
       $('up-list').innerHTML = U.map(u => `<li class="col"><div style="font-weight:500">${esc(u.title)} <span class="faint">· ${esc(u.kind)}</span></div><div class="faint" style="margin-top:4px;line-height:1.45">${esc(u.why || '')}</div>${u.phrases ? `<div class="faint" style="margin-top:4px">Say: “${esc((u.phrases || [])[0] || '')}”</div>` : ''}<div class="sug"><div class="acts"><button class="primary" onclick="upDo('${u.id}',true)">Approve</button><button onclick="upDo('${u.id}',false)">No</button></div></div></li>`).join('');
       $('up-btn').disabled = !!D.upgrading;
       $('skill-list').innerHTML = SK.map(s => `<li><div style="flex:1"><div>${esc(s.name)}</div><div class="faint">“${esc((s.phrases || [])[0] || '')}” · used ${s.uses || 0}×</div></div><button class="x" aria-label="Remove" onclick="J.skillRemove('${esc(s.name).replace(/'/g, '')}');setTimeout(load,150)">×</button></li>`).join('') || '<li class="empty">None yet. He builds them from what you do every week.</li>'; }
