@@ -192,6 +192,14 @@ class JarvisService : Service() {
             return START_STICKY
         }
         if (!goForeground()) {
+            // Android won't let the mic start from the background. If he never switched Jarvis off, hop to the front for a
+            // moment (allowed with "display over other apps") so he comes straight back, at most once a minute
+            val last = prefs.sp.getLong("revive_at", 0L), now = System.currentTimeMillis()
+            if (prefs.running && android.provider.Settings.canDrawOverlays(this) && now - last > 60_000L) {
+                prefs.sp.edit().putLong("revive_at", now).apply()
+                Trace.log(this, "revive", "Android stopped him in the background; bringing him back")
+                try { startActivity(Intent(this, MainActivity::class.java).putExtra("autostart", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)); stopSelf(); return START_NOT_STICKY } catch (_: Exception) {}
+            }
             Scheduler.notify(this, "Jarvis stopped", "Android paused him in the background. Tap to open Jarvis and start him again.", false)
             prefs.running = false
             stopSelf()
@@ -778,6 +786,7 @@ class JarvisService : Service() {
                 if (turn != turnId) { live?.cancel(); Trace.log(this, "dropped", "cancelled while thinking"); return@post }   // he cancelled while it was thinking
                 if (getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL) { live?.cancel(); inConvo = false; finishTurn(); return@post }
                 // heard chatter that wasn't for him: drop it silently; twice in a row and the conversation's over
+                if (reply.isBlank() && !followUp) { live?.cancel(); ignoredInRow = 0; speaking = true; speak("Say that again, sir?") { speaking = false; nextTurn(true) }; return@post }
                 if (reply.isBlank()) { live?.cancel(); ignoredInRow++; nextTurn(ignoredInRow < 2); return@post }
                 ignoredInRow = 0
                 if (quick?.endConvo == true) inConvo = false

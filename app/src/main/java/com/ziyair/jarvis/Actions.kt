@@ -348,7 +348,7 @@ class Actions(private val context: Context) {
             "list_check" -> Lists.check(context, input.getString("items"), input.optString("list"))
             "list_read" -> Lists.read(context, input.optString("list"))
             "list_clear" -> Lists.clear(context, input.optString("list"), input.optBoolean("everything"))
-            "log_expense" -> Expenses.log(context, input.getDouble("amount"), input.optString("what"), input.optString("day"))
+            "log_expense" -> input.optDouble("amount", 0.0).let { amt -> if (amt.isNaN() || amt <= 0.0) "Not logged yet: no amount. Ask him how much it was, then log it." else Expenses.log(context, amt, input.optString("what"), input.optString("day")) }
             "expenses_summary" -> Expenses.week(context)
             "spending" -> Spend.report(context)
             "set_budget" -> Spend.setBudget(context, input.getDouble("dollars"))

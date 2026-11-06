@@ -56,7 +56,18 @@ object Apps {
     }
 
     /** The top YouTube result for a song ("Fear NF"), as a video id, or null. Free, no key. */
-    fun youtubeId(query: String): String? = try {
+    fun youtubeId(query: String, key: String = ""): String? = (if (key.isNotBlank()) youtubeIdByKey(query, key) else null) ?: youtubeIdByPage(query)
+
+    /** The official search (his own YouTube key): reliable, about 100 searches a day free. */
+    private fun youtubeIdByKey(query: String, key: String): String? = try {
+        val c = java.net.URL("https://www.googleapis.com/youtube/v3/search?part=id&type=video&videoCategoryId=10&maxResults=1&q=" + java.net.URLEncoder.encode(query, "UTF-8") + "&key=" + java.net.URLEncoder.encode(key, "UTF-8")).openConnection() as java.net.HttpURLConnection
+        c.connectTimeout = 5000; c.readTimeout = 6000
+        val body = if (c.responseCode == 200) c.inputStream.bufferedReader().use { it.readText() } else null
+        c.disconnect()
+        body?.let { Regex("\"videoId\":\\s*\"([A-Za-z0-9_-]{11})\"").find(it)?.groupValues?.get(1) }
+    } catch (_: Exception) { null }
+
+    private fun youtubeIdByPage(query: String): String? = try {
         val c = java.net.URL("https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode("$query song", "UTF-8")).openConnection() as java.net.HttpURLConnection
         c.connectTimeout = 6000; c.readTimeout = 8000
         c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36")

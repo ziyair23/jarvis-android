@@ -22,6 +22,12 @@ import java.util.concurrent.TimeUnit
  *  3. tell him honestly it didn't start.
  * Blocking (runs on Jarvis's background thread), about 10 seconds at most.
  */
+/** What he asked for, minus what he tacked on ("sorry", "please", "for me"). */
+object SongQuery {
+    private val FILLER = Regex("(?:[\\s,.!?]+(?:sorry|please|thanks|thank you|jarvis|sir|for me|right now|now))+[\\s,.!?]*$", RegexOption.IGNORE_CASE)
+    fun clean(q: String): String = q.trim().replace(FILLER, "").replace(Regex("^(?:um+|uh+|so|okay|ok)[\\s,]+", RegexOption.IGNORE_CASE), "").trim().ifBlank { q.trim() }
+}
+
 object Music {
     private val main = Handler(Looper.getMainLooper())
 
@@ -46,7 +52,8 @@ object Music {
         return false
     }
 
-    fun play(context: Context, pkg: String, name: String, query: String, song: String?): String {
+    fun play(context: Context, pkg: String, name: String, query0: String, song: String?): String {
+        val query = SongQuery.clean(query0)
         val before = title(Apps.player(context, pkg))
         wasPlaying = playing(Apps.player(context, pkg)); seen = Apps.player(context, pkg) != null
         // Jarvis lets go of the speaker first: while he holds it the music app is paused, and when he let go
@@ -59,7 +66,7 @@ object Music {
         Thread.sleep(250)
         Trace.log(context, "music", "was on \"$before\", asking for \"$query\"")
         // look up the exact song in the background meanwhile, so the next way is ready at once if the first one stalls
-        val idAhead = if (pkg == Actions.YT_MUSIC) java.util.concurrent.Executors.newSingleThreadExecutor().let { ex -> ex.submit<String?> { Apps.youtubeId(query) }.also { ex.shutdown() } } else null
+        val idAhead = if (pkg == Actions.YT_MUSIC) java.util.concurrent.Executors.newSingleThreadExecutor().let { ex -> ex.submit<String?> { Apps.youtubeId(query, Prefs(context).youtubeKey) }.also { ex.shutdown() } } else null
         // 0. the same "play this" request Google Assistant sends: the app searches and plays the top result itself
         if (Settings.canDrawOverlays(context)) try {
             val i = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).setPackage(pkg)

@@ -141,12 +141,16 @@ class MessageListener : NotificationListenerService() {
         }
     }
 
-    private var lastCaller = ""; private var lastCallAt = 0L
+    private var lastCaller = ""; private var lastCallAt = 0L; private var lastMissedLog = 0L
 
     /** "Abbey is calling, sir." Only for a ringing call (it has an Answer button), once per call. */
     private fun announceCall(n: Notification) {
         val prefs = Prefs(this)
-        if (!prefs.running || !prefs.announceCalls) { Problems.log(this, "call ringing but not announced: " + if (!prefs.running) "Jarvis wasn't running" else "call announcements are switched off"); return }
+        if (!prefs.running || !prefs.announceCalls) {
+            val now = System.currentTimeMillis()
+            if (now - lastMissedLog > 120_000L) { lastMissedLog = now; Problems.log(this, "call ringing but not announced: " + if (!prefs.running) "Jarvis wasn't running" else "call announcements are switched off") }
+            return
+        }
         val labels = n.actions?.map { it.title?.toString()?.lowercase().orEmpty() }.orEmpty()
         val canAnswer = labels.any { it.contains("answer") || it.contains("accept") }
         if (!canAnswer && n.fullScreenIntent == null) return
