@@ -46,7 +46,7 @@ class BrainWallpaperTest {
 
     @Test fun homeScreenMotionAndHouseAreWiredIn() {
         val html = File("src/main/assets/dash.html").readText()
-        assertTrue(html.contains("<script src=\"motion.js\"></script>") && html.contains("<script src=\"house.js\"></script>"))
+        assertTrue(html.contains("<script src=\"motion.js\"></script>") && html.contains("<script src=\"three.min.js\"></script>\n<script src=\"house.js\"></script>"))
         assertTrue(html.contains("id=\"talkv\"") && html.contains("id=\"house\"") && html.contains("id=\"jobs\"") && html.contains("openHouse()"))
         val motion = File("src/main/assets/motion.js").readText(); val house = File("src/main/assets/house.js").readText()
         assertTrue(motion.contains("J.words()") && motion.contains("window.onAgents"))
