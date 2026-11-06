@@ -122,7 +122,7 @@ object LeaveAlerts {
     /** When to walk out: the drive with traffic plus a few minutes to get going. Pure. */
     fun leaveAt(begin: Long, driveSeconds: Long, bufferMin: Int = 10) = begin - driveSeconds * 1000L - bufferMin * 60_000L
     /** A real place to drive to, not a video call or a phone number. Pure. */
-    fun drivable(where: String) = where.isNotBlank() && !Regex("(?i)(https?://|zoom|meet\\.google|teams|webex|facetime|^\\+?[0-9 ()-]{7,}$|phone call|online|virtual)").containsMatchIn(where)
+    fun drivable(where: String) = where.isNotBlank() && !Regex("(?i)(https?://|zoom|meet\\.google|google meet|teams|webex|facetime|^\\+?[0-9 ()-]{7,}$|phone call|online|virtual)").containsMatchIn(where)
 
     private class Ev(val id: Long, val title: String, val begin: Long, val where: String)
 
