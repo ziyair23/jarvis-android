@@ -135,6 +135,14 @@ class Actions(private val context: Context) {
             props("screens" to bool("Also walk through shopping apps' order history on screen (default true)")), listOf()))
         put(tool("dash_day", "He's dashing or not on a given day: 'not dashing today', 'taking tomorrow off', 'I'm dashing tonight after all'. Jarvis only plans shifts and targets on dash days.",
             props("on" to bool("true if he's dashing, false if it's a day off"), "tomorrow" to bool("About tomorrow instead of today")), listOf("on")))
+        put(tool("start_shift", "He's starting a DoorDash shift ('starting my shift', 'going dashing'). Quiets the phone except starred contacts, and gives weather, roads and the cheapest gas. Usually starts by itself when the Dasher app goes on.", props(), listOf()))
+        put(tool("end_shift", "He's done dashing ('done for the night', 'ending my shift'). Says how long he worked and his dollars per hour; if nothing's logged yet, ask what he made and log it with log_earnings.", props(), listOf()))
+        put(tool("shift_status", "How long he's been on shift today and his dollars per hour so far.", props(), listOf()))
+        put(tool("stock_set", "He says how many of something they have ('we have 120 diapers', 'just bought 2 big packs of wipes, about 160'). Jarvis counts down as they're used and puts it on the list before it runs out.",
+            props("item" to str("diapers, wipes, formula..."), "count" to num("How many there are now"), "per_day" to num("Optional: how many they use a day (diapers are worked out from the log)")), listOf("item", "count")))
+        put(tool("stock_status", "How many diapers (and anything else he's told you about) are left, and how many days that lasts.", props(), listOf()))
+        put(tool("evening_rundown", "Go through his unread email and today's texts now and say who's waiting on him and what's about money. Runs by itself each evening.", props(), listOf()))
+        put(tool("habits_list", "The weekly habits Jarvis has noticed (like gas on Thursdays), which he offers to turn into reminders.", props(), listOf()))
         put(tool("run_job", "A whole job with several parts that needs planning across his life: 'handle my week', 'get us ready for tomorrow', 'sort out everything for Ziyair's checkup', 'what do I need to do before payday, and do it'. Runs in the background with all the agents and reports back when done.",
             props("goal" to str("The whole job, with every detail he gave")), listOf("goal")))
         put(tool("follow_up_add", "Keep something open and chase it over the next days: a reply he's waiting on, a delivery, something due by a date. Closes itself when the reply or package arrives; brings it up if it slips.",
@@ -309,6 +317,13 @@ class Actions(private val context: Context) {
             "upgrade_decide" -> Upgrade.decide(context, input.optString("which"), input.optBoolean("approve", true))
             "scan_phone" -> Scan.start(context, input.optBoolean("screens", true))
             "dash_day" -> DashDays.set(context, input.optBoolean("on", true), input.optBoolean("tomorrow"))
+            "start_shift" -> Shift.start(context)
+            "end_shift" -> { Shift.endedByHim(context); Shift.end(context) }
+            "shift_status" -> Shift.status(context)
+            "stock_set" -> Stock.set(context, input.optString("item"), input.optDouble("count", -1.0), input.optDouble("per_day", Double.NaN).takeIf { !it.isNaN() && it > 0 })
+            "stock_status" -> Stock.status(context)
+            "evening_rundown" -> Triage.run(context) ?: "Nothing new in his email or texts that needs him."
+            "habits_list" -> Patterns.list(context)
             "run_job" -> Jobs.start(context, input.optString("goal"))
             "follow_up_add" -> Loops.add(context, input)
             "follow_ups_list" -> Loops.list(context)
