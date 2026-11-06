@@ -137,7 +137,7 @@
                 <Button android:id="@+id/restoreBackup" style="@style/Btn.Small" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:layout_marginTop="8dp" android:layout_marginStart="8dp" android:text="Restore" />
             </LinearLayout>
 
-            <Button android:id="@+id/allowHealth" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:layout_marginTop="14dp" android:text="Allow sleep &amp; steps (Health Connect)" />
+            <Button android:id="@+id/allowHealth" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="14dp" android:text="Allow sleep &amp; steps (Health Connect)" />
 
             <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="YouTube Data API key (Google Cloud → APIs → YouTube Data API v3)" />
             <EditText android:id="@+id/youtubeKey" style="@style/Field" android:inputType="textPassword" android:hint="AIza…" />
