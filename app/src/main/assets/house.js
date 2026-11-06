@@ -44,8 +44,9 @@ const JR = {f: 2, c: 1}, GR = {f: 5, c: 2};
 // where things are inside a room (x from the room's left edge, z from the back wall at -2 to the open front at +2)
 const SPOT = {bed: [0.65, -0.95], edge: [1.25, -0.6], desk: [3.2, -0.95], prop: [2.05, -1.05]};
 const spotOf = (a, what) => { if (a.wide) { const m = {bed: [0.65, -0.95], edge: [1.25, -0.6], desk: [3.2, -0.95], prop: [7.4, -1.0]}; return [a.x0 + m[what][0], m[what][1]]; } const s = SPOT[what]; return [a.x0 + s[0], s[1]]; };
+const NOW = () => performance.now() / 1000;
 const realNow = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; };
-let simMin = realNow(), fast = false, focusI = 4, zoomed = false, open = false, coreFlash = 0, REAL = {}, T = 0;
+let simMin = realNow(), fast = false, focusI = 4, zoomed = false, coreZoom = false, introT = -1, leaving = -1, open = false, coreFlash = 0, REAL = {}, T = 0;
 const hourNow = () => (simMin / 60) % 24;
 const scheduleAwake = (a, h = hourNow()) => a.awake.some(([s, e]) => h >= s && h < e);
 const isOff = a => REAL[a.id] && REAL[a.id].on === false;
@@ -57,7 +58,15 @@ function wakesAt(a) { const h = hourNow(); let best = 99, at = 0; a.awake.forEac
 const lastRun = id => { const r = REAL[id] && REAL[id].runs; return r && r.length ? r[r.length - 1] : null; };
 const short = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const STATE_TXT = {sleep: 'ASLEEP', getup: 'GETTING UP', toDesk: 'ON THE MOVE', work: 'AT THE DESK', toProp: 'ON THE MOVE', prop: 'LOOKING SOMETHING UP', deliver: 'ON ITS WAY TO JARVIS', give: 'WITH JARVIS', toBed: 'HEADING TO BED', lieDown: 'GOING TO SLEEP'};
+function showCore() {
+  if (!$('f-name')) return; const busy = AGS.filter(a => a.job), OSv = typeof OS === 'number' ? OS : 0;
+  $('f-name').textContent = 'Jarvis · The core'; $('f-state').textContent = OSv === 1 ? 'LISTENING' : OSv === 2 ? 'THINKING' : OSv === 3 ? 'TALKING' : 'AWAKE';
+  $('f-act').textContent = busy.length ? busy.map(a => a.name).join(', ') + (busy.length === 1 ? ' is' : ' are') + ' working for him right now.' : 'Every thread is an agent. Light on a thread is work coming back to him.';
+  $('f-done').textContent = coreZoom ? 'Tap the brain again to talk to him.' : 'Tap a room to visit an agent, or the brain to go to him.';
+  const f = document.querySelector('#house .focus'); if (f) { f.classList.remove('asleep'); f.classList.toggle('live', OSv !== 0); }
+}
 function showFocus() {
+  if (coreZoom || !zoomed) return showCore();
   const a = AGS[focusI], lr = lastRun(a.id); if (!$('f-name')) return;
   $('f-name').textContent = a.name + ' · ' + a.room;
   $('f-state').textContent = isOff(a) ? 'SWITCHED OFF' : a.job ? 'ON YOUR JOB NOW' : STATE_TXT[a.state] || 'AWAKE';
@@ -110,7 +119,7 @@ function step(a, dt) {
 function arrive(a) {
   if (a.state === 'toDesk') { a.state = 'work'; a.face = PI; a.until = 6 + Math.random() * 8; }
   else if (a.state === 'toProp') { a.state = 'prop'; a.face = PI; a.until = 3.5 + Math.random() * 2.5; }
-  else if (a.state === 'deliver') { a.state = 'give'; a.face = a.x < JR.c * RW + 2 ? PI / 2 : -PI / 2; a.until = 1.4; setTimeout(() => { coreFlash = 1; try { window.brainPulse && window.brainPulse(a.id, 3); } catch (_) {} }, 700); }
+  else if (a.state === 'deliver') { a.state = 'give'; a.face = a.x < JR.c * RW + 2 ? PI / 2 : -PI / 2; a.until = 1.4; setTimeout(() => { coreFlash = 1; try { window.houseMote(a.id, 3); window.brainPulse && window.brainPulse(a.id, 3); } catch (_) {} }, 700); }
   else if (a.state === 'toBed') { a.state = 'lieDown'; a.face = PI / 2; a.until = 1.6; }
   if (AGS[focusI] === a) showFocus();
 }
@@ -299,22 +308,82 @@ function props(G, a, w) {
     box(G, .7, .4, .4, lam('#1b2a3a'), bx - .6, 1.15, bz + .2); plane(G, .6, .32, basic('#bcd4e8'), bx - .6, 1.15, bz + .41);
     box(G, .8, 2.0, .7, lam('#141416'), 10.9, 1.0, bz + .2); const leds = []; for (let k = 0; k < 10; k++) { box(G, .7, .14, .02, '#1e1e22', 10.9, .3 + k * .17, bz + .56); leds.push(box(G, .03, .03, .01, basic('#ff9a80'), 11.15, .3 + k * .17, bz + .575)); } G.userData.leds = leds; }
 }
+// Jarvis's room is the core of the house: the same brain as the home screen floats in it, and a thread runs from
+// each agent's spot in the brain out to that agent's room. Work travels along the threads as light.
+const SEG = 22, BS = .98, BRAIN_AT = new T3.Vector3(JR.c * RW + RW / 2, floorY(JR.f) + 1.62, -.3);
+const DEF_SHAPE = (() => { const P = [], KIND = []; for (let i = 0; i < 900; i++) { const u = Math.random() * PI * 2, v = Math.acos(2 * Math.random() - 1); P.push([Math.sin(v) * Math.cos(u) * .7, Math.cos(v) * .6, Math.sin(v) * Math.sin(u)]); KIND.push(0); } return {P, E: [], KIND, POS: {}}; })();
 function buildJarvis() {
   const G = new T3.Group(), y0 = floorY(JR.f); G.position.set(JR.c * RW, y0, 0); scene.add(G);
   plane(G, RW, RD, lam('#1a1012'), RW / 2, .001, 0, -PI / 2, 0, 8); plane(G, RW, RH, lam('#140c0e'), RW / 2, RH / 2, -RD / 2, 0, 0, 8);
-  for (let k = 0; k < 10; k++) { const c = new T3.Mesh(new T3.TorusGeometry(1.1 + k * .06, .006, 4, 48, PI), basic('#c9665c', {transparent: true, opacity: .25})); c.position.set(RW / 2, 1.5, -1.95); c.rotation.z = k * .35; G.add(c); }
-  cyl(G, .9, 1.0, .18, '#1e1416', RW / 2, .09, -.4, 32); cyl(G, .6, .7, .1, '#2a1a1c', RW / 2, .23, -.4, 32);
-  const core = new T3.Group(); core.position.set(RW / 2, 1.55, -.4); G.add(core);
-  const pts = []; for (let i = 0; i < 700; i++) { const u = Math.random() * PI * 2, v = Math.acos(2 * Math.random() - 1), r = .55 + (Math.random() < .2 ? Math.random() * .2 : 0); pts.push(Math.sin(v) * Math.cos(u) * r, Math.cos(v) * r * .85, Math.sin(v) * Math.sin(u) * r); }
-  const pg = new T3.BufferGeometry(); pg.setAttribute('position', new T3.Float32BufferAttribute(pts, 3));
-  const cloud = new T3.Points(pg, new T3.PointsMaterial({color: '#f0c3ba', size: .025, transparent: true, opacity: .85, blending: T3.AdditiveBlending, depthWrite: false})); core.add(cloud);
-  const inner = new T3.Mesh(sphG(.26, 24, 16), basic('#151517')); core.add(inner);
-  const ring = new T3.Mesh(new T3.TorusGeometry(.27, .018, 8, 48), basic('#c9665c')); core.add(ring);
-  const arc = new T3.Mesh(new T3.TorusGeometry(.27, .03, 8, 24, 1.1), basic('#ffe0d6')); core.add(arc);
-  const halo = glow(core, '#c9665c', 3.4, 0, 0, 0, .7);
-  const beam = new T3.Mesh(new T3.CylinderGeometry(.25, .7, 1.3, 24, 1, true), new T3.MeshBasicMaterial({color: '#c9665c', transparent: true, opacity: .12, blending: T3.AdditiveBlending, depthWrite: false, side: T3.DoubleSide})); beam.position.set(RW / 2, .9, -.4); G.add(beam);
-  const light = new T3.PointLight('#e2776a', 1.2, 7, 1.5); light.position.set(RW / 2, 1.6, .2); G.add(light);
-  return {core, cloud, ring, arc, halo, light};
+  for (let k = 0; k < 10; k++) { const c = new T3.Mesh(new T3.TorusGeometry(1.1 + k * .06, .006, 4, 48, PI), basic('#c9665c', {transparent: true, opacity: .2})); c.position.set(RW / 2, 1.5, -1.95); c.rotation.z = k * .35; G.add(c); }
+  cyl(G, .9, 1.0, .18, '#1e1416', RW / 2, .09, -.3, 32); cyl(G, .6, .7, .1, '#2a1a1c', RW / 2, .23, -.3, 32);
+  const beam = new T3.Mesh(new T3.CylinderGeometry(.2, .65, .6, 24, 1, true), new T3.MeshBasicMaterial({color: '#c9665c', transparent: true, opacity: .1, blending: T3.AdditiveBlending, depthWrite: false, side: T3.DoubleSide})); beam.position.set(RW / 2, .58, -.3); G.add(beam);
+  const light = new T3.PointLight('#e2776a', 1.2, 7, 1.5); light.position.set(RW / 2, 1.8, .4); G.add(light);
+  // the brain: points for neurons, fibres between them, sparks that run along the fibres
+  const S = window.brainShape || DEF_SHAPE, n = S.P.length;
+  const core = new T3.Group(); core.position.copy(BRAIN_AT); core.scale.setScalar(BS); scene.add(core);
+  const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const KC = [[.94, .92, .89], [.89, .7, .67], [.79, .4, .36], [.6, .32, .29]];
+  S.P.forEach((p, i) => { pos.set(p, i * 3); const c = KC[S.KIND[i]] || KC[0], d = .55 + .45 * Math.random(); col.set([c[0] * d, c[1] * d, c[2] * d], i * 3); });
+  const pg = new T3.BufferGeometry(); pg.setAttribute('position', new T3.BufferAttribute(pos, 3)); pg.setAttribute('color', new T3.BufferAttribute(col, 3));
+  const cloud = new T3.Points(pg, new T3.PointsMaterial({size: .026, vertexColors: true, transparent: true, opacity: .95, blending: T3.AdditiveBlending, depthWrite: false})); core.add(cloud);
+  const fp = new Float32Array(S.E.length * 6); S.E.forEach(([i, j], k) => { fp.set(S.P[i], k * 6); fp.set(S.P[j], k * 6 + 3); });
+  const fg = new T3.BufferGeometry(); fg.setAttribute('position', new T3.BufferAttribute(fp, 3));
+  const fibres = new T3.LineSegments(fg, new T3.LineBasicMaterial({color: '#c9665c', transparent: true, opacity: .32, blending: T3.AdditiveBlending, depthWrite: false})); core.add(fibres);
+  const SPK = 90, sp = new Float32Array(SPK * 6), sc = new Float32Array(SPK * 6), sg = new T3.BufferGeometry();
+  sg.setAttribute('position', new T3.BufferAttribute(sp, 3)); sg.setAttribute('color', new T3.BufferAttribute(sc, 3)); sg.setDrawRange(0, 0);
+  const sparks = new T3.LineSegments(sg, new T3.LineBasicMaterial({vertexColors: true, transparent: true, blending: T3.AdditiveBlending, depthWrite: false})); core.add(sparks);
+  // Jarvis himself at the centre: dark core, a ring that brightens when he listens, an arc that spins while he thinks
+  const inner = new T3.Mesh(sphG(.17, 24, 16), basic('#151517')); core.add(inner);
+  const ring = new T3.Mesh(new T3.TorusGeometry(.18, .014, 8, 48), basic('#c9665c', {transparent: true})); core.add(ring);
+  const arc = new T3.Mesh(new T3.TorusGeometry(.18, .026, 8, 24, 1.2), basic('#ffe0d6')); arc.visible = false; core.add(arc);
+  const halo = glow(core, '#c9665c', 1.4, 0, 0, 0, .6);
+  // each agent's spot in the brain
+  const nodes = {}; Object.keys(S.POS || {}).forEach(id => { const g = glow(core, '#e2776a', .45, ...S.POS[id], .8); const d = new T3.Mesh(sphG(.045, 10, 8), basic('#c9665c')); d.position.set(...S.POS[id]); core.add(d); nodes[id] = {g, d}; });
+  // threads from the brain to the rooms: one buffer, rebuilt each frame as the brain turns
+  const NA = AGS.length, tp = new Float32Array(NA * SEG * 6), tc = new Float32Array(NA * SEG * 6), tg = new T3.BufferGeometry();
+  tg.setAttribute('position', new T3.BufferAttribute(tp, 3)); tg.setAttribute('color', new T3.BufferAttribute(tc, 3));
+  const threads = new T3.LineSegments(tg, new T3.LineBasicMaterial({vertexColors: true, transparent: true, opacity: 1, blending: T3.AdditiveBlending, depthWrite: false})); threads.frustumCulled = false; scene.add(threads);
+  const motes = []; for (let k = 0; k < 24; k++) { const m = glow(scene, '#ffd6c8', .38, 0, -99, 0, 0); m.visible = false; motes.push({m, a: null, t0: 0, soft: false}); }
+  const hit = new T3.Mesh(sphG(1.05, 10, 8), new T3.MeshBasicMaterial({visible: false})); hit.position.copy(BRAIN_AT); scene.add(hit);
+  return {core, cloud, fibres, sparks, sp, sc, sg, S, ring, arc, halo, light, beam, nodes, threads, tp, tc, tg, motes, hit, spk: [], live: 0};
+}
+const roomEnd = a => new T3.Vector3(a.wide ? a.x0 + RW * 1.5 : a.x0 + RW / 2, floorY(a.f) + (a.wide ? ATTIC_H : RH) * .62, .9);
+const _v = new T3.Vector3(), _c = new T3.Vector3();
+function threadPoint(a, k, out) {   // k = 0 at the room, 1 at the brain
+  const p0 = roomEnd(a), node = jv.S.POS && jv.S.POS[a.id] ? _v.set(...jv.S.POS[a.id]).multiplyScalar(BS).applyEuler(jv.core.rotation).add(BRAIN_AT) : _v.copy(BRAIN_AT);
+  _c.set((p0.x + node.x) / 2, (p0.y + node.y) / 2 + .6, 3.4);
+  const u = 1 - k; return out.set(u * u * p0.x + 2 * u * k * _c.x + k * k * node.x, u * u * p0.y + 2 * u * k * _c.y + k * k * node.y, u * u * p0.z + 2 * u * k * _c.z + k * k * node.z);
+}
+function sendMote(a, soft) { const m = jv.motes.find(q => !q.a); if (!m) return; m.a = a; m.t0 = T; m.soft = soft; m.m.visible = true; }
+window.houseMote = (id, n = 1) => { const a = AGS.find(q => q.id === id); if (!a || !jv) return; for (let i = 0; i < n; i++) setTimeout(() => sendMote(a, false), i * 220); };
+const _q = new T3.Vector3();
+function animateBrain(dt) {
+  const OSv = typeof OS === 'number' ? OS : 0, OLv = typeof OL === 'number' ? OL : 0;
+  const tgt = OSv === 1 ? .3 + OLv * .7 : OSv === 3 ? (OLv >= 0 ? .35 + OLv * .65 : .45 + .3 * Math.abs(Math.sin(T * 6.5))) : OSv === 2 ? .5 : .12 + .06 * (.5 + .5 * Math.sin(T * 1.2));
+  jv.live += (tgt - jv.live) * (tgt > jv.live ? .35 : .08); const live = jv.live;
+  jv.core.rotation.y += dt * (.14 + .5 * live); jv.core.rotation.x = -.12 + Math.sin(T * .3) * .05;
+  const pulse = 1 + .03 * Math.sin(T * 1.6) + coreFlash * .12 + live * .06; jv.core.scale.setScalar(BS * pulse);
+  jv.halo.material.opacity = .35 + .5 * live + coreFlash * .4; jv.halo.scale.setScalar(1.2 + .8 * live);
+  jv.ring.material.opacity = .6 + .4 * live; jv.arc.visible = OSv === 2; jv.arc.rotation.z = T * 2.6;
+  jv.light.intensity = 1 + coreFlash * 1.6 + live * 1.2 + .2 * Math.sin(T * 1.6); jv.fibres.material.opacity = .26 + .25 * live + coreFlash * .2;
+  // sparks along the fibres: more when he's thinking, and around an agent that's working
+  const E = jv.S.E; if (E.length) {
+    for (let k = 0; k < 1 + Math.floor(live * 4); k++) if (Math.random() < .6) jv.spk.push({e: Math.floor(Math.random() * E.length), t: T});
+    jv.spk = jv.spk.filter(s => T - s.t < .7).slice(-90);
+    jv.spk.forEach((s, k) => { const [i, j] = E[s.e], b = 1 - (T - s.t) / .7; jv.sp.set(jv.S.P[i], k * 6); jv.sp.set(jv.S.P[j], k * 6 + 3); jv.sc.set([b, b * .66, b * .58, b, b * .66, b * .58], k * 6); });
+    jv.sg.setDrawRange(0, jv.spk.length * 2); jv.sg.attributes.position.needsUpdate = true; jv.sg.attributes.color.needsUpdate = true; }
+  // agent spots and threads
+  AGS.forEach((a, n) => { const busy = !!a.job, off = isOff(a), awake = !asleep(a) && !off;
+    const nd = jv.nodes[a.id]; if (nd) { nd.g.material.opacity = off ? .05 : busy ? .7 + .3 * Math.sin(T * 8) : awake ? .5 : .2; nd.d.material.color.set(off ? '#3a3634' : busy ? '#f0c3ba' : '#c9665c'); }
+    const br = off ? .08 : busy ? 1 : awake ? .6 : .26, cr = [br, br * .5, br * .44];
+    for (let s = 0; s < SEG; s++) { threadPoint(a, s / SEG, _q); jv.tp.set([_q.x, _q.y, _q.z], (n * SEG + s) * 6); threadPoint(a, (s + 1) / SEG, _q); jv.tp.set([_q.x, _q.y, _q.z], (n * SEG + s) * 6 + 3);
+      const f = .5 + .5 * Math.sin(s * .5 - T * (busy ? 9 : 2)); const m = busy ? .55 + .45 * f : .8 + .2 * f; jv.tc.set([cr[0] * m, cr[1] * m, cr[2] * m, cr[0] * m, cr[1] * m, cr[2] * m], (n * SEG + s) * 6); }
+    if (busy && Math.random() < dt * 1.6) sendMote(a, false); });
+  jv.tg.attributes.position.needsUpdate = true; jv.tg.attributes.color.needsUpdate = true;
+  if (Math.random() < dt * .5) { const on = AGS.filter(a => !asleep(a) && !isOff(a)); if (on.length) sendMote(on[Math.floor(Math.random() * on.length)], true); }
+  jv.motes.forEach(m => { if (!m.a) return; const k = (T - m.t0) / 1.5; if (k >= 1) { m.a = null; m.m.visible = false; if (!m.soft) coreFlash = Math.max(coreFlash, .5); return; }
+    threadPoint(m.a, k * k * (3 - 2 * k), m.m.position); m.m.material.opacity = (m.soft ? .45 : 1) * Math.min(1, k * 6, (1 - k) * 6); m.m.scale.setScalar(m.soft ? .35 : .7); });
 }
 function buildGarage() {
   const G = new T3.Group(), y0 = floorY(GR.f); G.position.set(GR.c * RW, y0, 0); scene.add(G);
@@ -415,13 +484,16 @@ const HOUSE_C = new T3.Vector3((STX + SW) / 2, (floorY(0) + ATTIC_H + 2.4) / 2, 
 const camS = {tx: HOUSE_C.x, ty: HOUSE_C.y, tz: 0, dist: 40, yaw: -.18, pitch: .1}, camT = Object.assign({}, camS);
 let userYaw = 0, userPitch = 0;
 function fitDist(w, h) { const v = cam.fov * PI / 180, hz = 2 * Math.atan(Math.tan(v / 2) * cam.aspect); return Math.max(h / 2 / Math.tan(v / 2), w / 2 / Math.tan(hz / 2)) + RD / 2; }
+const BRAIN_CAM = () => ({tx: BRAIN_AT.x, ty: BRAIN_AT.y, tz: BRAIN_AT.z, dist: 4.4, yaw: -.12, pitch: .05});
 function aimCamera(dt) {
-  if (zoomed) { const a = AGS[focusI], inRoom = a.fl === a.f && a.x > a.x0 - .1 && a.x < a.x0 + (a.wide ? RW * 3 : RW) + .1, w = a.wide ? RW * 3 : RW;
+  if (leaving >= 0 || (introT >= 0 && NOW() - introT < .45)) Object.assign(camT, BRAIN_CAM());
+  else if (coreZoom) { Object.assign(camT, {tx: BRAIN_AT.x, ty: BRAIN_AT.y - .15, tz: -.2, dist: fitDist(3.6, 3.2) * .8, yaw: -.22 + userYaw, pitch: .14 + userPitch}); }
+  else if (zoomed) { const a = AGS[focusI], inRoom = a.fl === a.f && a.x > a.x0 - .1 && a.x < a.x0 + (a.wide ? RW * 3 : RW) + .1, w = a.wide ? RW * 3 : RW;
     if (inRoom) { camT.tx = a.wide ? Math.max(a.x0 + 2.3, Math.min(a.x0 + w - 2.3, a.x)) : a.x0 + w / 2; camT.ty = floorY(a.f) + .95; camT.dist = fitDist(Math.min(w, 4.6), 3.6) * .86; }
     else { camT.tx = a.x; camT.ty = a.y + 1.1; camT.dist = fitDist(4.6, 3) * .8; }
     camT.tz = -.2; camT.yaw = -.22 + userYaw; camT.pitch = .16 + userPitch; }
   else { camT.tx = HOUSE_C.x + .7; camT.ty = HOUSE_C.y - 2.6; camT.tz = 0; camT.dist = fitDist(STX + SW + 3, floorY(0) + ATTIC_H + 10) * 1.0; camT.yaw = -.12 + userYaw; camT.pitch = .06 + userPitch; }
-  const k = 1 - Math.pow(.03, dt); for (const key in camT) camS[key] += (camT[key] - camS[key]) * k;
+  const ease = leaving >= 0 ? .004 : introT >= 0 && NOW() - introT < .45 ? 1 : introT >= 0 && NOW() - introT < 2.8 ? .3 : .03, k = 1 - Math.pow(ease, dt); for (const key in camT) camS[key] += (camT[key] - camS[key]) * k;
   const cp = Math.cos(camS.pitch); cam.position.set(camS.tx + Math.sin(camS.yaw) * cp * camS.dist, camS.ty + Math.sin(camS.pitch) * camS.dist, camS.tz + Math.cos(camS.yaw) * cp * camS.dist); cam.lookAt(camS.tx, camS.ty, camS.tz);
 }
 // ---------- each frame ----------
@@ -448,15 +520,16 @@ function frame(ts) {
   shared.screens.forEach(s => drawScreen(s, T));
   AGS.forEach(a => { a.mesh.visible = true; posePerson(a, T); if (a.state === 'give') { const k = Math.max(0, (1.4 - a.until - .7) / .7); const o = a.mesh.userData.orb; o.visible = k < 1; const jx = JR.c * RW + 2 - a.x, jy = floorY(JR.f) + 1.55 - a.y; o.position.set(0, 1.15 + .4 * k, .42 + .55 * k); } else a.mesh.userData.orb.position.set(0, 1.15, .42); });
   // Jarvis
-  jv.cloud.rotation.y += dt * .35; jv.ring.rotation.x = PI / 2 + Math.sin(T * .5) * .3; jv.arc.rotation.set(PI / 2, 0, T * 1.6); const pulse = 1 + .05 * Math.sin(T * 1.6) + coreFlash * .3;
-  jv.core.scale.setScalar(pulse); jv.halo.material.opacity = .55 + coreFlash * .45; jv.light.intensity = 1.1 + coreFlash * 1.6 + .2 * Math.sin(T * 1.6);
+  animateBrain(dt);
   if (T - lastSign > 5) { lastSign = T; drawSign(garageG); }
   // name plates: bigger when you're looking at the whole house
-  const ps = zoomed ? .3 : 1.25;
+  const ps = zoomed || coreZoom ? .3 : 1.25;
   plates.forEach((p, i) => { const a = AGS[i], fx = p.fixed; const on = fx ? true : !asleep(a) && !isOff(a); drawPlate(p, on, !fx && i === focusI, !fx && !!a.job);
     const x0 = fx ? fx.x : a.x0, y0 = floorY(fx ? fx.f : a.f) + (a && a.wide ? ATTIC_H : RH) - .3; const w = ps * (p.w || 300) / 96;
     p.s.scale.set(ps * 512 / 96, ps, 1); p.s.position.set(x0 + .25 + ps * 512 / 96 / 2, y0 - ps / 2 + .1, RD / 2 - .1); });
+  const plateOp = leaving >= 0 ? 0 : introT >= 0 ? Math.max(0, Math.min(1, (NOW() - introT - 1.1) / .8)) : 1; plates.forEach(p => p.s.material.opacity = coreZoom && p.fixed && p.fixed.f === JR.f && p.fixed.x === JR.c * RW ? 0 : plateOp);
   aimCamera(dt); R.render(scene, cam);
+  if (leaving >= 0 && NOW() - leaving > .55) { leaving = -1; window.closeHouse(); }
 }
 requestAnimationFrame(frame);
 // ---------- touch: drag to look around, tap a room to go in ----------
@@ -465,12 +538,14 @@ canvas.addEventListener('pointerdown', e => { drag = {x: e.clientX, y: e.clientY
 canvas.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved += Math.abs(dx) + Math.abs(dy); drag.x = e.clientX; drag.y = e.clientY;
   if (drag.moved > 8) { userYaw = Math.max(-.75, Math.min(.75, userYaw - dx * .005)); userPitch = Math.max(-.12, Math.min(.5, userPitch + dy * .004)); } });
 canvas.addEventListener('pointerup', e => { const d = drag; drag = null; if (!d || d.moved > 8 || !built) return; const r = canvas.getBoundingClientRect(); v2.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); ray.setFromCamera(v2, cam);
-  const people = ray.intersectObjects(AGS.map(a => a.mesh), true); if (people.length) { let o = people[0].object; while (o.parent && !AGS.some(a => a.mesh === o)) o = o.parent; const i = AGS.findIndex(a => a.mesh === o); if (i >= 0) { focusI = i; zoomed = true; userYaw = 0; userPitch = 0; showFocus(); return; } }
-  const hit = ray.intersectObjects(AGS.map(a => a.hit)); if (hit.length) { focusI = hit[0].object.userData.i; zoomed = true; userYaw = 0; userPitch = 0; showFocus(); } });
+  if (ray.intersectObject(jv.hit).length) { if (coreZoom) { try { orbTap(); } catch (_) {} } else { coreZoom = true; zoomed = false; userYaw = 0; userPitch = 0; showCore(); } return; }
+  const people = ray.intersectObjects(AGS.map(a => a.mesh), true); if (people.length) { let o = people[0].object; while (o.parent && !AGS.some(a => a.mesh === o)) o = o.parent; const i = AGS.findIndex(a => a.mesh === o); if (i >= 0) { focusI = i; zoomed = true; coreZoom = false; userYaw = 0; userPitch = 0; showFocus(); return; } }
+  const hit = ray.intersectObjects(AGS.map(a => a.hit)); if (hit.length) { focusI = hit[0].object.userData.i; zoomed = true; coreZoom = false; userYaw = 0; userPitch = 0; showFocus(); } });
 // ---------- open, close, back ----------
-window.openHouse = () => { if (!built) { try { build(); } catch (e) { try { J.jsError('house 3d: ' + e.message); } catch (_) {} const pl = $('peek-line'); if (pl) pl.textContent = 'His house needs 3D graphics this phone isn\'t giving the app right now.'; return; } } open = true; window.houseOpen = true; zoomed = false; userYaw = 0; userPitch = 0; simMin = realNow(); H$.classList.add('on'); H$.setAttribute('aria-hidden', 'false'); resize(); showFocus(); };
-window.closeHouse = () => { open = false; window.houseOpen = false; H$.classList.remove('on'); H$.setAttribute('aria-hidden', 'true'); };
-window.houseBack = () => { if (!open) return false; if (zoomed) { zoomed = false; userYaw = 0; userPitch = 0; } else window.closeHouse(); return true; };
+window.openHouse = () => { if (!built) { try { build(); } catch (e) { try { J.jsError('house 3d: ' + e.message); } catch (_) {} const pl = $('peek-line'); if (pl) pl.textContent = 'His house needs 3D graphics this phone isn\'t giving the app right now.'; return; } } open = true; window.houseOpen = true; zoomed = false; coreZoom = false; leaving = -1; userYaw = 0; userPitch = 0; simMin = realNow();
+  Object.assign(camS, BRAIN_CAM()); introT = NOW(); H$.classList.add('on'); H$.setAttribute('aria-hidden', 'false'); resize(); showFocus(); };
+window.closeHouse = () => { leaving = -1; open = false; window.houseOpen = false; H$.classList.remove('on'); H$.setAttribute('aria-hidden', 'true'); };
+window.houseBack = () => { if (!open) return false; if (leaving >= 0) return true; if (zoomed || coreZoom) { zoomed = false; coreZoom = false; userYaw = 0; userPitch = 0; showFocus(); } else { leaving = NOW(); userYaw = 0; userPitch = 0; } return true; };
 window.houseSet = (k, v) => { if (k === 'hour') { fast = true; simMin = v * 60; } if (k === 'focus') { focusI = v; zoomed = true; showFocus(); } if (k === 'zoom') zoomed = v; if (k === 'state') AGS.forEach(a => { if (scheduleAwake(a)) { a.state = 'work'; [a.x, a.z] = spotOf(a, 'desk'); a.face = PI; } else { a.state = 'sleep'; [a.x, a.z] = spotOf(a, 'bed'); } a.path = []; a.fl = a.f; a.y = floorY(a.f); }); };
 $('h-out').onclick = () => window.houseBack();
 $('h-speed').onclick = () => { fast = !fast; $('h-speed').setAttribute('aria-pressed', String(fast)); $('h-speed').textContent = fast ? 'Fast day' : 'Real time'; if (!fast) simMin = realNow(); };

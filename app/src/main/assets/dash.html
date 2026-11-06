@@ -238,7 +238,7 @@ body.talking #jobs{bottom:calc(150px + env(safe-area-inset-bottom))}
     <div class="sub" id="t-last" style="color:var(--ink-dim);font-size:14px;line-height:1.45;margin-top:8px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden"></div>
   </button>
   <button class="tile wide inside-tile" onclick="openHouse()"><canvas id="peek" width="300" height="200" aria-hidden="true"></canvas>
-    <div class="k">Inside his mind<span class="go">›</span></div><div class="v s" style="max-width:62%">Visit his house</div><div class="sub" id="peek-line" style="max-width:62%">Every agent has a room.</div></button>
+    <div class="k">Inside his mind<span class="go">›</span></div><div class="v s" style="max-width:62%">The house his brain lives in</div><div class="sub" id="peek-line" style="max-width:62%">Pinch the brain to pull back.</div></button>
 </div>
 <div class="foot"><button id="quietBtn" class="ghost" onclick="D && D.stealth ? J.quietEnd() : J.quietStart()">Quiet mode</button></div>
 
@@ -707,6 +707,7 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
     near.sort((x, y) => x[1] - y[1]);
     for (let k = 0; k < Math.min(3, near.length); k++) if (i < near[k][0]) E.push([i, near[k][0]]);
   }
+  window.brainShape = {P, E, KIND, POS};   // the house draws this same brain in Jarvis's room
   // sparks: a fibre lights up for a moment (more of them near an agent that's working)
   let sparks = [];
   const nearEdges = {};
@@ -832,13 +833,21 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   requestAnimationFrame(frame);
 
   const pt = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) * cv.width / b.width, (e.clientY - b.top) * cv.height / b.height]; };
-  cv.addEventListener('pointerdown', e => { if (openId) { closeSheet(); return; } drag = {x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), turning: false, at: pt(e)}; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
+  cv.addEventListener('pointerdown', e => { if (fingers.size > 1) { drag = null; return; } if (openId) { closeSheet(); return; } drag = {x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), turning: false, at: pt(e)}; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
   cv.addEventListener('pointermove', e => { if (!drag) return;
     if (!drag.turning && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 14) drag.turning = true;   // only a real drag turns the brain
     if (!drag.turning) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     yaw += dx * 0.01; pitch = Math.max(-1.1, Math.min(1.1, pitch + dy * 0.01)); vy = dx * 0.6; vp = dy * 0.6; drag.x = e.clientX; drag.y = e.clientY; });
   cv.addEventListener('pointercancel', () => { drag = null; });
+  // pinch the brain (two fingers together) to pull back and see the house it lives in
+  const fingers = new Map(); let pinch0 = 0;
+  const spread = () => { const f = [...fingers.values()]; return f.length < 2 ? 0 : Math.hypot(f[0][0] - f[1][0], f[0][1] - f[1][1]); };
+  cv.addEventListener('pointerdown', e => { if (e.isPrimary) fingers.clear(); fingers.set(e.pointerId, [e.clientX, e.clientY]); if (fingers.size === 2) { pinch0 = spread(); drag = null; } }, true);
+  cv.addEventListener('pointermove', e => { if (!fingers.has(e.pointerId)) return; fingers.set(e.pointerId, [e.clientX, e.clientY]);
+    if (fingers.size === 2 && pinch0) { drag = null; if (pinch0 - spread() > 60) { pinch0 = 0; fingers.clear(); window.openHouse && window.openHouse(true); } } }, true);
+  const lift = e => { fingers.delete(e.pointerId); if (fingers.size < 2) pinch0 = 0; };
+  cv.addEventListener('pointerup', lift, true); cv.addEventListener('pointercancel', lift, true);
   cv.addEventListener('pointerup', e => { const d = drag; drag = null; if (!d || d.turning || performance.now() - d.t0 > 700) return;
     const [x, y] = d.at; let best = 'jarvis', bd = 1e9; const c = proj([0, 0, 0]); bd = Math.hypot(x - c[0], y - c[1]) - 70;
     let ab = 1e9, aid = null;
