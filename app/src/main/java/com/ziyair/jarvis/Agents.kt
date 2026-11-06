@@ -24,7 +24,9 @@ object Agents {
         "log_baby", "baby_status", "log_earnings", "earnings_summary", "log_expense", "play_music", "navigate",
         "lights", "open_app", "set_alarm", "journal_add", "pursuit_add", "judge_offer", "draft_text", "meal_tonight",
         // the advanced ones: whole jobs, follow-through, and what his own mind has been up to
-        "dash_day", "scan_phone", "recall", "baby_patterns", "simulate", "self_check", "run_skill", "upgrade_now", "upgrades_list", "upgrade_decide", "run_job", "follow_up_add", "follow_ups_list", "follow_up_done", "mind_recent")
+        "dash_day", "scan_phone", "recall", "baby_patterns", "simulate", "self_check", "run_skill", "upgrade_now", "upgrades_list", "upgrade_decide", "run_job", "follow_up_add", "follow_ups_list", "follow_up_done", "mind_recent",
+        // quick lookups from his connections (no hop): drive times, gas, sleep, YouTube, sending to his laptop
+        "drive_time", "gas_prices", "health_today", "youtube_stats")
 
     /** Lights an agent up in the brain for a moment when its skill was used directly. */
     fun flash(id: String, ms: Long = 1600) { val t = System.currentTimeMillis(); active[id] = t; Thread { try { Thread.sleep(ms) } catch (_: Exception) {}; active.remove(id, t) }.start() }
@@ -33,7 +35,7 @@ object Agents {
 
     val PHONE = Def("phone", "Phone", "Runs his phone: calls, texts, DMs, apps, music, directions, the screen.",
         setOf("call", "send_text", "read_messages", "reply_message", "navigate", "stop_navigation", "play_music", "open_app",
-            "media_control", "phone_task", "screen_read", "phone_control", "find_phone", "answer_call", "decline_call"),
+            "media_control", "phone_task", "screen_read", "phone_control", "find_phone", "answer_call", "decline_call", "telegram_send"),
         "Do the job on his phone with the fewest steps. For anything inside an app, use phone_task with the whole job in one sentence. " +
             "Texts, DMs, replies and calls only go out when the task says he confirmed; otherwise get it ready and say it's waiting for his yes.")
 
@@ -43,7 +45,7 @@ object Agents {
 
     val FAMILY = Def("family", "Family and home", "Ziyair's feeds, diapers and sleep, the baby journal, the lights and the house.",
         setOf("log_baby", "baby_status", "baby_patterns", "set_feed_interval", "journal_add", "journal_read", "remind_at_home", "lights",
-            "house_speaker", "set_home_wifi"),
+            "house_speaker", "set_home_wifi", "nest_devices", "nest_thermostat"),
         "Log baby events the moment he mentions them. Speech-to-text often mangles the baby's name: it's always Ziyair.")
 
     val PLANNER = Def("planner", "Planner", "Owns his time: calendar, reminders, alarms, the morning briefing and his protocols.",
@@ -61,7 +63,7 @@ object Agents {
             "the best few, newest first. Talk like a sharp co-founder: practical, no hype. Never post, message or buy anything.")
 
     val MEMORY = Def("memory", "Memory", "Keeps everything Jarvis knows about him accurate: what he remembers, corrections, and forgetting on request.",
-        setOf("remember", "forget", "memory_list", "memory_fix"),
+        setOf("remember", "forget", "memory_list", "memory_fix", "backup_now", "backup_status"),
         "Read memory_list before changing anything. When he asks what you know, give the few things that matter most in two or three sentences, not the whole list. " +
             "When tidying, merge duplicates and fix outdated facts with memory_fix; never invent facts. Forget means delete, completely.")
 
@@ -91,7 +93,19 @@ object Agents {
         "Healthy, cheap and quick: 30 minutes or less, there's a newborn at home. Simple, real food from a normal grocery store; reuse ingredients across the week so less goes to waste. " +
             "When you plan, save every day with meal_save (ingredients as a short shopping list). Then say the week in one or two sentences, not every ingredient. Never buy or order anything.")
 
-    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER, COACH, BILLS, APPTS, PACKAGES, SUPPLIES, MEALS)
+    val INBOX = Def("inbox", "Inbox", "Reads his Gmail on its own (read only) for bills, receipts and deliveries, and hands them to the Bills, Appointments and Packages agents.",
+        setOf("email_check", "email_search", "receipts"),
+        "Never send, delete or change email. Say what matters in one or two sentences: new bills with amount and due date, deliveries, receipts with totals.")
+
+    val ROADS = Def("roads", "Roads", "Drive times with live traffic and the cheapest gas around him, from Google Maps.",
+        setOf("drive_time", "gas_prices", "navigate"),
+        "Answer with the time, the traffic and the one fact that matters (miles, the price, the street). Only start directions if he asked to go.")
+
+    val HEALTH = Def("health", "Health", "His sleep and steps from Health Connect, so Jarvis knows how rested he is.",
+        setOf("health_today"),
+        "Give the numbers plainly in one sentence. No medical advice; never save health details to memory.")
+
+    val ALL = listOf(PHONE, MONEY, FAMILY, PLANNER, RESEARCH, PURSUIT, MEMORY, BUILDER, COACH, BILLS, APPTS, PACKAGES, SUPPLIES, MEALS, INBOX, ROADS, HEALTH)
     fun def(id: String) = ALL.firstOrNull { it.id == id }
 
     // ---------------- switches, notebooks, stats ----------------
@@ -167,12 +181,13 @@ object Agents {
     /** Agents that think things through on the bigger model (Phone, Packages and Supplies stay quick). */
     val SMART = setOf("planner", "money", "family", "pursuit", "memory", "coach", "bills", "appts", "meals", "research", "builder")
     /** Agents that can ask each other (Builder and Phone don't: one works on Jarvis himself, the other only acts on his yes). */
-    private val TEAM_PLAYERS = setOf("money", "family", "planner", "research", "pursuit", "memory", "bills", "appts", "packages", "supplies", "meals")
+    private val TEAM_PLAYERS = setOf("money", "family", "planner", "research", "pursuit", "memory", "bills", "appts", "packages", "supplies", "meals", "inbox", "roads", "health")
 
     /** Skills that need a look at the result before the agent is done (everything else returns straight away). */
     private val LOOK_AGAIN = setOf("screen_read", "read_messages", "earnings_summary", "expenses_summary", "baby_status", "journal_read",
         "calendar_events", "list_reminders", "briefing", "pursuit_list", "memory_list", "list_lessons", "review_today", "bills_list", "appts_list", "life_sweep", "packages_list", "supplies_list", "supply_check", "meals_week", "money_week", "subscriptions_list", "cheapest_store", "list_read",
-        "read_file", "list_files", "build_status", "read_build_errors", "ask_agent", "follow_ups_list")
+        "read_file", "list_files", "build_status", "read_build_errors", "ask_agent", "follow_ups_list",
+        "email_check", "email_search", "receipts", "health_today", "drive_time", "gas_prices", "nest_devices", "backup_status")
 
     fun smartFor(c: Context, id: String) = id in SMART && Brain(c).config().optBoolean("agents_smart", true) && !Claude.nearBudget(c)
 

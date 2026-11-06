@@ -106,6 +106,26 @@ class Prefs(context: Context) {
         get() = sp.getString("voice_name", "") ?: ""
         set(v) = sp.edit().putString("voice_name", v.trim()).apply()
 
+    // ---- connections (every key is typed in on the phone and stays in app-private storage; never in GitHub, never in backups) ----
+    private fun s(k: String) = sp.getString(k, "") ?: ""
+    private fun put(k: String, v: String) = sp.edit().putString(k, v.trim()).apply()
+    /** Google sign-in for Gmail, Drive and Nest: a "Desktop app" OAuth client from Google Cloud. */
+    var googleClientId: String get() = s("google_client_id"); set(v) = put("google_client_id", v)
+    var googleClientSecret: String get() = s("google_client_secret"); set(v) = put("google_client_secret", v)
+    /** Passphrase that locks the Drive backup. Without it the backup can't be read, by anyone. */
+    var backupPass: String get() = s("backup_pass"); set(v) = put("backup_pass", v)
+    var youtubeKey: String get() = s("youtube_key"); set(v) = put("youtube_key", v)
+    /** His channel: @handle or the UC… channel ID. */
+    var youtubeChannel: String get() = s("youtube_channel"); set(v) = put("youtube_channel", v)
+    var telegramToken: String get() = s("telegram_token"); set(v) = put("telegram_token", v)
+    var mapsKey: String get() = s("maps_key"); set(v) = put("maps_key", v)
+    /** Nest Device Access project ID (from console.nest.google.com/device-access). */
+    var nestProject: String get() = s("nest_project"); set(v) = put("nest_project", v)
+    var elevenKey: String get() = s("eleven_key"); set(v) = put("eleven_key", v)
+    var elevenVoice: String get() = s("eleven_voice"); set(v) = put("eleven_voice", v)
+    /** A realistic cloud voice is in use (ElevenLabs or Google), so his own on-phone voice steps aside. */
+    val cloudVoice: Boolean get() = ttsKey.isNotBlank() || ElevenVoice.usable(this)
+
     /** Long-term memory: [{"t":"fact","at":ms}] */
     fun memory(): JSONArray = try { JSONArray(sp.getString("memory", "[]")) } catch (e: Exception) { JSONArray() }
     fun saveMemory(a: JSONArray) = sp.edit().putString("memory", a.toString()).apply()

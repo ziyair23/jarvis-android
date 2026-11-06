@@ -49,6 +49,19 @@ class MainActivity : Activity() {
         val github = findViewById<EditText>(R.id.githubToken); github.setText(prefs.githubToken)
         val ttsKey = findViewById<EditText>(R.id.ttsKey); ttsKey.setText(prefs.ttsKey)
         val voiceName = findViewById<EditText>(R.id.voiceName); voiceName.setText(prefs.voiceName)
+        // connections: every key typed in here stays in the app's private storage on this phone
+        val conn = listOf<Triple<Int, () -> String, (String) -> Unit>>(
+            Triple(R.id.googleClientId, { prefs.googleClientId }, { v -> prefs.googleClientId = v }),
+            Triple(R.id.googleClientSecret, { prefs.googleClientSecret }, { v -> prefs.googleClientSecret = v }),
+            Triple(R.id.backupPass, { prefs.backupPass }, { v -> prefs.backupPass = v }),
+            Triple(R.id.youtubeKey, { prefs.youtubeKey }, { v -> prefs.youtubeKey = v }),
+            Triple(R.id.youtubeChannel, { prefs.youtubeChannel }, { v -> prefs.youtubeChannel = v }),
+            Triple(R.id.telegramToken, { prefs.telegramToken }, { v -> if (v.trim() != prefs.telegramToken) { prefs.telegramToken = v; Telegram.unpair(this); if (prefs.running) thread { Telegram.restart(this) } } }),
+            Triple(R.id.mapsKey, { prefs.mapsKey }, { v -> prefs.mapsKey = v }),
+            Triple(R.id.nestProject, { prefs.nestProject }, { v -> prefs.nestProject = v }),
+            Triple(R.id.elevenKey, { prefs.elevenKey }, { v -> if (v.trim() != prefs.elevenKey) ElevenVoice.unbench(prefs); prefs.elevenKey = v }),
+            Triple(R.id.elevenVoice, { prefs.elevenVoice }, { v -> prefs.elevenVoice = v }))
+        for ((id, get, _) in conn) findViewById<EditText>(id).setText(get())
 
         findViewById<Button>(R.id.save).setOnClickListener {
             prefs.claudeKey = claude.text.toString(); prefs.picoKey = pico.text.toString()
@@ -57,6 +70,8 @@ class MainActivity : Activity() {
             prefs.dinner = dinner.text.toString(); prefs.bedtime = bed.text.toString()
             prefs.carName = car.text.toString(); prefs.goveeKey = govee.text.toString(); prefs.geminiKey = gemini.text.toString(); prefs.groqKey = groq.text.toString(); prefs.sp.edit().remove("fast_chat_bad").apply(); prefs.sp.edit().remove("live_dead_key").apply(); prefs.githubToken = github.text.toString()
             prefs.ttsKey = ttsKey.text.toString(); prefs.voiceName = voiceName.text.toString()
+            for ((id, _, set) in conn) set(findViewById<EditText>(id).text.toString())
+            if (prefs.running) thread { Telegram.start(this) }
             Scheduler.scheduleDaily(this)
             status.text = "Saved, sir."
             findViewById<View>(R.id.setup).visibility = if (ready()) View.GONE else View.VISIBLE
@@ -77,7 +92,8 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.battery).setOnClickListener { askBattery() }
         findViewById<Button>(R.id.allowComms).setOnClickListener {
             requestPermissions(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS,
-                Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR, Manifest.permission.CAMERA), 2)
+                Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR, Manifest.permission.CAMERA,
+                Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 2)
         }
         findViewById<Button>(R.id.allowApps).setOnClickListener {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -100,12 +116,30 @@ class MainActivity : Activity() {
                 .show()
         }
         findViewById<Button>(R.id.memoryBtn).setOnClickListener { showMemory() }
+        val say: (String) -> Unit = { m -> runOnUiThread { status.text = m; render() } }
+        findViewById<Button>(R.id.connectGoogle).setOnClickListener {
+            if (GoogleAuth.connected(this, GoogleAuth.GOOGLE)) { confirm("Disconnect Google?", "Gmail reading and the Drive backup stop until you connect again.") { GoogleAuth.disconnect(this, GoogleAuth.GOOGLE); render() }; return@setOnClickListener }
+            status.text = "Opening Google sign-in…"; GoogleAuth.connect(this, GoogleAuth.GOOGLE, say)
+        }
+        findViewById<Button>(R.id.connectNest).setOnClickListener {
+            if (GoogleAuth.connected(this, GoogleAuth.NEST)) { confirm("Disconnect Nest?", "Jarvis stops seeing your Nest devices.") { GoogleAuth.disconnect(this, GoogleAuth.NEST); render() }; return@setOnClickListener }
+            status.text = "Opening Nest sign-in…"; GoogleAuth.connect(this, GoogleAuth.NEST, say)
+        }
+        findViewById<Button>(R.id.allowHealth).setOnClickListener { startActivity(Intent(this, HealthPermsActivity::class.java)) }
+        findViewById<Button>(R.id.backupNow).setOnClickListener { status.text = "Backing up…"; thread { say(DriveBackup.backupNow(this)) } }
+        findViewById<Button>(R.id.restoreBackup).setOnClickListener {
+            confirm("Restore from Drive?", "This replaces what Jarvis remembers on this phone with the backup. Your keys stay as they are.") { status.text = "Restoring…"; thread { say(DriveBackup.restore(this)) } }
+        }
+        findViewById<Button>(R.id.telegramPair).setOnClickListener {
+            if (Telegram.owner(this) != 0L) confirm("Unpair Telegram?", "The next chat that sends /start to your bot becomes yours.") { Telegram.unpair(this); render() }
+            else status.text = if (prefs.telegramToken.isBlank()) "Add your bot token and Save first." else "From your laptop's Telegram, send your bot: /start ${Telegram.code(this)}  (Jarvis needs to be running.)"
+        }
         findViewById<Button>(R.id.testVoice).setOnClickListener {
-            if (prefs.claudeKey.isBlank() && prefs.ttsKey.isBlank()) { status.text = "Save your keys first, sir."; return@setOnClickListener }
+            if (prefs.claudeKey.isBlank() && !prefs.cloudVoice) { status.text = "Save your keys first, sir."; return@setOnClickListener }
             if (!hasMic()) { askPermissions(); return@setOnClickListener }
             startForegroundService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_SAY)
                 .putExtra("text", "Good evening, sir. This is how I sound. Shall we get to work?"))
-            if (prefs.ttsKey.isNotBlank()) thread { Thread.sleep(6000); runOnUiThread { if (CloudVoice.lastError.isNotBlank()) status.text = CloudVoice.lastError + ". Check the Google voice key." } }
+            if (prefs.cloudVoice) thread { Thread.sleep(6000); runOnUiThread { val e = ElevenVoice.lastError.takeIf { ElevenVoice.usable(prefs) && it.isNotBlank() } ?: CloudVoice.lastError; if (e.isNotBlank()) status.text = "$e. Check the voice key." } }
         }
         findViewById<Button>(R.id.voiceDl).setOnClickListener {
             if (Piper.downloading) return@setOnClickListener
@@ -173,7 +207,7 @@ class MainActivity : Activity() {
         if (i?.getBooleanExtra("update", false) == true) { i.removeExtra("update"); update.performClick() }
     }
 
-    override fun onResume() { super.onResume(); LogBus.listen(refresh); render() }
+    override fun onResume() { super.onResume(); LogBus.listen(refresh); render(); thread { val ok = try { HealthLink.granted(this) } catch (_: Throwable) { false }; if (ok != healthOk) { healthOk = ok; runOnUiThread { render() } } } }
     override fun onPause() { LogBus.unlisten(refresh); super.onPause() }
 
     private fun ready() = prefs.claudeKey.isNotBlank()
@@ -216,6 +250,24 @@ class MainActivity : Activity() {
         catch (_: Exception) { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
     }
 
+    private fun confirm(title: String, msg: String, yes: () -> Unit) {
+        android.app.AlertDialog.Builder(this).setTitle(title).setMessage(msg).setPositiveButton("Yes") { _, _ -> yes() }.setNegativeButton("Cancel", null).show()
+    }
+
+    private var healthOk = false
+    private fun renderConnections() {
+        val g = GoogleAuth.connected(this, GoogleAuth.GOOGLE)
+        findViewById<Button>(R.id.connectGoogle).text = if (g) "Google connected" + GoogleAuth.account(this, GoogleAuth.GOOGLE).takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty() + " · tap to disconnect" else "Connect Google (Gmail + Drive)"
+        findViewById<Button>(R.id.connectNest).text = if (GoogleAuth.connected(this, GoogleAuth.NEST)) "Nest connected · tap to disconnect" else "Connect Nest"
+        val who = Telegram.ownerName(this)
+        findViewById<Button>(R.id.telegramPair).text = when { prefs.telegramToken.isBlank() -> "Telegram: add a bot token"; Telegram.owner(this) != 0L -> "Telegram: paired with ${who.ifBlank { "you" }} · tap to unpair"; else -> "Telegram: send /start ${Telegram.code(this)} to your bot" }
+        findViewById<Button>(R.id.allowHealth).text = if (healthOk) "Sleep & steps: allowed" else "Allow sleep & steps (Health Connect)"
+        val on = listOfNotNull("Gmail".takeIf { g }, "Drive backup".takeIf { DriveBackup.on(this) }, "Health".takeIf { healthOk }, "YouTube".takeIf { prefs.youtubeKey.isNotBlank() && prefs.youtubeChannel.isNotBlank() },
+            "Telegram".takeIf { Telegram.owner(this) != 0L && prefs.telegramToken.isNotBlank() }, "Maps".takeIf { prefs.mapsKey.isNotBlank() },
+            "Nest".takeIf { GoogleAuth.connected(this, GoogleAuth.NEST) }, "ElevenLabs".takeIf { prefs.elevenKey.isNotBlank() })
+        findViewById<TextView>(R.id.connStatus).text = if (on.isEmpty()) "Nothing connected yet." else "Connected: " + on.joinToString(", ") + ". " + DriveBackup.status(this).takeIf { DriveBackup.on(this) }.orEmpty()
+    }
+
     private fun showMemory() {
         val facts = Memory.all(this)
         val b = android.app.AlertDialog.Builder(this)
@@ -227,6 +279,7 @@ class MainActivity : Activity() {
     }
 
     private fun render() {
+        renderConnections()
         findViewById<Button>(R.id.talkFirst).text = if (prefs.talkFirst) "Speaks first: on" else "Speaks first: off"
         val listening = (Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: "").contains(packageName)
         findViewById<Button>(R.id.allowMsgs).text = if (listening) "Reading messages: allowed" else "Allow reading messages"
@@ -237,8 +290,9 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.wakeScreen).text = if (prefs.wakeScreen) "Show replies on lock screen: on" else "Show replies on lock screen: off"
         val comms = checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
-        val cam = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        findViewById<Button>(R.id.allowComms).text = if (comms && Cal.allowed(this) && cam) "Calls, texts, calendar & camera: allowed" else "Allow calls, texts, calendar & camera"
+        val cam = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+            (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+        findViewById<Button>(R.id.allowComms).text = if (comms && Cal.allowed(this) && cam) "Calls, texts, calendar, camera & location: allowed" else "Allow calls, texts, calendar, camera & location"
         findViewById<Button>(R.id.voiceDl).text = Piper.label(this)
         findViewById<Button>(R.id.allowScreen).text = if (JarvisAccess.on(this)) "Screen control: on" else "Allow screen control"
         findViewById<Button>(R.id.homeWifi).text = if (HomeNet.saved(prefs).isBlank()) "This is my home Wi-Fi (tap while at home)" else "Home Wi-Fi saved" + HomeNet.name(prefs).takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty() + " · tap to reset"
