@@ -7,7 +7,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -28,16 +27,13 @@ import kotlin.concurrent.thread
  */
 object HealthLink {
     val PERMS = setOf(HealthPermission.getReadPermission(SleepSessionRecord::class), HealthPermission.getReadPermission(StepsRecord::class))
-    const val BACKGROUND = HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
+    /** Lets him ask by voice with the screen locked (newer Health Connect only; older ones just don't grant it). */
+    const val BACKGROUND = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
 
     fun available(c: Context) = HealthConnectClient.getSdkStatus(c) == HealthConnectClient.SDK_AVAILABLE
     private fun client(c: Context) = HealthConnectClient.getOrCreate(c)
 
-    fun canBackground(c: Context): Boolean = try {
-        client(c).features.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
-    } catch (_: Throwable) { false }
-
-    fun wanted(c: Context): Set<String> = if (canBackground(c)) PERMS + BACKGROUND else PERMS
+    fun wanted(@Suppress("UNUSED_PARAMETER") c: Context): Set<String> = PERMS + BACKGROUND
 
     fun granted(c: Context): Boolean = available(c) && try { runBlocking { client(c).permissionController.getGrantedPermissions().containsAll(PERMS) } } catch (_: Throwable) { false }
 
