@@ -142,9 +142,9 @@
             <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="YouTube Data API key (Google Cloud → APIs → YouTube Data API v3)" />
             <EditText android:id="@+id/youtubeKey" style="@style/Field" android:inputType="textPassword" android:hint="AIza…" />
             <TextView style="@style/Hint" android:text="Your YouTube channel" />
-            <EditText android:id="@+id/youtubeChannel" style="@style/Field" android:inputType="text" android:hint="@yourhandle" />
+            <EditText android:id="@+id/youtubeChannel" style="@style/Field" android:inputType="text" android:hint="\@yourhandle" />
 
-            <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="Telegram bot token (from @BotFather). Then send /start to your bot from your laptop." />
+            <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="Telegram bot token (from \@BotFather). Save, then send your bot the /start code shown below." />
             <EditText android:id="@+id/telegramToken" style="@style/Field" android:inputType="textPassword" android:hint="123456:ABC…" />
             <Button android:id="@+id/telegramPair" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Telegram: not paired" />
 

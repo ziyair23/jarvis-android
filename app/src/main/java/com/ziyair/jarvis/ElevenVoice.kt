@@ -22,7 +22,8 @@ object ElevenVoice {
 
     /** Out of credits, bad key, or rate limited: step aside until tomorrow morning (or a fresh key is saved). */
     fun benchUntilTomorrow(p: Prefs) {
-        val t = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1); set(Calendar.HOUR_OF_DAY, 5); set(Calendar.MINUTE, 0) }.timeInMillis
+        val now = Calendar.getInstance()
+        val t = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 5); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); if (!after(now)) add(Calendar.DAY_OF_YEAR, 1) }.timeInMillis
         p.sp.edit().putLong("eleven_off_until", t).apply()
     }
     fun unbench(p: Prefs) = p.sp.edit().remove("eleven_off_until").apply()

@@ -14,6 +14,11 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 /**
  * Nightly encrypted backup of Jarvis's mind to Google Drive: memory, lessons, lists, baby log, bills, money, the
@@ -86,20 +91,20 @@ object DriveBackup {
         backupNow(c)
     }
 
-    @Volatile private var busy = false
+    private val busy = java.util.concurrent.atomic.AtomicBoolean(false)
 
     fun backupNow(c: Context): String {
         val p = Prefs(c)
         if (!GoogleAuth.connected(c, GoogleAuth.GOOGLE)) return "Drive isn't connected. Tap Connect Google in setup."
         if (p.backupPass.length < 8) return "Set a backup passphrase (8 characters or more) in setup first."
-        if (busy) return "Already backing up."
-        busy = true
+        if (!busy.compareAndSet(false, true)) return "Already backing up."
         p.sp.edit().putLong("backup_try_at", System.currentTimeMillis()).apply()
         try {
             val tl = timelineFile(c).takeIf { it.exists() && it.length() < 12L * 1024 * 1024 }?.readText()
             val plain = gzip(pack(p.sp.all, tl, System.currentTimeMillis()).toString().toByteArray())
             val blob = encrypt(plain, p.backupPass)
-            val id = findId(c)
+            val (found, id) = findId(c)
+            if (!found) return "Couldn't reach Drive to back up. I'll try again later."
             val (code, body) = if (id == null) {
                 val boundary = "jarvis" + System.nanoTime()
                 val meta = JSONObject().put("name", NAME).put("parents", JSONArray().put("appDataFolder")).toString()
@@ -113,38 +118,40 @@ object DriveBackup {
             Trace.log(c, "backup", "backed up ${blob.size / 1024} KB to Drive")
             return "Backed up to your Drive, locked with your passphrase (${maxOf(1, blob.size / 1024)} KB)."
         } catch (e: Exception) { Problems.log(c, "backup: ${e.message}"); return "Backup failed: ${e.message}"
-        } finally { busy = false }
+        } finally { busy.set(false) }
     }
 
-    // HttpURLConnection can't send PATCH, so Google's method override does it
+    // a real PATCH (HttpURLConnection can't send one), through OkHttp
     private fun patch(c: Context, id: String, blob: ByteArray): Pair<Int, String> {
         val t = GoogleAuth.token(c, GoogleAuth.GOOGLE) ?: return 0 to "not connected"
         return try {
-            val k = java.net.URL("https://www.googleapis.com/upload/drive/v3/files/$id?uploadType=media").openConnection() as java.net.HttpURLConnection
-            k.requestMethod = "POST"; k.setRequestProperty("X-HTTP-Method-Override", "PATCH"); k.doOutput = true
-            k.connectTimeout = 8000; k.readTimeout = 30000
-            k.setRequestProperty("Authorization", "Bearer $t"); k.setRequestProperty("content-type", "application/octet-stream")
-            k.outputStream.use { it.write(blob) }
-            val code = k.responseCode
-            val body = (if (code in 200..299) k.inputStream else k.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-            k.disconnect(); code to body
+            val req = Request.Builder().url("https://www.googleapis.com/upload/drive/v3/files/$id?uploadType=media")
+                .header("Authorization", "Bearer $t").patch(blob.toRequestBody("application/octet-stream".toMediaType())).build()
+            OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+                .newCall(req).execute().use { it.code to (it.body?.string().orEmpty()) }
         } catch (e: Exception) { -1 to (e.message ?: "no connection") }
     }
 
-    private fun findId(c: Context): String? {
+    /** (reached Drive, newest backup's id or null if there isn't one). */
+    private fun findId(c: Context): Pair<Boolean, String?> {
         val q = java.net.URLEncoder.encode("name='$NAME'", "UTF-8")
-        val (code, body) = GoogleAuth.api(c, GoogleAuth.GOOGLE, "GET", "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,modifiedTime)&q=$q")
-        if (code != 200) return null
-        val f = JSONObject(body).optJSONArray("files") ?: return null
-        return if (f.length() > 0) f.getJSONObject(0).optString("id") else null
+        val order = java.net.URLEncoder.encode("modifiedTime desc", "UTF-8")
+        val (code, body) = GoogleAuth.api(c, GoogleAuth.GOOGLE, "GET", "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,modifiedTime)&orderBy=$order&q=$q")
+        if (code != 200) return false to null
+        val f = try { JSONObject(body).optJSONArray("files") } catch (_: Exception) { return false to null } ?: return true to null
+        return true to (if (f.length() > 0) f.getJSONObject(0).optString("id").ifBlank { null } else null)
     }
 
     /** Pulls the backup down and puts everything back (keys stay as they are on this phone). */
-    fun restore(c: Context): String {
+    fun restore(c: Context): String = try { restoreInner(c) } catch (e: Exception) { Problems.log(c, "restore: ${e.message}"); "Couldn't restore: ${e.message}" }
+
+    private fun restoreInner(c: Context): String {
         val p = Prefs(c)
         if (!GoogleAuth.connected(c, GoogleAuth.GOOGLE)) return "Connect Google first."
         if (p.backupPass.isBlank()) return "Type the backup passphrase in setup first."
-        val id = findId(c) ?: return "There's no Jarvis backup in this Google account yet."
+        val (found, id0) = findId(c)
+        if (!found) return "Couldn't reach Drive."
+        val id = id0 ?: return "There's no Jarvis backup in this Google account yet."
         val blob = GoogleAuth.bytes(c, GoogleAuth.GOOGLE, "https://www.googleapis.com/drive/v3/files/$id?alt=media") ?: return "Couldn't download the backup."
         val plain = decrypt(blob, p.backupPass) ?: return "That passphrase doesn't open this backup."
         val j = JSONObject(String(gunzip(plain)))

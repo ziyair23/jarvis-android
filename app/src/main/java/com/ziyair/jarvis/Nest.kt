@@ -35,7 +35,7 @@ object Nest {
         t.optJSONObject("sdm.devices.traits.Temperature")?.optDouble("ambientTemperatureCelsius")?.takeIf { !it.isNaN() }?.let { parts.add("${f(it)}°F inside") }
         t.optJSONObject("sdm.devices.traits.Humidity")?.optDouble("ambientHumidityPercent")?.takeIf { !it.isNaN() }?.let { parts.add("${it.toInt()}% humidity") }
         t.optJSONObject("sdm.devices.traits.ThermostatMode")?.optString("mode")?.takeIf { it.isNotBlank() }?.let { parts.add("mode ${it.lowercase()}") }
-        t.optJSONObject("sdm.devices.traits.ThermostatHvac")?.optString("status")?.takeIf { it.isNotBlank() && it != "OFF" }?.let { parts.add(it.lowercase() + "ing") }
+        t.optJSONObject("sdm.devices.traits.ThermostatHvac")?.optString("status")?.takeIf { it.isNotBlank() && it != "OFF" }?.let { parts.add(it.lowercase()) }
         t.optJSONObject("sdm.devices.traits.ThermostatTemperatureSetpoint")?.let { s ->
             s.optDouble("heatCelsius").takeIf { !it.isNaN() }?.let { parts.add("heat set to ${f(it)}°F") }
             s.optDouble("coolCelsius").takeIf { !it.isNaN() }?.let { parts.add("cool set to ${f(it)}°F") } }
@@ -69,8 +69,8 @@ object Nest {
         if (th.isEmpty()) return "There's no Nest thermostat on your account."
         val d = th.firstOrNull { !which.isNullOrBlank() && it.label.contains(which, true) } ?: th[0]
         val done = ArrayList<String>()
-        if (!mode.isNullOrBlank()) {
-            val m = mode.uppercase(Locale.US).replace(" ", "").replace("AUTO", "HEATCOOL").replace("HEAT_COOL", "HEATCOOL")
+        val m = mode?.uppercase(Locale.US)?.replace(" ", "")?.replace("AUTO", "HEATCOOL")?.replace("HEAT_COOL", "HEATCOOL")?.replace("HEAT-COOL", "HEATCOOL")?.takeIf { it.isNotBlank() }
+        if (m != null) {
             if (m !in setOf("HEAT", "COOL", "HEATCOOL", "OFF")) return "Thermostat modes are heat, cool, auto or off."
             val (code, b) = cmd(c, d, "sdm.devices.commands.ThermostatMode.SetMode", JSONObject().put("mode", m))
             if (code != 200) return "Nest didn't take the mode change ($code): ${b.take(80)}"
@@ -78,7 +78,7 @@ object Nest {
         }
         if (tempF != null) {
             if (tempF < 50 || tempF > 90) return "Keep it between 50 and 90°F."
-            val cur = if (done.isNotEmpty()) mode!!.uppercase(Locale.US) else d.traits.optJSONObject("sdm.devices.traits.ThermostatMode")?.optString("mode").orEmpty()
+            val cur = m ?: d.traits.optJSONObject("sdm.devices.traits.ThermostatMode")?.optString("mode").orEmpty()
             val (name, params) = when {
                 cur.startsWith("COOL") -> "SetCool" to JSONObject().put("coolCelsius", c(tempF))
                 cur.startsWith("HEATCOOL") || cur.startsWith("AUTO") -> "SetRange" to JSONObject().put("heatCelsius", c(tempF - 2)).put("coolCelsius", c(tempF + 2))
@@ -86,7 +86,7 @@ object Nest {
                 else -> "SetHeat" to JSONObject().put("heatCelsius", c(tempF))
             }
             val (code, b) = cmd(c, d, "sdm.devices.commands.ThermostatTemperatureSetpoint.$name", params)
-            if (code != 200) return "Nest didn't take the temperature ($code): ${b.take(80)}"
+            if (code != 200) return "Nest didn't take the temperature ($code)" + (if (b.contains("Eco", true) || b.contains("FAILED_PRECONDITION")) "; if it's in Eco mode, turn Eco off first." else ": ${b.take(80)}")
             done.add("${Math.round(tempF)}°F")
         }
         return if (done.isEmpty()) describe(d) + "." else "${d.label} set to ${done.joinToString(", ")}."

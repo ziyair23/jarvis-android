@@ -53,7 +53,17 @@ object GoogleAuth {
     // ---------------- stored tokens ----------------
     fun connected(c: Context, which: String) = Prefs(c).sp.getString("g_refresh_$which", "").orEmpty().isNotBlank()
     fun account(c: Context, which: String) = Prefs(c).sp.getString("g_who_$which", "").orEmpty()
-    fun disconnect(c: Context, which: String) = Prefs(c).sp.edit().remove("g_refresh_$which").remove("g_access_$which").remove("g_exp_$which").apply()
+    /** Forgets the sign-in here and tells Google to cancel it too. */
+    fun disconnect(c: Context, which: String) {
+        val p = Prefs(c); val refresh = p.sp.getString("g_refresh_$which", "").orEmpty()
+        p.sp.edit().remove("g_refresh_$which").remove("g_access_$which").remove("g_exp_$which").remove("g_who_$which").apply()
+        if (refresh.isNotBlank()) Thread { form("https://oauth2.googleapis.com/revoke", mapOf("token" to refresh)) }.start()
+    }
+
+    /** Which of the Google features he left unticked on the consent screen (granular consent). Pure. */
+    fun missing(granted: String): List<String> = listOfNotNull("Gmail".takeIf { !granted.contains("gmail.readonly") }, "Drive backup".takeIf { !granted.contains("drive.appdata") })
+
+    private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
     /** A fresh access token, or null (not connected / no signal / Google said no). Blocking; call off the main thread. */
     @Synchronized fun token(c: Context, which: String): String? {
@@ -80,8 +90,10 @@ object GoogleAuth {
     }
 
     /** Opens Google's sign-in in the browser and waits (on a background thread) for the answer. [done] gets a sentence for the screen. */
-    fun connect(c: Context, which: String, done: (String) -> Unit) {
+    fun connect(c: Context, which: String, done0: (String) -> Unit) {
         val p = Prefs(c)
+        val once = java.util.concurrent.atomic.AtomicBoolean(false)
+        val done: (String) -> Unit = { m -> if (once.compareAndSet(false, true)) done0(m) }
         if (p.googleClientId.isBlank() || p.googleClientSecret.isBlank()) { done("Add the Google client ID and secret first, then Save."); return }
         if (which == NEST && p.nestProject.isBlank()) { done("Add your Nest Device Access project ID first, then Save."); return }
         val server = try { ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")) } catch (e: Exception) { done("Couldn't start sign-in: ${e.message}"); return }
@@ -95,7 +107,7 @@ object GoogleAuth {
                     val line = sock.getInputStream().bufferedReader().readLine().orEmpty()
                     val q = parseRequestLine(line)
                     val ok = q["state"] == state && !q["code"].isNullOrBlank()
-                    val page = if (ok) "Jarvis is connected. You can close this and go back to the app." else "Sign-in didn't finish: ${q["error"] ?: "try again"}."
+                    val page = if (ok) "Jarvis is connected. You can close this and go back to the app." else "Sign-in didn't finish: ${esc(q["error"] ?: "try again")}."
                     val html = "<html><body style=\"background:#120a0b;color:#e8dcd6;font:20px sans-serif;padding:40px\">$page</body></html>"
                     sock.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${html.toByteArray().size}\r\nConnection: close\r\n\r\n$html").toByteArray())
                     sock.getOutputStream().flush()
@@ -110,14 +122,16 @@ object GoogleAuth {
                         .putLong("g_exp_$which", System.currentTimeMillis() + j.optLong("expires_in", 3600) * 1000L).apply()
                     if (which == GOOGLE) Gmail.profile(c)?.let { p.sp.edit().putString("g_who_$which", it).apply() }
                     Trace.log(c, "connect", "Google ($which) connected")
-                    done(if (which == NEST) "Nest connected, sir." else "Google connected, sir: Gmail and Drive backup are on.")
+                    val gaps = if (which == GOOGLE) missing(j.optString("scope")) else emptyList()
+                    done(when { which == NEST -> "Nest connected, sir."; gaps.isEmpty() -> "Google connected, sir: Gmail and Drive backup are on."
+                        else -> "Google connected, but ${gaps.joinToString(" and ")} was left unticked. Tap to disconnect, connect again and tick every box." })
                 }
             } catch (e: java.net.SocketTimeoutException) { done("Sign-in timed out. Tap Connect again.")
             } catch (e: Exception) { done("Sign-in failed: ${e.message}")
             } finally { try { server.close() } catch (_: Exception) {} }
         }.start()
         try { c.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        catch (e: Exception) { try { server.close() } catch (_: Exception) {}; done("No browser to sign in with.") }
+        catch (e: Exception) { done("No browser to sign in with."); try { server.close() } catch (_: Exception) {} }
     }
 
     // ---------------- http ----------------

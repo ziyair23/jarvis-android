@@ -90,12 +90,15 @@ object Maps {
     fun driveTime(c: Context, to: String, from: String?): String {
         val p = Prefs(c)
         if (noKey(p)) return "Google Maps isn't set up. Add the Maps key in setup."
-        val origin = from?.takeIf { it.isNotBlank() }?.let { place(it) } ?: here(c)?.let { point(it) } ?: place(p.city.ifBlank { "Spokane, WA" })
+        val city = p.city.ifBlank { "Spokane, WA" }
+        val ll = if (from.isNullOrBlank()) here(c) else null
+        val guessed = from.isNullOrBlank() && ll == null
+        val origin = from?.takeIf { it.isNotBlank() }?.let { place(it) } ?: ll?.let { point(it) } ?: place(city)
         val body = JSONObject().put("origin", origin).put("destination", place(to)).put("travelMode", "DRIVE").put("routingPreference", "TRAFFIC_AWARE").put("units", "IMPERIAL")
         val (code, b) = post(p.mapsKey, "https://routes.googleapis.com/directions/v2:computeRoutes", "routes.duration,routes.staticDuration,routes.distanceMeters", body)
         if (code != 200) return keyHelp(code, "Routes API")
         val r = parseRoute(b) ?: return "Google Maps couldn't find a drive to $to."
-        return describe(to, r)
+        return (if (guessed) "From $city (I can't see where you are right now): " else "") + describe(to, r)
     }
 
     /** The cheapest regular gas near him (or near [near]). */
@@ -115,6 +118,6 @@ object Maps {
         val priced = list.filter { it.regular != null }
         if (priced.isEmpty()) return "Google doesn't have prices for the stations nearby right now. Closest: ${list.sortedBy { it.miles ?: 99.0 }.take(3).joinToString(", ") { it.name }}."
         fun line(g: Gas) = "${g.name} on ${g.address}, $" + String.format(Locale.US, "%.2f", g.regular) + (g.miles?.let { String.format(Locale.US, ", %.1f mi", it) } ?: "")
-        return "Cheapest regular: ${line(priced[0])}." + (if (priced.size > 1) " Then ${priced.drop(1).take(2).joinToString("; ") { line(it) }}." else "")
+        return (if (near.isNullOrBlank() && ll == null) "Near ${p.city.ifBlank { "Spokane" }} (I can't see where you are right now): " else "") + "Cheapest regular: ${line(priced[0])}." + (if (priced.size > 1) " Then ${priced.drop(1).take(2).joinToString("; ") { line(it) }}." else "")
     }
 }

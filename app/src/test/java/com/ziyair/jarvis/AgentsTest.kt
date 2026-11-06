@@ -87,7 +87,7 @@ class AgentsTest {
     }
 
     @Test fun onlyThePhoneAgentCanSend() {
-        val senders = setOf("send_text", "reply_message", "call", "phone_task", "answer_call")
+        val senders = setOf("send_text", "reply_message", "call", "phone_task", "answer_call", "telegram_send")
         for (d in Agents.ALL.filter { it.id != "phone" }) assertTrue("${d.id} must not be able to send or call", (d.tools intersect senders).isEmpty())
     }
 

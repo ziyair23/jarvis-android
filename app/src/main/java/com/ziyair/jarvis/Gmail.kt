@@ -69,10 +69,10 @@ object Gmail {
     private fun seen(c: Context): JSONArray = try { JSONArray(Prefs(c).sp.getString("gmail_seen", "[]")) } catch (_: Exception) { JSONArray() }
     fun receipts(c: Context): JSONArray = try { JSONArray(Prefs(c).sp.getString("gmail_receipts", "[]")) } catch (_: Exception) { JSONArray() }
 
-    @Volatile private var busy = false
+    private val busy = java.util.concurrent.atomic.AtomicBoolean(false)
 
     fun maybeSweep(c: Context) {
-        if (!on(c) || busy) return
+        if (!on(c) || busy.get()) return
         if (System.currentTimeMillis() - Prefs(c).sp.getLong("gmail_swept", 0L) < 30 * 60_000L) return
         sweep(c)
     }
@@ -80,8 +80,8 @@ object Gmail {
     /** Reads new mail from the last few days and hands it to the right agents. Returns a sentence. Blocking. */
     fun sweep(c: Context): String {
         if (!on(c)) return "Gmail isn't connected. Tap Connect Google in setup."
-        if (busy) return "Already reading your email."
-        busy = true; Agents.active["inbox"] = System.currentTimeMillis()
+        if (!busy.compareAndSet(false, true)) return "Already reading your email."
+        Agents.active["inbox"] = System.currentTimeMillis()
         try {
             val p = Prefs(c)
             val msgs = fetch(c, "newer_than:3d -category:social -category:promotions -in:sent -in:chats", 25)
@@ -117,7 +117,7 @@ object Gmail {
             LogBus.changed()
             return out
         } catch (e: Exception) { Problems.log(c, "gmail sweep: ${e.message}"); return "Couldn't finish reading email: ${e.message}"
-        } finally { busy = false; Agents.active.remove("inbox") }
+        } finally { busy.set(false); Agents.active.remove("inbox") }
     }
 
     /** Receipts from the last [days] days, newest first. */

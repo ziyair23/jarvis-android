@@ -466,7 +466,8 @@ class BrainModel private constructor() {
             "pursuit" to floatArrayOf(0.74f, -0.14f, 0.16f), "builder" to floatArrayOf(-0.1f, 0.4f, -0.96f), "coach" to floatArrayOf(-0.36f, -0.3f, -0.62f),
             "bills" to floatArrayOf(0.62f, 0.18f, -0.55f), "appts" to floatArrayOf(-0.62f, 0.34f, -0.22f),
             "packages" to floatArrayOf(0.35f, -0.3f, 0.72f), "supplies" to floatArrayOf(-0.3f, -0.36f, 0.68f),
-            "meals" to floatArrayOf(-0.5f, 0.1f, 0.78f))
+            "meals" to floatArrayOf(-0.5f, 0.1f, 0.78f),
+            "inbox" to floatArrayOf(0.66f, 0.3f, -0.3f), "roads" to floatArrayOf(-0.15f, 0.0f, 0.98f), "health" to floatArrayOf(-0.6f, -0.4f, -0.35f))
         @Volatile private var one: BrainModel? = null
         fun get(): BrainModel = one ?: synchronized(this) { one ?: BrainModel().also { one = it } }
     }

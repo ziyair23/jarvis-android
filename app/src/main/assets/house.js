@@ -6,8 +6,8 @@ if (!window.THREE) return;
 const $ = id => document.getElementById(id);
 const T3 = THREE, PI = Math.PI;
 // ---------- the plan ----------
-const RW = 4, RH = 3, RD = 4, LEVELS = 6, STX = 12, SW = 2.4, LANE = 1.25, ATTIC_H = 2.4;
-const floorY = L => L === 0 ? 5 * RH : (5 - L) * RH;            // level 0 is the attic (top), 5 is the ground floor
+const RW = 4, RH = 3, RD = 4, LEVELS = 7, STX = 12, SW = 2.4, LANE = 1.25, ATTIC_H = 2.4;
+const floorY = L => L === 0 ? 6 * RH : (6 - L) * RH;            // level 0 is the attic (top), 6 is the ground floor
 const AGS = [
   {id:'builder', room:'Workshop', f:0, c:0, wide:true, prop:'bench', wall:'#3a2f28', blanket:'#5a4634', awake:[[13,22],[1,5]],
     look:{skin:'#c48c66', hair:'#2a1c14', style:'cap', top:'#6e4428', pants:'#34312e'}, acts:['Running his night tests', 'Looking over his own code', 'Sketching ideas for upgrades']},
@@ -37,10 +37,16 @@ const AGS = [
     look:{skin:'#b8845e', hair:'#2a1c14', style:'cap', top:'#7a5e3e', pants:'#2e2c2a'}, acts:['Sorting the shelves', 'Checking tracking numbers', 'Stacking boxes']},
   {id:'supplies', room:'Pantry', f:5, c:1, prop:'pantry', wall:'#36322b', blanket:'#566450', awake:[[7,21]],
     look:{skin:'#d8a882', hair:'#6a4026', style:'short', top:'#566450', pants:'#2a2a2e'}, acts:['Counting what\'s left', 'Restocking the shelves', 'Checking the diapers']},
+  {id:'inbox', room:'Post room', f:5, c:2, prop:'paper', wall:'#35302c', blanket:'#5c4a3e', awake:[[6,22]],
+    look:{skin:'#c69472', hair:'#3a2a20', style:'short', top:'#5c4a3e', pants:'#26262b', glasses:true}, acts:['Opening the mail', 'Sorting letters into piles', 'Reading the fine print']},
+  {id:'roads', room:'Map room', f:6, c:0, prop:'calendar', wall:'#2f3236', blanket:'#3e4a56', awake:[[5,23]],
+    look:{skin:'#a8714e', hair:'#1a1210', style:'cap', top:'#3e4a56', pants:'#22222a'}, acts:['Watching the traffic', 'Checking gas prices', 'Tracing routes on the map']},
+  {id:'health', room:'Rest room', f:6, c:1, prop:'gym', wall:'#33302f', blanket:'#5a5466', awake:[[6,22]],
+    look:{skin:'#dcae8c', hair:'#4a2e1e', style:'bun', top:'#5a5466', pants:'#2a2a2e'}, acts:['Counting your steps', 'Looking over last night', 'Stretching']},
 ];
-const NAME = {builder:'Builder', research:'Research', planner:'Planner', phone:'Phone', money:'Money', bills:'Bills', meals:'Meals', family:'Family', memory:'Memory', coach:'Coach', pursuit:'Pursuit', appts:'Appointments', packages:'Packages', supplies:'Supplies'};
+const NAME = {builder:'Builder', research:'Research', planner:'Planner', phone:'Phone', money:'Money', bills:'Bills', meals:'Meals', family:'Family', memory:'Memory', coach:'Coach', pursuit:'Pursuit', appts:'Appointments', packages:'Packages', supplies:'Supplies', inbox:'Inbox', roads:'Roads', health:'Health'};
 AGS.forEach(a => { a.name = NAME[a.id]; a.x0 = a.wide ? 0 : a.c * RW; });
-const JR = {f: 2, c: 1}, GR = {f: 5, c: 2};
+const JR = {f: 2, c: 1}, GR = {f: 6, c: 2};
 // where things are inside a room (x from the room's left edge, z from the back wall at -2 to the open front at +2)
 const SPOT = {bed: [0.65, -0.95], edge: [1.25, -0.6], desk: [3.2, -0.95], prop: [2.05, -1.05]};
 const spotOf = (a, what) => { if (a.wide) { const m = {bed: [0.65, -0.95], edge: [1.25, -0.6], desk: [3.2, -0.95], prop: [7.4, -1.0]}; return [a.x0 + m[what][0], m[what][1]]; } const s = SPOT[what]; return [a.x0 + s[0], s[1]]; };
@@ -553,8 +559,8 @@ $('h-speed').onclick = () => { fast = !fast; $('h-speed').setAttribute('aria-pre
 const pv = $('peek');
 if (pv) { const pg = pv.getContext('2d'); let k = 0;
   const draw = ts => { requestAnimationFrame(draw); if (document.hidden || open) return; const t = ts / 1000, W = pv.width, H = pv.height; pg.clearRect(0, 0, W, H);
-    const x0 = 132, y0 = 58, cw = 42, ch = 26; pg.fillStyle = '#1c1213'; pg.beginPath(); pg.moveTo(x0 - 12, y0); pg.lineTo(x0 + cw * 1.5, 18); pg.lineTo(x0 + cw * 3 + 12, y0); pg.fill();
-    for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) { const a = AGS.find(q => q.f === r + 1 && q.c === c), isJ = r === 1 && c === 1, isG = r === 4 && c === 2, flick = .85 + .15 * Math.sin(t * 3 + r * 3 + c);
+    const x0 = 132, y0 = 58, cw = 42, ch = 23; pg.fillStyle = '#1c1213'; pg.beginPath(); pg.moveTo(x0 - 12, y0); pg.lineTo(x0 + cw * 1.5, 18); pg.lineTo(x0 + cw * 3 + 12, y0); pg.fill();
+    for (let r = 0; r < 6; r++) for (let c = 0; c < 3; c++) { const a = AGS.find(q => q.f === r + 1 && q.c === c), isJ = r === 1 && c === 1, isG = r === 5 && c === 2, flick = .85 + .15 * Math.sin(t * 3 + r * 3 + c);
       pg.fillStyle = isJ ? `rgba(201,102,92,${.55 + .25 * Math.sin(t * 2)})` : isG ? 'rgba(40,36,40,.7)' : a && a.job ? `rgba(255,214,196,${.6 + .3 * Math.sin(t * 6)})` : a && !asleep(a) ? `rgba(255,196,150,${.35 * flick})` : 'rgba(40,36,50,.6)';
       pg.fillRect(x0 + c * cw + 3, y0 + r * ch + 3, cw - 6, ch - 6); } };
   requestAnimationFrame(draw);

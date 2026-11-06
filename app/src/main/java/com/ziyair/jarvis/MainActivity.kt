@@ -56,7 +56,7 @@ class MainActivity : Activity() {
             Triple(R.id.backupPass, { prefs.backupPass }, { v -> prefs.backupPass = v }),
             Triple(R.id.youtubeKey, { prefs.youtubeKey }, { v -> prefs.youtubeKey = v }),
             Triple(R.id.youtubeChannel, { prefs.youtubeChannel }, { v -> prefs.youtubeChannel = v }),
-            Triple(R.id.telegramToken, { prefs.telegramToken }, { v -> if (v.trim() != prefs.telegramToken) { prefs.telegramToken = v; Telegram.unpair(this); if (prefs.running) Telegram.restart(this) } }),
+            Triple(R.id.telegramToken, { prefs.telegramToken }, { v -> if (v.trim() != prefs.telegramToken) { prefs.telegramToken = v; Telegram.unpair(this); if (prefs.running) thread { Telegram.restart(this) } } }),
             Triple(R.id.mapsKey, { prefs.mapsKey }, { v -> prefs.mapsKey = v }),
             Triple(R.id.nestProject, { prefs.nestProject }, { v -> prefs.nestProject = v }),
             Triple(R.id.elevenKey, { prefs.elevenKey }, { v -> if (v.trim() != prefs.elevenKey) ElevenVoice.unbench(prefs); prefs.elevenKey = v }),
@@ -132,7 +132,7 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.telegramPair).setOnClickListener {
             if (Telegram.owner(this) != 0L) confirm("Unpair Telegram?", "The next chat that sends /start to your bot becomes yours.") { Telegram.unpair(this); render() }
-            else status.text = if (prefs.telegramToken.isBlank()) "Add your bot token and Save first." else "Send /start to your bot from your laptop's Telegram. Jarvis needs to be running."
+            else status.text = if (prefs.telegramToken.isBlank()) "Add your bot token and Save first." else "From your laptop's Telegram, send your bot: /start ${Telegram.code(this)}  (Jarvis needs to be running.)"
         }
         findViewById<Button>(R.id.testVoice).setOnClickListener {
             if (prefs.claudeKey.isBlank() && !prefs.cloudVoice) { status.text = "Save your keys first, sir."; return@setOnClickListener }
@@ -260,7 +260,7 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.connectGoogle).text = if (g) "Google connected" + GoogleAuth.account(this, GoogleAuth.GOOGLE).takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty() + " · tap to disconnect" else "Connect Google (Gmail + Drive)"
         findViewById<Button>(R.id.connectNest).text = if (GoogleAuth.connected(this, GoogleAuth.NEST)) "Nest connected · tap to disconnect" else "Connect Nest"
         val who = Telegram.ownerName(this)
-        findViewById<Button>(R.id.telegramPair).text = when { prefs.telegramToken.isBlank() -> "Telegram: add a bot token"; Telegram.owner(this) != 0L -> "Telegram: paired with ${who.ifBlank { "you" }} · tap to unpair"; else -> "Telegram: waiting for /start" }
+        findViewById<Button>(R.id.telegramPair).text = when { prefs.telegramToken.isBlank() -> "Telegram: add a bot token"; Telegram.owner(this) != 0L -> "Telegram: paired with ${who.ifBlank { "you" }} · tap to unpair"; else -> "Telegram: send /start ${Telegram.code(this)} to your bot" }
         findViewById<Button>(R.id.allowHealth).text = if (healthOk) "Sleep & steps: allowed" else "Allow sleep & steps (Health Connect)"
         val on = listOfNotNull("Gmail".takeIf { g }, "Drive backup".takeIf { DriveBackup.on(this) }, "Health".takeIf { healthOk }, "YouTube".takeIf { prefs.youtubeKey.isNotBlank() && prefs.youtubeChannel.isNotBlank() },
             "Telegram".takeIf { Telegram.owner(this) != 0L && prefs.telegramToken.isNotBlank() }, "Maps".takeIf { prefs.mapsKey.isNotBlank() },
@@ -291,7 +291,7 @@ class MainActivity : Activity() {
         val comms = checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
         val cam = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
-            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED)
         findViewById<Button>(R.id.allowComms).text = if (comms && Cal.allowed(this) && cam) "Calls, texts, calendar, camera & location: allowed" else "Allow calls, texts, calendar, camera & location"
         findViewById<Button>(R.id.voiceDl).text = Piper.label(this)
         findViewById<Button>(R.id.allowScreen).text = if (JarvisAccess.on(this)) "Screen control: on" else "Allow screen control"

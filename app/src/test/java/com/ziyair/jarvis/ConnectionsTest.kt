@@ -106,12 +106,30 @@ class ConnectionsTest {
 
     // ---------- Telegram ----------
     @Test fun telegramOnlyAnswersHim() {
-        val ups = Telegram.parseUpdates("""{"ok":true,"result":[{"update_id":7,"message":{"chat":{"id":42},"from":{"first_name":"Marcus"},"text":"/start"}},{"update_id":8,"message":{"chat":{"id":99},"text":"hi"}}]}""")
-        assertEquals(2, ups.size); assertEquals(42L, ups[0].chat); assertEquals("Marcus", ups[0].name)
-        assertTrue("first /start pairs", Telegram.allowed(0L, ups[0]))
-        assertFalse("nothing but /start before pairing", Telegram.allowed(0L, ups[1]))
-        assertTrue(Telegram.allowed(42L, ups[0])); assertFalse("strangers are ignored", Telegram.allowed(42L, ups[1]))
+        val ups = Telegram.parseUpdates("""{"ok":true,"result":[
+            {"update_id":7,"message":{"chat":{"id":42,"type":"private"},"from":{"id":42,"first_name":"Marcus"},"text":"/start 482913"}},
+            {"update_id":8,"message":{"chat":{"id":99,"type":"private"},"from":{"id":99},"text":"/start"}},
+            {"update_id":9,"message":{"chat":{"id":-500,"type":"group"},"from":{"id":42},"text":"/start 482913"}},
+            {"update_id":10,"message":{"chat":{"id":42,"type":"private"},"from":{"id":42},"text":"what's on my list"}}]}""")
+        assertEquals(4, ups.size); assertEquals(42L, ups[0].chat); assertEquals("Marcus", ups[0].name); assertEquals(42L, ups[0].from)
+        assertTrue("his code pairs", Telegram.pairs("482913", ups[0]))
+        assertFalse("a bare /start from a stranger never pairs", Telegram.pairs("482913", ups[1]))
+        assertFalse("a group can never pair", Telegram.pairs("482913", ups[2]))
+        assertFalse("wrong code", Telegram.pairs("111111", ups[0]))
+        assertTrue(Telegram.allowed(42L, 42L, ups[3]))
+        assertFalse("strangers are ignored", Telegram.allowed(42L, 42L, ups[1]))
+        assertFalse("not in a group, even from him", Telegram.allowed(42L, 42L, ups[2]))
+        assertFalse("nobody before pairing", Telegram.allowed(0L, 0L, ups[3]))
         assertEquals(3, Telegram.chunks("x".repeat(9000)).size)
+    }
+
+    @Test fun googleConsentGaps() {
+        assertTrue(GoogleAuth.missing("https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.appdata").isEmpty())
+        assertEquals(listOf("Drive backup"), GoogleAuth.missing("https://www.googleapis.com/auth/gmail.readonly"))
+    }
+
+    @Test fun telegramSendIsOnlyThePhoneAgents() {
+        assertFalse(Agents.CORE.contains("telegram_send")); assertTrue(Agents.PHONE.tools.contains("telegram_send"))
     }
 
     // ---------- Maps ----------
@@ -145,6 +163,8 @@ class ConnectionsTest {
         assertEquals("Hallway (thermostat): 70°F inside, mode heat, heat set to 68°F", Nest.describe(d[0]))
         assertEquals(20.0, Nest.c(68.0), 0.01)
         assertTrue(Nest.parse("{}").isEmpty())
+        val heating = Nest.parse("""{"devices":[{"name":"n","type":"sdm.devices.types.THERMOSTAT","traits":{"sdm.devices.traits.Info":{"customName":"Hall"},"sdm.devices.traits.ThermostatHvac":{"status":"HEATING"}}}]}""")
+        assertEquals("Hall (thermostat): heating", Nest.describe(heating[0]))
     }
 
     // ---------- ElevenLabs ----------
@@ -156,7 +176,7 @@ class ConnectionsTest {
     }
 
     @Test fun newAgentsCanNeverSend() {
-        val senders = setOf("send_text", "reply_message", "call", "phone_task", "answer_call")
+        val senders = setOf("send_text", "reply_message", "call", "phone_task", "answer_call", "telegram_send")
         for (d in listOf(Agents.INBOX, Agents.ROADS, Agents.HEALTH)) assertTrue((d.tools intersect senders).isEmpty())
         assertFalse("health stays out of memory", Agents.HEALTH.tools.contains("remember"))
         assertNotNull(JSONObject("{}"))

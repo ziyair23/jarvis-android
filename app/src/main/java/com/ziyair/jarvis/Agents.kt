@@ -26,7 +26,7 @@ object Agents {
         // the advanced ones: whole jobs, follow-through, and what his own mind has been up to
         "dash_day", "scan_phone", "recall", "baby_patterns", "simulate", "self_check", "run_skill", "upgrade_now", "upgrades_list", "upgrade_decide", "run_job", "follow_up_add", "follow_ups_list", "follow_up_done", "mind_recent",
         // quick lookups from his connections (no hop): drive times, gas, sleep, YouTube, sending to his laptop
-        "drive_time", "gas_prices", "health_today", "youtube_stats", "telegram_send")
+        "drive_time", "gas_prices", "health_today", "youtube_stats")
 
     /** Lights an agent up in the brain for a moment when its skill was used directly. */
     fun flash(id: String, ms: Long = 1600) { val t = System.currentTimeMillis(); active[id] = t; Thread { try { Thread.sleep(ms) } catch (_: Exception) {}; active.remove(id, t) }.start() }
@@ -93,7 +93,7 @@ object Agents {
         "Healthy, cheap and quick: 30 minutes or less, there's a newborn at home. Simple, real food from a normal grocery store; reuse ingredients across the week so less goes to waste. " +
             "When you plan, save every day with meal_save (ingredients as a short shopping list). Then say the week in one or two sentences, not every ingredient. Never buy or order anything.")
 
-    val INBOX = Def("inbox", "Inbox", "Reads his Gmail on its own (read only) for bills, receipts and deliveries, and hands them to Bills, Packages and Money.",
+    val INBOX = Def("inbox", "Inbox", "Reads his Gmail on its own (read only) for bills, receipts and deliveries, and hands them to the Bills, Appointments and Packages agents.",
         setOf("email_check", "email_search", "receipts"),
         "Never send, delete or change email. Say what matters in one or two sentences: new bills with amount and due date, deliveries, receipts with totals.")
 
