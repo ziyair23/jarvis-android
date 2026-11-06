@@ -26,3 +26,14 @@ class LogFixes2Test {
         assertTrue(File(src + "Control.kt").readText().contains("youtube/v3/search"))
     }
 }
+
+class BreathingRoomTest {
+    @Test fun midThoughtPausesWait() {
+        org.junit.Assert.assertFalse(EarlyRead.complete("I need"))
+        org.junit.Assert.assertFalse(EarlyRead.complete("Can you play"))
+        org.junit.Assert.assertFalse(EarlyRead.complete("I'm gonna"))
+        org.junit.Assert.assertTrue(EarlyRead.complete("What's the weather like"))
+        val ear = java.io.File("src/main/java/com/ziyair/jarvis/Ear.kt").readText()
+        assertTrue(ear.contains("maxOf(650, cfg.optInt(\"ear_fast_end_ms\", 700))") && ear.contains("giving him a moment"))
+    }
+}
