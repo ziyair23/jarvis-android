@@ -1,0 +1,28 @@
+package com.ziyair.jarvis
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+
+/** From his log of Nov 6: songs with "sorry" on the end, a $0 gas expense, a silent empty answer, Jarvis left off after Android stopped him. */
+class LogFixes2Test {
+    @Test fun songRequestsLoseTheFiller() {
+        assertEquals("far by nf", SongQuery.clean("far by nf sorry"))
+        assertEquals("Far NF", SongQuery.clean("Far NF, please"))
+        assertEquals("lose yourself", SongQuery.clean("um lose yourself for me Jarvis"))
+        assertEquals("sorry", SongQuery.clean("sorry"))
+        assertEquals("Now and Then", SongQuery.clean("Now and Then"))
+    }
+
+    @Test fun fixesAreInPlace() {
+        val src = "src/main/java/com/ziyair/jarvis/"
+        val actions = File(src + "Actions.kt").readText()
+        assertTrue(actions.contains("Not logged yet: no amount"))
+        val svc = File(src + "JarvisService.kt").readText()
+        assertTrue(svc.contains("speak(\"Say that again, sir?\")") && svc.contains("revive_at"))
+        assertTrue(File(src + "Messages.kt").readText().contains("lastMissedLog"))
+        assertTrue(File(src + "Mind.kt").readText().contains("never tell him to call a doctor over a logging gap"))
+        assertTrue(File(src + "Control.kt").readText().contains("youtube/v3/search"))
+    }
+}
