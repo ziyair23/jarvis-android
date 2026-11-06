@@ -194,8 +194,7 @@ object Protocols {
         when {
             Regex("good ?night|sleep|bed").containsMatchIn(name) -> return goodnight(context)
             name.contains("dash") || name.contains("work") -> {
-                DriveMode.on = true; out.add("Driving mode on.")
-                try { DashDays.seen(context, "dash protocol") } catch (_: Exception) {}
+                out.add(Shift.start(context))
                 step("Dasher") { Apps.open(context, "dasher") }
                 step("music") { Apps.media(context, "play") }
                 Weather.now(context)?.let { out.add("Weather: $it" + Weather.roadsNote(context)) }
@@ -207,14 +206,23 @@ object Protocols {
                 step("volume") { PhoneControl.run(context, "volume", 3) }
                 out.add(Baby.status(context))
             }
+            name.contains("morning") || name.contains("wake") -> {
+                val nm = context.getSystemService(NotificationManager::class.java)
+                if (nm.isNotificationPolicyAccessGranted) step("quiet off") { nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL); "Phone's back to normal." }
+                if (Lights.available(context)) step("lights") { Lights.set(context, "all", true, 70, "warm") }
+                Weather.now(context)?.let { out.add("Weather: $it" + Weather.roadsNote(context)) }
+                try { out.add(DashDays.line(context)) } catch (_: Exception) {}
+                out.add(Baby.status(context))
+                try { out.add(Bills.upcoming(context, 3)) } catch (_: Exception) {}
+            }
             name.contains("home") -> {
                 HomeNet.learnIfUnknown(context)
-                DriveMode.on = false; out.add("Driving mode off.")
+                if (Shift.active(context)) { Shift.endedByHim(context); out.add(Shift.end(context)) } else { DriveMode.on = false; out.add("Driving mode off.") }
                 if (Lights.available(context)) step("lights") { Lights.set(context, "all", true, if (Lights.late()) 15 else 80, "warm") }
                 out.add("Earned today ${Earnings.money(Earnings.today(context))}. Ask him how the shift went if nothing's logged.")
                 out.add(Baby.status(context))
             }
-            else -> return "No protocol called $nameIn. Known: dash, baby, home, goodnight."
+            else -> return "No protocol called $nameIn. Known: dash (starts a shift), home (ends it), morning, baby, goodnight."
         }
         return out.joinToString(" ")
     }

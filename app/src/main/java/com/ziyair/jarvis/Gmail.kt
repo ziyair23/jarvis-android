@@ -66,6 +66,10 @@ object Gmail {
         return Msg(id, head("From"), head("Subject"), snip, j.optString("internalDate").toLongOrNull() ?: System.currentTimeMillis())
     }
 
+    /** Unread mail from the last day in his main inbox: (from, subject, snippet). For the evening rundown. */
+    fun unread(c: Context, max: Int): List<Triple<String, String, String>> =
+        (fetch(c, "is:unread newer_than:1d category:primary -in:sent", max) ?: emptyList()).map { Triple(it.from, it.subject, it.snippet) }
+
     private fun seen(c: Context): JSONArray = try { JSONArray(Prefs(c).sp.getString("gmail_seen", "[]")) } catch (_: Exception) { JSONArray() }
     fun receipts(c: Context): JSONArray = try { JSONArray(Prefs(c).sp.getString("gmail_receipts", "[]")) } catch (_: Exception) { JSONArray() }
 

@@ -89,9 +89,10 @@ object Upgrade {
     fun maybeReview(c: Context) {
         if (running || !Mind.on(c)) return
         val p = Prefs(c)
-        if (System.currentTimeMillis() - p.sp.getLong("upgrade_at", 0L) < 6L * 86_400_000L) return
+        // every three days in the evening, he looks back for ways to upgrade himself (small ones he applies, big ones wait for a yes)
+        if (System.currentTimeMillis() - p.sp.getLong("upgrade_at", 0L) < Brain(c).config().optLong("upgrade_every_days", 3L) * 86_400_000L) return
         val cal = java.util.Calendar.getInstance()
-        if (cal.get(java.util.Calendar.DAY_OF_WEEK) != java.util.Calendar.SUNDAY || cal.get(java.util.Calendar.HOUR_OF_DAY) < 18) return
+        if (cal.get(java.util.Calendar.HOUR_OF_DAY) < 18 || Claude.nearBudget(c, 0.8)) return
         start(c)
     }
 

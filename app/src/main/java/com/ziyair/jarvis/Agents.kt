@@ -26,7 +26,9 @@ object Agents {
         // the advanced ones: whole jobs, follow-through, and what his own mind has been up to
         "dash_day", "scan_phone", "recall", "baby_patterns", "simulate", "self_check", "run_skill", "upgrade_now", "upgrades_list", "upgrade_decide", "run_job", "follow_up_add", "follow_ups_list", "follow_up_done", "mind_recent",
         // quick lookups from his connections (no hop): drive times, gas, sleep, YouTube, sending to his laptop
-        "drive_time", "gas_prices", "health_today", "youtube_stats")
+        "drive_time", "gas_prices", "health_today", "youtube_stats",
+        // his day on autopilot: shifts, supplies counting down, the evening rundown, habits he repeats
+        "start_shift", "end_shift", "shift_status", "stock_set", "stock_status", "evening_rundown", "habits_list")
 
     /** Lights an agent up in the brain for a moment when its skill was used directly. */
     fun flash(id: String, ms: Long = 1600) { val t = System.currentTimeMillis(); active[id] = t; Thread { try { Thread.sleep(ms) } catch (_: Exception) {}; active.remove(id, t) }.start() }

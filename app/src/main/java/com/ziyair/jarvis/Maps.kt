@@ -86,6 +86,15 @@ object Maps {
     private fun place(s: String) = JSONObject().put("address", s)
     private fun point(ll: Pair<Double, Double>) = JSONObject().put("location", JSONObject().put("latLng", JSONObject().put("latitude", ll.first).put("longitude", ll.second)))
 
+    /** The drive from where he is now to [to], with live traffic (for leave-on-time alerts). Null without a key or a route. */
+    fun route(c: Context, to: String): Route? {
+        val p = Prefs(c); if (noKey(p)) return null
+        val origin = here(c)?.let { point(it) } ?: place(p.city.ifBlank { "Spokane, WA" })
+        val body = JSONObject().put("origin", origin).put("destination", place(to)).put("travelMode", "DRIVE").put("routingPreference", "TRAFFIC_AWARE").put("units", "IMPERIAL")
+        val (code, b) = post(p.mapsKey, "https://routes.googleapis.com/directions/v2:computeRoutes", "routes.duration,routes.staticDuration,routes.distanceMeters", body)
+        return if (code == 200) parseRoute(b) else null
+    }
+
     /** Drive time with live traffic, from where he is (or [from]) to [to]. */
     fun driveTime(c: Context, to: String, from: String?): String {
         val p = Prefs(c)

@@ -232,6 +232,9 @@ object Mind {
         val a = tells(c); a.put(JSONObject().put("at", System.currentTimeMillis()).put("t", t).put("said", false)); put(c, "mind_tell", a, 12)
     }
 
+    /** A job Jarvis would like to do, waiting for his yes in His mind (yes runs it as a job). */
+    fun offer(c: Context, text: String): String = suggest(c, JSONObject().put("text", text))
+
     /** Something for Jarvis to mention the next time he talks to Marcus. */
     fun tellLater(c: Context, text: String) = tell(c, text, false)
 
