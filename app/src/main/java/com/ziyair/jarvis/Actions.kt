@@ -156,6 +156,23 @@ class Actions(private val context: Context) {
         put(tool("judge_offer", "Is the DoorDash offer on his screen right now a good one? Reads the pay and miles and gives the verdict. Never accepts or declines it.", props(), listOf()))
         put(tool("offer_rule", "Change DoorDash order judging: minimum dollars per mile, or turn it on/off.", props("per_mile" to num("Minimum $ per mile"), "on" to bool("Judge offers or not")), listOf()))
         put(tool("driving_mode", "Turn driving mode on or off (short answers, messages read aloud).", props("on" to bool("true for on")), listOf("on")))
+        // ---- connections ----
+        put(tool("email_check", "Read his Gmail now for new bills, receipts and delivery emails and hand them to the right agents (read only; never sends or deletes).", props(), listOf()))
+        put(tool("email_search", "Look something up in his Gmail (read only), e.g. 'from:landlord', 'order Walmart', 'Avista bill'. Returns the five newest matches.",
+            props("query" to str("Gmail search words")), listOf("query")))
+        put(tool("receipts", "Receipts and order confirmations from his email, with totals.", props("days" to num("How many days back, default 7")), listOf()))
+        put(tool("health_today", "His sleep last night and his steps today and yesterday, from Health Connect.", props(), listOf()))
+        put(tool("youtube_stats", "His YouTube channel: subscribers, views, videos, how his latest uploads are doing, and the change since last time.", props(), listOf()))
+        put(tool("telegram_send", "Send something to his Telegram chat so he has it on his laptop (a list, a link, an address, notes). Only ever to his own chat.",
+            props("text" to str("What to send")), listOf("text")))
+        put(tool("drive_time", "How long the drive is right now with live traffic (and whether traffic is worse than usual), from where he is or a starting place.",
+            props("to" to str("Destination, place name or address"), "from" to str("Optional start; leave out for where he is now")), listOf("to")))
+        put(tool("gas_prices", "The cheapest regular gas near him (or near a place), with the station and distance.", props("near" to str("Optional place; leave out for where he is")), listOf()))
+        put(tool("nest_devices", "His Google Nest devices on Device Access (thermostat, cameras, doorbell) and their state.", props(), listOf()))
+        put(tool("nest_thermostat", "Change the Nest thermostat: mode heat, cool, auto or off, and/or a temperature in °F.",
+            props("mode" to str("heat, cool, auto or off"), "temp_f" to num("Target temperature in °F"), "which" to str("Thermostat name if he has more than one")), listOf()))
+        put(tool("backup_now", "Back up Jarvis's memory to his Google Drive now (encrypted with his passphrase).", props(), listOf()))
+        put(tool("backup_status", "When Jarvis's memory was last backed up to Drive.", props(), listOf()))
     }
 
     fun run(name: String, input: JSONObject): String { return try {
@@ -362,6 +379,18 @@ class Actions(private val context: Context) {
             "lights" -> Lights.set(context, input.optString("which", "all"), if (input.has("on")) input.optBoolean("on") else null,
                 if (input.has("brightness")) input.optInt("brightness") else null, input.optString("color").ifBlank { null })
             "find_phone" -> FindPhone.ring(context)
+            "email_check" -> Gmail.sweep(context)
+            "email_search" -> Gmail.search(context, input.getString("query"))
+            "receipts" -> Gmail.receiptsSummary(context, input.optInt("days", 7).coerceIn(1, 90))
+            "health_today" -> HealthLink.today(context)
+            "youtube_stats" -> YouTube.stats(context)
+            "telegram_send" -> Telegram.send(context, input.getString("text"))
+            "drive_time" -> Maps.driveTime(context, input.getString("to"), input.optString("from").ifBlank { null })
+            "gas_prices" -> Maps.gas(context, input.optString("near").ifBlank { null })
+            "nest_devices" -> Nest.list(context)
+            "nest_thermostat" -> Nest.thermostat(context, input.optString("which").ifBlank { null }, input.optString("mode").ifBlank { null }, if (input.has("temp_f")) input.optDouble("temp_f") else null)
+            "backup_now" -> DriveBackup.backupNow(context)
+            "backup_status" -> DriveBackup.status(context)
             "driving_mode" -> { DriveMode.on = input.optBoolean("on"); if (DriveMode.on) "Driving mode on." else "Driving mode off." }
             else -> "Unknown action."
         }

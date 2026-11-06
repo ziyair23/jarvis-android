@@ -665,7 +665,8 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   let A = [], sel = 'jarvis', yaw = 0.6, pitch = -0.22, vy = 0.12, vp = 0, drag = null, lastT = 0, pulses = [], lastActive = {};
   // where each agent lives in the brain, roughly where that kind of thinking happens
   const POS = {memory:[0.3,-0.32,-0.12], phone:[0.05,0.28,0.98], planner:[-0.42,0.52,0.55], research:[0.44,0.5,0.52], money:[0.5,0.62,-0.18],
-    family:[-0.74,-0.16,0.2], pursuit:[0.74,-0.14,0.16], builder:[-0.1,0.4,-0.96], coach:[-0.36,-0.3,-0.62], bills:[0.62,0.18,-0.55], appts:[-0.62,0.34,-0.22], packages:[0.35,-0.3,0.72], supplies:[-0.3,-0.36,0.68], meals:[-0.5,0.1,0.78]};
+    family:[-0.74,-0.16,0.2], pursuit:[0.74,-0.14,0.16], builder:[-0.1,0.4,-0.96], coach:[-0.36,-0.3,-0.62], bills:[0.62,0.18,-0.55], appts:[-0.62,0.34,-0.22], packages:[0.35,-0.3,0.72], supplies:[-0.3,-0.36,0.68], meals:[-0.5,0.1,0.78],
+    inbox:[0.78,0.3,-0.2], roads:[-0.08,0.02,1.0], health:[-0.68,-0.42,-0.2]};
   // ---- the brain itself: a folded cortex (two hemispheres), cerebellum and brain stem, as points and fibres ----
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const P = [], KIND = [];

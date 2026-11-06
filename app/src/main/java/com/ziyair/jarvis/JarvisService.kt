@@ -67,6 +67,7 @@ class JarvisService : Service() {
             if (n > 0) Trace.log(this, "memory", "cleared $n sensitive lines from memory and the conversation")
         }
         Cast.discover(this)
+        Telegram.start(this)
         // undo any call mode left over from older builds
         try { val am = getSystemService(AudioManager::class.java); if (am.mode == AudioManager.MODE_IN_COMMUNICATION) am.mode = AudioManager.MODE_NORMAL } catch (_: Exception) {}
         // watchdog: if his ears ever stop (mic grabbed by another app, an error), quietly start them again
@@ -176,6 +177,7 @@ class JarvisService : Service() {
 
     private val unlocked = object : android.content.BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) { if (!busy) thread { Updater.check(this@JarvisService, busy = busy); Coach.maybeReview(this@JarvisService); LifeWatch.maybeSweep(this@JarvisService); Supplies.maybeCheck(this@JarvisService); Meals.maybePlanWeek(this@JarvisService); Mind.maybeThink(this@JarvisService); Upgrade.maybeReview(this@JarvisService); SelfCare.maybeMorning(this@JarvisService)
+            try { Gmail.maybeSweep(this@JarvisService) } catch (_: Exception) {}; try { DriveBackup.maybeBackup(this@JarvisService) } catch (_: Exception) {}
             Loops.sweep(this@JarvisService)?.let { line -> main.postDelayed({ sayFirst(line, thenListen = line.endsWith("?")) }, 2500) } } }
     }
 
@@ -437,7 +439,7 @@ class JarvisService : Service() {
         val stealth = Stealth.on(prefs)
         val speed = cfg.optDouble("piper_speed", 1.0).toFloat()
         // "Yes, sir?" in his own voice, straight from the phrasebook so there's no wait; the chirp if it isn't ready yet
-        val line = if (!stealth && cfg.optString("wake_reply", "voice") == "voice" && Piper.installed(this) && prefs.ttsKey.isBlank()) Persona.wakeLine(this, cfg) else null
+        val line = if (!stealth && cfg.optString("wake_reply", "voice") == "voice" && Piper.installed(this) && !prefs.cloudVoice) Persona.wakeLine(this, cfg) else null
         val clip = line?.let { Piper.cached(this, it, speed) }
         val wakeTurn = turnId
         val go = { if (busy && wakeTurn == turnId && !thinking) { openWindow(wakeSecs); listen(firstTurn = true) } }
@@ -471,7 +473,7 @@ class JarvisService : Service() {
     /** Records his everyday lines in the current voice, once, in the background. */
     @Volatile private var preparing = false
     private fun prepareLines() {
-        if (preparing || !Piper.installed(this) || prefs.ttsKey.isNotBlank()) return
+        if (preparing || !Piper.installed(this) || prefs.cloudVoice) return
         preparing = true
         thread {
             try { val cfg = brain.config(); Voicebank.prepare(this, Persona.stockLines(cfg), cfg.optDouble("piper_speed", 1.0).toFloat()) }
@@ -706,7 +708,7 @@ class JarvisService : Service() {
         // only what would go to Claude anyway (quick phone commands are already instant)
         if (t.split(" ").size < 3 || isStop(text) || goodbyeRe.containsMatchIn(t) || t.contains("timer") || Fast.direct(t) != null ||
             Fast.parse(t, prefs.babyName.lowercase()) != null || Fast.reminder(t, java.util.Calendar.getInstance()) != null || Coach.isCorrection(text)) return
-        if (Stealth.on(prefs) || !Piper.installed(this) || prefs.ttsKey.isNotBlank() || Cast.mode(prefs) == "everything" || liveOK(false)) return
+        if (Stealth.on(prefs) || !Piper.installed(this) || prefs.cloudVoice || Cast.mode(prefs) == "everything" || liveOK(false)) return
         if (!earFirst && FollowUp.reject(text, System.currentTimeMillis() - lastSpokeEnd, followUpsInRow) != null) return
         ahead?.let { if (sameWords(it.text, text)) return; it.decide(false) }
         if (aheadCount >= 2) return
@@ -744,7 +746,7 @@ class JarvisService : Service() {
         chatted = true
         // with Jarvis's own voice he starts talking as soon as the first sentence is ready
         val wasQuiet = Stealth.on(prefs)
-        val live = if (!wasQuiet && Piper.installed(this) && prefs.ttsKey.isBlank() && Cast.mode(prefs) != "everything")
+        val live = if (!wasQuiet && Piper.installed(this) && !prefs.cloudVoice && Cast.mode(prefs) != "everything")
             SpeechStream(this, brain.config().optDouble("piper_speed", 1.0).toFloat(), main, brain.config().optInt("sentence_gap_ms", 160)) { acking }.also { stream = it } else null
         thread {
             // quick everyday commands are done right here on the phone: instant, and free
@@ -1022,7 +1024,7 @@ class JarvisService : Service() {
     /** Speak with the realistic Google voice when a key is set, otherwise the phone's own voice. */
     /** At home with a Nest Hub: say it through the speaker (blocks until done), else on the phone. */
     private fun speakHouse(text: String, then: () -> Unit) {
-        if (Cast.target(prefs) == null || !Piper.installed(this) || prefs.ttsKey.isNotBlank()) { speak(text, then); return }
+        if (Cast.target(prefs) == null || !Piper.installed(this) || prefs.cloudVoice) { speak(text, then); return }
         if (acking) { main.postDelayed({ speakHouse(text, then) }, 150); return }
         quiet(false)
         LockView.showIfLocked(this, text)
@@ -1040,6 +1042,18 @@ class JarvisService : Service() {
         quiet(false)
         LockView.showIfLocked(this, text)
         val key = prefs.ttsKey
+        if (ElevenVoice.usable(prefs)) {
+            // ElevenLabs first; if it fails (no signal, out of free credits) Google's voice, then his own, then the phone's
+            thread {
+                val f = ElevenVoice.synth(this, text) ?: key.takeIf { it.isNotBlank() }?.let { CloudVoice.synth(this, it, text, brain.config()) }
+                main.post {
+                    if (f != null && playFile(f, then)) return@post
+                    if (Piper.installed(this)) thread { val a = Piper.synth(this, text, brain.config().optDouble("piper_speed", 1.0).toFloat()); main.post { if (a == null || !playPcm(a.first, a.second, then)) phoneSpeak(text, then) } }
+                    else phoneSpeak(text, then)
+                }
+            }
+            return
+        }
         if (key.isBlank()) {
             if (!Piper.installed(this)) { phoneSpeak(text, then); return }
             thread {
@@ -1178,6 +1192,7 @@ class JarvisService : Service() {
 
     override fun onDestroy() {
         destroyed = true
+        Telegram.stop()
         main.removeCallbacksAndMessages(null)
         try { unregisterReceiver(unlocked) } catch (_: Exception) {}
         try { unregisterReceiver(screenOn) } catch (_: Exception) {}

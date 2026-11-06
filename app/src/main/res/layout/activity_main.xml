@@ -120,6 +120,46 @@
             <TextView style="@style/Hint" android:text="Bedtime (24-hour)" />
             <EditText android:id="@+id/bedtime" style="@style/Field" android:inputType="text" android:hint="00:00" />
 
+            <TextView style="@style/Label" android:layout_marginTop="26dp" android:text="Connections" />
+            <TextView style="@style/Hint" android:text="Every key here stays on this phone. None of it goes to GitHub or into the Drive backup." />
+            <TextView android:id="@+id/connStatus" style="@style/Hint" android:layout_marginTop="6dp" android:text="" />
+
+            <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="Google client ID, for Gmail, Drive backup and Nest (Google Cloud → OAuth client → Desktop app)" />
+            <EditText android:id="@+id/googleClientId" style="@style/Field" android:inputType="textPassword" android:hint="….apps.googleusercontent.com" />
+            <TextView style="@style/Hint" android:text="Google client secret" />
+            <EditText android:id="@+id/googleClientSecret" style="@style/Field" android:inputType="textPassword" android:hint="GOCSPX-…" />
+            <Button android:id="@+id/connectGoogle" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Connect Google (Gmail + Drive)" />
+
+            <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="Backup passphrase (8+ characters). Locks the nightly Drive backup; you'll need it to restore." />
+            <EditText android:id="@+id/backupPass" style="@style/Field" android:inputType="textPassword" android:hint="Something only you know" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/backupNow" style="@style/Btn.Small" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Back up now" />
+                <Button android:id="@+id/restoreBackup" style="@style/Btn.Small" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:layout_marginTop="8dp" android:layout_marginStart="8dp" android:text="Restore" />
+            </LinearLayout>
+
+            <Button android:id="@+id/allowHealth" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:layout_marginTop="14dp" android:text="Allow sleep &amp; steps (Health Connect)" />
+
+            <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="YouTube Data API key (Google Cloud → APIs → YouTube Data API v3)" />
+            <EditText android:id="@+id/youtubeKey" style="@style/Field" android:inputType="textPassword" android:hint="AIza…" />
+            <TextView style="@style/Hint" android:text="Your YouTube channel" />
+            <EditText android:id="@+id/youtubeChannel" style="@style/Field" android:inputType="text" android:hint="@yourhandle" />
+
+            <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="Telegram bot token (from @BotFather). Then send /start to your bot from your laptop." />
+            <EditText android:id="@+id/telegramToken" style="@style/Field" android:inputType="textPassword" android:hint="123456:ABC…" />
+            <Button android:id="@+id/telegramPair" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Telegram: not paired" />
+
+            <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="Google Maps key (Routes API + Places API on). For drive times, traffic and gas prices." />
+            <EditText android:id="@+id/mapsKey" style="@style/Field" android:inputType="textPassword" android:hint="AIza…" />
+
+            <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="Nest Device Access project ID (console.nest.google.com/device-access). Covers Nest thermostats, cameras and doorbells." />
+            <EditText android:id="@+id/nestProject" style="@style/Field" android:inputType="textPassword" android:hint="Project ID" />
+            <Button android:id="@+id/connectNest" style="@style/Btn.Small" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="Connect Nest" />
+
+            <TextView style="@style/Hint" android:layout_marginTop="14dp" android:text="ElevenLabs key (optional, Jarvis's voice; falls back when the free credits run out)" />
+            <EditText android:id="@+id/elevenKey" style="@style/Field" android:inputType="textPassword" android:hint="sk_…" />
+            <TextView style="@style/Hint" android:text="ElevenLabs voice ID (blank = George, British and warm)" />
+            <EditText android:id="@+id/elevenVoice" style="@style/Field" android:inputType="textPassword" android:hint="Voice ID" />
+
             <Button android:id="@+id/save" style="@style/Btn.Primary" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="12dp" android:text="Save" />
             <TextView style="@style/Hint" android:layout_marginTop="10dp" android:text="Your keys stay on this phone only." />
         </LinearLayout>

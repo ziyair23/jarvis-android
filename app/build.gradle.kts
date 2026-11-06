@@ -58,9 +58,11 @@ dependencies {
     if (withHome) {
         implementation("com.google.android.gms:play-services-home:17.1.0")
         implementation("com.google.android.gms:play-services-home-types:17.1.0")
-        implementation("androidx.activity:activity-ktx:1.9.3")
-        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     }
+    // Health Connect (sleep and steps) and what it needs
+    implementation("androidx.health.connect:connect-client:1.1.0")
+    implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
     implementation("org.apache.commons:commons-compress:1.26.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
