@@ -59,8 +59,8 @@ class MainActivity : Activity() {
             Triple(R.id.telegramToken, { prefs.telegramToken }, { v -> if (v.trim() != prefs.telegramToken) { prefs.telegramToken = v; Telegram.unpair(this); if (prefs.running) thread { Telegram.restart(this) } } }),
             Triple(R.id.mapsKey, { prefs.mapsKey }, { v -> prefs.mapsKey = v }),
             Triple(R.id.nestProject, { prefs.nestProject }, { v -> prefs.nestProject = v }),
-            Triple(R.id.elevenKey, { prefs.elevenKey }, { v -> if (v.trim() != prefs.elevenKey) ElevenVoice.unbench(prefs); prefs.elevenKey = v }),
-            Triple(R.id.elevenVoice, { prefs.elevenVoice }, { v -> prefs.elevenVoice = v }))
+            Triple(R.id.elevenKey, { prefs.elevenKey }, { v -> ElevenVoice.unbench(prefs); prefs.elevenKey = v }),
+            Triple(R.id.elevenVoice, { prefs.elevenVoice }, { v -> ElevenVoice.unbench(prefs); prefs.elevenVoice = v }))
         for ((id, get, _) in conn) findViewById<EditText>(id).setText(get())
 
         findViewById<Button>(R.id.save).setOnClickListener {
