@@ -111,6 +111,7 @@ class DashActivity : Activity() {
         @JavascriptInterface fun quietEnd() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_QUIET_END)) }
         /** "state,level" for the big orb on the dashboard (0 idle, 1 listening, 2 thinking, 3 speaking). */
         @JavascriptInterface fun orb(): String = Orb.now().let { "${it.first},${it.second}" }
+        @JavascriptInterface fun words(): String = Orb.words()
         @JavascriptInterface fun hush() = runOnUiThread { startService(Intent(ctx, JarvisService::class.java).setAction(JarvisService.ACTION_HUSH)) }
         @JavascriptInterface fun agents(): String = try { Agents.json(ctx).toString() } catch (e: Exception) { Trace.log(ctx, "dash", "agents list failed: ${e.message}"); "[]" }
         @JavascriptInterface fun upgradeDecide(id: String, yes: Boolean) { Upgrade.decide(ctx, id, yes); LogBus.changed() }

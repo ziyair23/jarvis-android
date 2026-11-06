@@ -36,6 +36,7 @@ class SpeechStream(
     fun add(sentence: String) {
         if (cancelled) return
         if (!started) { started = true; start() }
+        Orb.saying(sentence)
         texts.put(sentence)
     }
 

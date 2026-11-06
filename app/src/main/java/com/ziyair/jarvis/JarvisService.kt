@@ -601,6 +601,7 @@ class JarvisService : Service() {
                 val p = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                 if (p.isBlank() || p == lastPartial) return
                 lastPartial = p
+                Orb.hearing(p)
                 val mine = recognizer
                 if (isStop(p)) {
                     main.postDelayed({ if (live() && recognizer === mine && lastPartial == p) { done = true; stopListening(p) } },
@@ -718,6 +719,7 @@ class JarvisService : Service() {
     private fun handle(text0: String, followUp: Boolean = false) {
         val text = text0.replace(Regex("^\\s*((hey|hi|ok|okay|yo)[,.!]?\\s+)?jarvis[,.!?]*\\s*", RegexOption.IGNORE_CASE), "").trim()
         if (text.isBlank()) { Trace.log(this, "wake", "just his name, listening"); openWindow(convoSeconds()); listen(firstTurn = !followUp); return }
+        Orb.heardFinal(text)
         if (isStop(text)) { Trace.log(this, "stop", "\"$text\""); stopListening(text); return }
         val lower = text.lowercase(Locale.US)
         if (Regex("^(never ?mind|thanks?( you)?,? (jarvis|that'?s (it|all))|thank you,? jarvis|nothing|no thanks?|i'?m good|that'?ll be all|goodbye|see you)\\b").containsMatchIn(lower)
@@ -1033,6 +1035,7 @@ class JarvisService : Service() {
 
     private fun speak(text: String, then: () -> Unit) {
         if (acking) { main.postDelayed({ speak(text, then) }, 150); return }
+        Orb.saying(text)
         if (Cast.mode(prefs) == "everything" && Cast.target(prefs) != null && !casting) { casting = true; speakHouse(text) { casting = false; then() }; return }
         quiet(false)
         LockView.showIfLocked(this, text)

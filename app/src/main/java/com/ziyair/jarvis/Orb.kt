@@ -46,6 +46,15 @@ object Orb {
 
     fun level(v: Float) { level = v.coerceIn(0f, 1f) }
 
+    // ---- the words of the current turn, for the home screen's talking view ----
+    @Volatile var heard = ""; private set
+    @Volatile var said = ""; private set
+    @Volatile var turnAt = 0L; private set
+    fun hearing(text: String) { if (state == LISTEN || heard.isEmpty()) { if (said.isNotEmpty() && state == LISTEN) { said = ""; turnAt = System.currentTimeMillis() }; heard = text.take(300) } }
+    fun heardFinal(text: String) { heard = text.take(300); said = ""; turnAt = System.currentTimeMillis() }
+    fun saying(text: String) { if (text.isNotBlank()) said = (if (said.isEmpty()) text.trim() else "$said ${text.trim()}").takeLast(600) }
+    fun words(): String = org.json.JSONObject().put("heard", heard).put("said", said).put("at", turnAt).toString()
+
     // ---- his actual voice: loudness every 20 ms of what's being played, read against the speaker's position ----
     private val env = ArrayList<Float>()
     private var envRate = 24000

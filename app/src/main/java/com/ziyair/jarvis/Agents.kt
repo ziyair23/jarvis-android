@@ -126,6 +126,9 @@ object Agents {
 
     /** Which agents are working right now (the Brain view lights their threads). */
     val active = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    /** What each working agent is on right now, and the skills it has used so far (the home screen shows them live). */
+    val nowTask = java.util.concurrent.ConcurrentHashMap<String, String>()
+    val nowSteps = java.util.concurrent.ConcurrentHashMap<String, CopyOnWriteArrayList<String>>()
     /** Inner skills used recently (so Jarvis knows "play_music" ran even when an agent did it). */
     private val inner = CopyOnWriteArrayList<Pair<Long, String>>()
     fun usedRecently(name: String, ms: Long) = inner.any { it.second == name && System.currentTimeMillis() - it.first < ms }
@@ -197,6 +200,7 @@ object Agents {
         if (id == "research" && Spend.thisMonth(Prefs(c)) >= Spend.budget(Prefs(c))) return "He's at his Claude budget for the month, so deep research is paused; I can still do a quick search."
         val t0 = System.currentTimeMillis()
         active[id] = t0
+        nowTask[id] = task.take(160); nowSteps[id] = CopyOnWriteArrayList()
         Trace.log(c, "agent", "${d.name} <- \"${task.take(140)}\"${if (confirmed) " (confirmed)" else ""}${if (depth > 0) " (asked by the team)" else ""}")
         val used = ArrayList<String>()
         var result = ""
@@ -273,7 +277,7 @@ object Agents {
                                 name in d.tools || name in Loops.TOOLS -> actions.run(name, input)
                                 else -> "That skill belongs to another agent."
                             }
-                            if (name != "note_to_self") { used.add(name); inner.add(System.currentTimeMillis() to name); outs.add(out) }
+                            if (name != "note_to_self") { used.add(name); nowSteps[id]?.add(name); inner.add(System.currentTimeMillis() to name); outs.add(out) }
                             if (name in LOOK_AGAIN || smart) lookAgain = true
                             Trace.log(c, "agent", "${d.name}: $name -> ${out.take(140)}")
                             results.put(JSONObject().put("type", "tool_result").put("tool_use_id", p.optString("id")).put("content", out))
@@ -293,7 +297,7 @@ object Agents {
             Problems.log(c, "${d.name} agent: ${e.message}")
             result = "The ${d.name} agent hit a problem: ${e.message}"
         } finally {
-            if (active[id] == t0) active.remove(id)
+            if (active[id] == t0) { active.remove(id); nowTask.remove(id); nowSteps.remove(id) }
             val ms = System.currentTimeMillis() - t0
             logRun(c, id, task, result, ms, used)
             Trace.log(c, "agent", "${d.name} -> \"${result.take(160)}\" (${ms}ms)")
@@ -310,6 +314,7 @@ object Agents {
             .put("on", enabled(c, d.id) && on(c) && (d.id != "builder" || Builder.allowed(c)))
             .put("needs", if (d.id == "builder" && !Builder.allowed(c)) "Add a GitHub token in setup to let him build new versions. Small changes work without it." else "")
             .put("active", active.containsKey(d.id))
+            .put("task", nowTask[d.id].orEmpty()).put("steps", JSONArray(nowSteps[d.id]?.toList() ?: emptyList<String>()))
             .put("skills", JSONArray(d.tools.sorted())).put("count", Prefs(c).sp.getInt("agent_count_${d.id}", 0))
             .put("runs", runs(c, d.id)).put("notes", if (d.id == "coach") Coach.lessons(c) else notes(c, d.id)))
     }
