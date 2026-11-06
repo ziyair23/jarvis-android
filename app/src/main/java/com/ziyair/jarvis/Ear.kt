@@ -97,7 +97,11 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
             var speechAt = 0L
             // early read: the moment he pauses, start reading what he said; if he was done, the words are ready when the pause is confirmed
             val earlyMs = cfg.optInt("ear_early_ms", 260)
-            val fastEndMs = cfg.optInt("ear_fast_end_ms", 450)
+            // a finished sentence still gets a breath of quiet before he answers (a live model waits about this long)
+            val fastEndMs = maxOf(650, cfg.optInt("ear_fast_end_ms", 700))
+            // a pause that sounds mid-thought ("can you...", "and then", "um"): keep listening a while longer before answering
+            val graceMs = cfg.optInt("ear_grace_ms", 1500)
+            var held: FloatArray? = null; var heldText = ""; var heldAt = 0L; var holds = 0
             val bargeOn = cfg.optBoolean("barge_in", true)
             val barge = Barge(CHUNK * 1000 / RATE, cfg.optDouble("barge_ratio", 3.0).toFloat(), cfg.optInt("barge_ms", 320))
             val ring = FloatArray(RATE); var ringPos = 0
@@ -107,6 +111,7 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
             val pre = FloatArray(CHUNK * 8); var preN = 0   // the last ~0.6 s before he started, so the first word is never clipped
             var spec: java.util.concurrent.Future<String>? = null; var specN = 0
             fun resetUtt() { uttN = 0; quietMs = 0; spec = null; specN = 0; preN = 0 }
+            fun dropHeld() { held = null; heldText = ""; holds = 0 }
             try {
                 rec.startRecording()
                 if (rec.recordingState != AudioRecord.RECORDSTATE_RECORDING) throw IllegalStateException("mic busy")
@@ -122,7 +127,7 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                     val m = mode
                     if (modeChanged || m != last) {
                         modeChanged = false
-                        if (m == Mode.LISTEN) { vad.reset(); speechAt = 0L; resetUtt() }
+                        if (m == Mode.LISTEN) { vad.reset(); speechAt = 0L; resetUtt(); dropHeld() }
                         if ((m == Mode.SLEEP || m == Mode.SPEAKING) && last != Mode.SLEEP && last != Mode.SPEAKING) { wake.reset(); wake.gate.reset() }
                         if (m == Mode.SPEAKING) barge.reset()
                         wake.sensitive(m != Mode.SPEAKING)
@@ -161,6 +166,14 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                                 speechStarted = true; speechAt = System.currentTimeMillis()
                                 main.post { events.onSpeechStart() }
                             }
+                            val h = held
+                            if (h != null && !speechStarted && System.currentTimeMillis() - heldAt > graceMs) {
+                                mode = Mode.HOLD; last = Mode.HOLD; vad.reset()
+                                val t = heldText; dropHeld()
+                                if (t.isNotBlank()) deliver(t, h.size * 1000L / RATE, 0, true) else asr.execute { transcribe(h) }
+                                main.post { Trace.log(context, "ear", "waited ${graceMs}ms for the rest, he was done") }
+                                continue
+                            }
                             if (!speechStarted) {
                                 floor = floor * 0.95f + rms * 0.05f
                                 if (preN == pre.size) System.arraycopy(pre, CHUNK, pre, 0, pre.size - CHUNK).also { preN -= CHUNK }
@@ -179,7 +192,7 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                                     // he's clearly finished (a complete thought, not "remind me to... um"): answer now instead of
                                     // waiting out the full second of silence
                                     val sp = spec
-                                    if (sp != null && sp.isDone && quietMs >= fastEndMs) {
+                                    if (held == null && sp != null && sp.isDone && quietMs >= fastEndMs) {
                                         val text = try { sp.get() } catch (_: Exception) { "" }
                                         if (EarlyRead.complete(text)) {
                                             mode = Mode.HOLD; last = Mode.HOLD; vad.reset()
@@ -190,12 +203,24 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
                                     }
                                 }
                             }
-                            if (endedEarly) { endedEarly = false } else if (!vad.empty()) {
+                            if (endedEarly) { endedEarly = false; dropHeld() } else if (!vad.empty()) {
                                 val seg = vad.front()
                                 while (!vad.empty()) vad.pop()
+                                val prev = held
+                                val samples = if (prev != null) FloatArray(prev.size + seg.samples.size).also { System.arraycopy(prev, 0, it, 0, prev.size); System.arraycopy(seg.samples, 0, it, prev.size, seg.samples.size) } else seg.samples
+                                val early0 = spec
+                                // sounds like he's mid-thought: hold on to it and give him time to carry on (twice at most)
+                                val earlyText = if (early0 != null && early0.isDone && EarlyRead.usable(seg.samples.size, specN, RATE)) (try { early0.get() } catch (_: Exception) { "" }) else ""
+                                val sofar = (heldText + " " + earlyText).trim()
+                                if (holds < 2 && earlyText.isNotBlank() && !EarlyRead.complete(sofar)) {
+                                    held = samples; heldText = if (prev == null) earlyText else ""; heldAt = System.currentTimeMillis(); holds++
+                                    resetUtt(); speechStarted = false
+                                    main.post { Trace.log(context, "ear", "sounds unfinished (\"${sofar.takeLast(40)}\"), giving him a moment") }
+                                    continue
+                                }
                                 mode = Mode.HOLD; last = Mode.HOLD
-                                val samples = seg.samples
-                                val early = spec
+                                val early = if (prev != null) null else spec
+                                dropHeld()
                                 if (early != null && EarlyRead.usable(samples.size, specN, RATE)) {
                                     val t0 = System.currentTimeMillis()
                                     asr.execute { val text = try { early.get() } catch (_: Exception) { "" }
@@ -375,7 +400,7 @@ class Barge(private val chunkMs: Int, private val ratio: Float = 3f, private val
 object EarlyRead {
     private val TRAIL = setOf("and", "or", "but", "so", "to", "the", "a", "an", "for", "with", "my", "at", "about", "of", "in", "on", "is", "if",
         "because", "cause", "um", "uh", "uhm", "hmm", "then", "can", "could", "would", "should", "will", "i", "we", "you", "he", "she", "they",
-        "it's", "i'm", "what", "when", "where", "how", "why", "which", "who", "from", "into", "by", "was", "are", "be", "just", "maybe", "also", "her", "his", "your", "our", "their", "this", "some", "any")
+        "it's", "i'm", "need", "want", "gonna", "wanna", "gotta", "what", "when", "where", "how", "why", "which", "who", "from", "into", "by", "was", "are", "be", "just", "maybe", "also", "her", "his", "your", "our", "their", "this", "some", "any")
     /** Does this sound like he's finished, rather than pausing mid-thought? Pure, unit-tested. */
     fun complete(text: String): Boolean {
         val t = text.trim().lowercase().replace(Regex("[^a-z0-9' ]"), " ").replace(Regex("\\s+"), " ").trim()
