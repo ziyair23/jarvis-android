@@ -112,6 +112,75 @@ input::placeholder{color:#5f5b56}
 .sheet .title .icon{width:38px;height:38px;min-height:38px;font-size:18px}
 .sheet .body{overflow-y:auto;padding:8px 16px calc(24px + env(safe-area-inset-bottom));overscroll-behavior:contain}
 @media (prefers-reduced-motion:reduce){.sheet,#scrim{transition:none}}
+/* ---- motion: tiles catching the light, the brain docking, the talking view, job cards, his house ---- */
+.tile::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 40%,rgba(240,195,186,.07) 50%,transparent 60%);transform:translateX(-100%);pointer-events:none}
+.tile.shine::after{animation:shine 1.1s ease-out}
+@keyframes shine{to{transform:translateX(100%)}}
+.mini i{transform-origin:50% 100%}
+.bars div{transform-origin:50% 100%}
+.bar>i{transition:width 1.3s cubic-bezier(.2,.8,.2,1)}
+.caret{display:inline-block;width:1px;height:1em;background:var(--accent-soft);vertical-align:-2px;margin-left:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+#hero{transition:transform .65s cubic-bezier(.2,.8,.2,1)}
+#hero.docked{z-index:23}
+#hero.docked #status{opacity:0}
+#status{transition:opacity .3s}
+.sheet .body>.card,.sheet .body>.day,.sheet .body>p,.sheet .body>button{opacity:0;transform:translateY(18px)}
+.sheet.open .body>.card,.sheet.open .body>.day,.sheet.open .body>p,.sheet.open .body>button{opacity:1;transform:none;transition:opacity .45s ease,transform .55s cubic-bezier(.2,.8,.2,1)}
+.sheet.open .body>:nth-child(2){transition-delay:.06s}.sheet.open .body>:nth-child(3){transition-delay:.12s}.sheet.open .body>:nth-child(4){transition-delay:.18s}.sheet.open .body>:nth-child(5){transition-delay:.24s}.sheet.open .body>:nth-child(n+6){transition-delay:.3s}
+.list li.ticking .chip{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)!important;transition:background .2s}
+.list li.ticking>span:last-child{position:relative;color:var(--ink-faint);transition:color .3s .15s}
+.list li.ticking>span:last-child::after{content:"";position:absolute;left:0;top:52%;height:1px;background:var(--ink-faint);animation:strike .35s ease .1s forwards;width:0}
+@keyframes strike{to{width:100%}}
+#talkv{position:fixed;inset:0;z-index:30;opacity:0;pointer-events:none;transition:opacity .45s}
+body.talking #talkv{opacity:1;pointer-events:auto}
+body.talking #hero{z-index:31;transform:translateY(10px) scale(1.04)}
+#talkv .shade{position:absolute;inset:0;background:radial-gradient(90% 60% at 50% 28%,rgba(40,14,12,.55),rgba(5,5,6,.95) 70%);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#tv-words{position:absolute;left:24px;right:24px;display:flex;flex-direction:column;gap:14px}
+#tv-you{font:400 15px/1.45 var(--sans);color:var(--ink-dim);min-height:22px;max-height:66px;overflow:hidden}
+#tv-him{font:300 26px/1.25 var(--serif);color:var(--ink);max-height:34vh;overflow:hidden}
+#talkv .w{display:inline-block;opacity:0;filter:blur(6px);transform:translateY(6px);transition:opacity .35s,filter .35s,transform .35s;margin-right:.26em}
+#talkv .w.on{opacity:1;filter:none;transform:none}
+#tv-him .w.on.lit{color:#ffe2d9;text-shadow:0 0 18px rgba(226,119,79,.55)}
+#tv-wave{position:absolute;left:24px;right:24px;bottom:calc(92px + env(safe-area-inset-bottom));height:36px;width:calc(100% - 48px)}
+#tv-stop{position:absolute;left:50%;bottom:calc(30px + env(safe-area-inset-bottom));transform:translateX(-50%);font:500 11px var(--sans);letter-spacing:.16em;color:var(--ink-dim);background:rgba(255,255,255,.04);border:1px solid rgba(239,235,228,.14);border-radius:999px;padding:0 22px;min-height:44px;white-space:nowrap}
+#jobs{position:fixed;left:14px;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:32;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none}
+body.talking #jobs{bottom:calc(150px + env(safe-area-inset-bottom))}
+.job{padding:14px 16px;border-radius:18px;background:linear-gradient(180deg,rgba(32,20,19,.95),rgba(18,14,14,.95));border:1px solid rgba(201,102,92,.45);box-shadow:0 20px 40px rgba(0,0,0,.5)}
+.job .jk{font:600 10.5px var(--sans);letter-spacing:.18em;color:var(--accent-soft);display:flex;align-items:center;gap:8px}
+.job .jk i{width:6px;height:6px;border-radius:50%;background:var(--accent-soft);animation:jbusy 1s infinite}
+.job .jk i.ok{animation:none;box-shadow:0 0 10px rgba(201,102,92,.7)}
+@keyframes jbusy{50%{box-shadow:0 0 0 6px rgba(201,102,92,.18)}}
+.job .jt{margin-top:6px;font-size:14px;line-height:1.4;color:var(--ink)}
+.job ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.job li{display:flex;gap:10px;align-items:center;font-size:13px;color:var(--ink-dim);opacity:0;transform:translateX(-6px);transition:opacity .3s,transform .3s}
+.job li.on{opacity:1;transform:none}
+.job li b{width:13px;height:13px;flex:none;border-radius:50%;border:1.5px solid rgba(201,102,92,.35);border-top-color:#f0c3ba;animation:jspin .8s linear infinite}
+.job li.ok b{animation:none;border-color:var(--accent-soft);background:var(--accent-soft)}
+@keyframes jspin{to{transform:rotate(360deg)}}
+.job .shim{height:2px;margin-top:10px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--accent-soft),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:jshim 1.2s linear infinite}
+@keyframes jshim{from{background-position:-50% 0}to{background-position:150% 0}}
+.inside-tile{background:radial-gradient(120% 140% at 85% 20%,rgba(176,82,74,.25),transparent 60%),linear-gradient(180deg,var(--card2),var(--card))}
+.inside-tile canvas{position:absolute;right:0;top:0;width:150px;height:100%;pointer-events:none}
+#house{position:fixed;inset:0;z-index:40;background:#070506;opacity:0;pointer-events:none;transform:scale(1.12);transition:opacity .6s ease,transform .8s cubic-bezier(.2,.8,.2,1)}
+#house.on{opacity:1;pointer-events:auto;transform:none}
+#room{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#house .htop{position:absolute;left:0;right:0;top:0;padding:calc(18px + env(safe-area-inset-top)) 16px 18px;display:flex;align-items:center;gap:12px;background:linear-gradient(180deg,rgba(5,4,5,.8),transparent);pointer-events:none}
+#house .htop>*{pointer-events:auto}
+#house .htop h2{margin:0;font:300 26px/1.1 var(--serif)}
+#house .clockbox{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+#house .clockbox span{font:400 22px/1 var(--serif);font-variant-numeric:tabular-nums}
+#house .clockbox button{font:500 11px var(--sans);letter-spacing:.06em;color:var(--ink-dim);background:rgba(20,16,16,.7);border:1px solid var(--edge);border-radius:999px;padding:6px 12px;min-height:34px}
+#house .clockbox button[aria-pressed="true"]{color:#ffd9c9;border-color:rgba(201,102,92,.55)}
+#house .focus{position:absolute;left:14px;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));padding:16px 16px 14px;border-radius:20px;background:linear-gradient(180deg,rgba(30,19,18,.88),rgba(15,12,12,.92));border:1px solid rgba(201,102,92,.3);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);display:flex;flex-direction:column;gap:6px}
+#house .fk{font:600 10.5px var(--sans);letter-spacing:.2em;color:var(--accent-soft);display:flex;gap:8px;align-items:center}
+#house .fk i{width:6px;height:6px;border-radius:50%;background:var(--accent-soft);animation:jbusy 1s infinite}
+#house .focus.live{border-color:rgba(240,195,186,.6)}
+#house .focus.asleep .fk{color:var(--ink-faint)}#house .focus.asleep .fk i{background:var(--ink-faint);animation:none}
+#house .fn{font:300 26px/1.1 var(--serif)}
+#house .fa{font-size:14px;color:var(--ink);min-height:21px}
+#house .ff{font-size:12.5px;color:var(--ink-faint)}
+@media (prefers-reduced-motion:reduce){#hero,#house,#talkv,.sheet .body>*{transition:none!important}}
 </style>
 </head>
 <body>
@@ -168,10 +237,20 @@ input::placeholder{color:#5f5b56}
     <div class="k">Last said<span class="go">›</span></div>
     <div class="sub" id="t-last" style="color:var(--ink-dim);font-size:14px;line-height:1.45;margin-top:8px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden"></div>
   </button>
+  <button class="tile wide inside-tile" onclick="openHouse()"><canvas id="peek" width="300" height="200" aria-hidden="true"></canvas>
+    <div class="k">Inside his mind<span class="go">›</span></div><div class="v s" style="max-width:62%">Visit his house</div><div class="sub" id="peek-line" style="max-width:62%">Every agent has a room.</div></button>
 </div>
 <div class="foot"><button id="quietBtn" class="ghost" onclick="D && D.stealth ? J.quietEnd() : J.quietStart()">Quiet mode</button></div>
 
 <div id="scrim" onclick="scrimTap()"></div>
+<div id="talkv" aria-hidden="true" aria-live="polite"><div class="shade"></div><div id="tv-words"><div id="tv-you"></div><div id="tv-him"></div></div>
+  <canvas id="tv-wave" width="680" height="72"></canvas><button id="tv-stop">TAP TO STOP HIM</button></div>
+<div id="jobs" aria-live="polite"></div>
+<div id="house" aria-hidden="true"><canvas id="room" aria-label="Jarvis's house: a room for each agent. Tap a room to go in."></canvas>
+  <div class="htop"><button class="icon" id="h-out" aria-label="Back">‹</button><div style="flex:1;min-width:0"><div class="date" id="h-awake">Live</div><h2>His house</h2></div>
+    <div class="clockbox"><span id="h-clock">—</span><button id="h-speed" aria-pressed="false">Real time</button></div></div>
+  <div class="focus"><span class="fk"><i></i><span id="f-state">AT THE DESK</span></span><span class="fn" id="f-name">Money</span><span class="fa" id="f-act"></span><span class="ff" id="f-done"></span></div>
+</div>
 
 <div class="sheet" id="sh-money"><div class="head"><div class="grab"></div><div class="title"><h2>Money</h2><button class="icon" aria-label="Close" onclick="closeSheet()">×</button></div></div><div class="body">
   <div class="card">
@@ -332,19 +411,19 @@ function openSheet(id) {
   if (openId) $('sh-' + openId).classList.remove('open'); else { try { history.pushState({sheet: id}, ''); pushed = true; } catch (e) { pushed = false; } }
   openId = id;
   const el = $('sh-' + id); el.style.transform = ''; el.classList.add('open');
-  $('scrim').classList.add('on'); document.body.classList.add('locked');
+  $('scrim').classList.add('on'); document.body.classList.add('locked'); window.dockBrain && window.dockBrain(true, id);
   if (id === 'talk') setTimeout(() => { const b = el.querySelector('.body'); b.scrollTop = b.scrollHeight; }, 60);
   if (id === 'agent' && window.panel) window.panel();
 }
 function hideSheet() {
   if (!openId) return;
   const el = $('sh-' + openId); el.classList.remove('open'); el.style.transform = '';
-  $('scrim').classList.remove('on'); document.body.classList.remove('locked'); openId = null;
+  $('scrim').classList.remove('on'); document.body.classList.remove('locked'); openId = null; window.dockBrain && window.dockBrain(false);
 }
 function closeSheet() { if (!openId) return; if (pushed) { pushed = false; try { history.back(); return; } catch (e) {} } hideSheet(); }
 window.addEventListener('popstate', () => { pushed = false; hideSheet(); });
 // the phone's back button (called by the app): close an open sheet, or say there's nothing to close
-window.backPressed = () => { if (openId) { closeSheet(); return true; } return false; };
+window.backPressed = () => { if (window.houseBack && window.houseBack()) return true; if (openId) { closeSheet(); return true; } return false; };
 document.querySelectorAll('.sheet').forEach(el => {
   const head = el.querySelector('.head'), body = el.querySelector('.body'); let y0 = null, dy = 0;
   const start = e => { if (e.currentTarget === body && body.scrollTop > 0) return; y0 = e.touches[0].clientY; dy = 0; el.style.transition = 'none'; };
@@ -385,6 +464,7 @@ function load() {
   const lastFeed = log.find(e => e.k === 'feed');
   $('t-feed').textContent = lastFeed ? 'Fed ' + ago(lastFeed.at) : 'No feeds logged yet';
   $('t-baby').textContent = lastFeed ? 'Next feed around ' + clock(lastFeed.at + D.feedHours * 3600000) : 'Tap Fed, or tell Jarvis "he just ate".';
+  window.nextFeedAt = lastFeed ? lastFeed.at + D.feedHours * 3600000 : 0;
   $('b-status').textContent = D.babyStatus;
   let html = '', cur = '';
   log.slice(0, 120).forEach(e => {
@@ -410,7 +490,7 @@ function load() {
   // list
   const L = (D.lists && D.lists.list) ? Array.from({length: D.lists.list.length}, (_, i) => D.lists.list[i]) : [];
   const open = L.filter(x => !x.done), got = L.filter(x => x.done);
-  $('l-list').innerHTML = (open.concat(got)).map(x => `<li onclick="J.listToggle('list','${x.at}')" style="cursor:pointer"><span class="chip" style="${x.done ? 'opacity:.5' : 'color:var(--accent);border-color:#5c513c'}">${x.done ? '✓' : '○'}</span><span style="${x.done ? 'text-decoration:line-through;color:var(--ink-faint)' : ''}">${esc(x.t)}</span></li>`).join('')
+  $('l-list').innerHTML = (open.concat(got)).map(x => `<li onclick="${x.done ? `J.listToggle('list','${x.at}')` : `tickItem(this,'${x.at}')`}" style="cursor:pointer"><span class="chip" style="${x.done ? 'opacity:.5' : 'color:var(--accent);border-color:#5c513c'}">${x.done ? '✓' : '○'}</span><span style="${x.done ? 'text-decoration:line-through;color:var(--ink-faint)' : ''}">${esc(x.t)}</span></li>`).join('')
     + (got.length ? `<li><button class="x" style="margin:0" onclick="J.listClearDone()">Clear ticked items</button></li>` : '')
     || '<li class="empty">Empty. Say "Hey Jarvis, add wipes to the list."</li>';
 
@@ -639,7 +719,7 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
     const f = 3.2 / (3.2 - z), S = cv.width * 0.37;
     return [cv.width / 2 + x * S * f, cv.height / 2 - y * S * f, z, f];
   }
-  const visible = () => !document.hidden && !openId;
+  const visible = () => !document.hidden && !window.houseOpen;
   // the strip of agents under the brain: always tappable, whatever the brain's doing
   let barKey = '';
   function bar() {
@@ -653,8 +733,9 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   function openAgent(id) { sel = id; openSheet('agent'); }
   window.openAgent = openAgent;
   // where an agent's dot is on screen right now (used by the checks)
-  window.agentAt = id => { const b = cv.getBoundingClientRect(), q = proj(POS[id] || [0, 0, 1]); return [b.left + q[0] * b.width / cv.width, b.top + q[1] * b.height / cv.height]; };
-  function refresh() { if (A.length && !visible()) return; try { A = JSON.parse(J.agents()); } catch (e) { A = []; } bar();
+  window.brainPulse = (id, n = 3) => { for (let i = 0; i < n; i++) pulses.push({id, t: performance.now() / 1000 + i * 0.22}); };
+  window.agentAt = id => { const b = cv.getBoundingClientRect(), q = proj(POS[id] || (id === 'jarvis' ? [0, 0, 0] : [0, 0, 1])); return [b.left + q[0] * b.width / cv.width, b.top + q[1] * b.height / cv.height]; };
+  function refresh() { if (A.length && document.hidden) return; try { A = JSON.parse(J.agents()); } catch (e) { A = []; } bar(); window.onAgents && window.onAgents(A);
     A.forEach(a => { if (a.active && !lastActive[a.id]) for (let i = 0; i < 3; i++) pulses.push({id: a.id, t: performance.now() / 1000 + i * 0.25}); lastActive[a.id] = a.active; });
     if (openId === 'agent') panel(); }
   refresh(); setInterval(refresh, 1000);
@@ -751,7 +832,7 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   requestAnimationFrame(frame);
 
   const pt = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) * cv.width / b.width, (e.clientY - b.top) * cv.height / b.height]; };
-  cv.addEventListener('pointerdown', e => { drag = {x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), turning: false, at: pt(e)}; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
+  cv.addEventListener('pointerdown', e => { if (openId) { closeSheet(); return; } drag = {x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), turning: false, at: pt(e)}; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
   cv.addEventListener('pointermove', e => { if (!drag) return;
     if (!drag.turning && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 14) drag.turning = true;   // only a real drag turns the brain
     if (!drag.turning) return;
@@ -801,5 +882,7 @@ setInterval(() => { try { const v = J.orb().split(','); OS = +v[0]; OL = +v[1]; 
   window.panel = panel;
 })();
 </script>
+<script src="motion.js"></script>
+<script src="house.js"></script>
 </body>
 </html>

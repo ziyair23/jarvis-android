@@ -43,4 +43,17 @@ class BrainWallpaperTest {
         assertTrue(man.contains(".BrainWallpaper") && man.contains("android.permission.BIND_WALLPAPER") && man.contains("@xml/brain_wallpaper"))
         assertTrue(File("src/main/res/xml/brain_wallpaper.xml").exists())
     }
+
+    @Test fun homeScreenMotionAndHouseAreWiredIn() {
+        val html = File("src/main/assets/dash.html").readText()
+        assertTrue(html.contains("<script src=\"motion.js\"></script>") && html.contains("<script src=\"house.js\"></script>"))
+        assertTrue(html.contains("id=\"talkv\"") && html.contains("id=\"house\"") && html.contains("id=\"jobs\"") && html.contains("openHouse()"))
+        val motion = File("src/main/assets/motion.js").readText(); val house = File("src/main/assets/house.js").readText()
+        assertTrue(motion.contains("J.words()") && motion.contains("window.onAgents"))
+        // every agent has a room in the house
+        val ids = Regex("\\{id:'(\\w+)'").findAll(house).map { it.groupValues[1] }.toSet()
+        for (id in BrainModel.POS.keys) assertTrue("$id has no room in the house", id in ids)
+        val agents = File("src/main/java/com/ziyair/jarvis/Agents.kt").readText()
+        assertTrue(agents.contains(".put(\"task\", nowTask[d.id].orEmpty())"))
+    }
 }
