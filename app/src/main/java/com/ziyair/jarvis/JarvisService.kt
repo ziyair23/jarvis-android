@@ -194,7 +194,7 @@ class JarvisService : Service() {
         if (!goForeground()) {
             // Android won't let the mic start from the background. If he never switched Jarvis off, hop to the front for a
             // moment (allowed with "display over other apps") so he comes straight back, at most once a minute
-            val last = prefs.sp.getLong("revive_at", 0L), now = System.currentTimeMillis()
+            val last = prefs.sp.getLong("revive_at", 0L); val now = System.currentTimeMillis()
             if (prefs.running && android.provider.Settings.canDrawOverlays(this) && now - last > 60_000L) {
                 prefs.sp.edit().putLong("revive_at", now).apply()
                 Trace.log(this, "revive", "Android stopped him in the background; bringing him back")
