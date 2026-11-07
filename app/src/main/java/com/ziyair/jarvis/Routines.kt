@@ -84,6 +84,9 @@ object Shift {
         LogBus.changed()
         val made = Earnings.today(c)
         val rate = perHour(made, before + ms)
+        // the payout read off the Dasher app in the last half hour: no need to ask him
+        val fresh = try { org.json.JSONArray(p.sp.getString("payouts_seen", "[]")).let { a -> a.length() > 0 && System.currentTimeMillis() - a.getJSONObject(a.length() - 1).optLong("at") < 30 * 60_000L } } catch (_: Exception) { false }
+        if (fresh && rate != null) return "Shift done after ${hm(ms)}. ${Earnings.money(made)} today, about ${Earnings.money(Math.round(rate).toDouble())} an hour."
         return "Shift done after ${hm(ms)}." + if (made > 0 && rate != null) " Today's logged at ${Earnings.money(made)}, about ${Earnings.money(Math.round(rate).toDouble())} an hour." else
             " Ask him what he made, log it, then tell him his dollars per hour (${hm(before + ms)} on shift today). Also ask how many miles the Dasher app shows, and log them."
     }
