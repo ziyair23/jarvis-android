@@ -62,6 +62,7 @@ object Shift {
         }
         try { Weather.now(c)?.let { out.add("Weather: $it" + Weather.roadsNote(c)) } } catch (_: Exception) {}
         if (p.mapsKey.isNotBlank()) try { out.add(Maps.gas(c, null)) } catch (_: Exception) {}
+        Lessons.offerLine(c)?.let { out.add(it) }
         Timeline.add(c, "shift", "Shift started")
         LogBus.changed()
         return out.joinToString(" ")
@@ -84,7 +85,7 @@ object Shift {
         val made = Earnings.today(c)
         val rate = perHour(made, before + ms)
         return "Shift done after ${hm(ms)}." + if (made > 0 && rate != null) " Today's logged at ${Earnings.money(made)}, about ${Earnings.money(Math.round(rate).toDouble())} an hour." else
-            " Ask him what he made, log it, then tell him his dollars per hour (${hm(before + ms)} on shift today)."
+            " Ask him what he made, log it, then tell him his dollars per hour (${hm(before + ms)} on shift today). Also ask how many miles the Dasher app shows, and log them."
     }
 
     fun status(c: Context): String {
@@ -320,5 +321,7 @@ object Routines {
         try { Stock.tick(c) } catch (_: Exception) {}
         try { Triage.maybe(c) } catch (e: Exception) { Problems.log(c, "evening rundown: ${e.message}") }
         try { Patterns.tick(c) } catch (_: Exception) {}
+        try { Radar.tick(c) } catch (_: Exception) {}
+        try { NightWatch.maybe(c) } catch (_: Exception) {}
     }
 }

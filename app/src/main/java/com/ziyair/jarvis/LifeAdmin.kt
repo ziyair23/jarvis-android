@@ -175,6 +175,7 @@ object Bills {
         val a = all(c); var hit: JSONObject? = null
         for (i in 0 until a.length()) if (same(a.getJSONObject(i).optString("name"), name)) hit = a.getJSONObject(i)
         val b = hit ?: JSONObject().put("name", name).also { a.put(it) }
+        try { BillFighter.check(c, name, if (b.has("amount")) b.optDouble("amount") else null, amount) } catch (_: Exception) {}
         if (amount != null && amount > 0) b.put("amount", amount)
         b.put("due", due).put("repeat", if (repeat == "monthly") "monthly" else "none").put("paid", false)
         schedule(c, b)

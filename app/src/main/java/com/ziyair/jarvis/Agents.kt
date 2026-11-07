@@ -28,7 +28,9 @@ object Agents {
         // quick lookups from his connections (no hop): drive times, gas, sleep, YouTube, sending to his laptop
         "drive_time", "gas_prices", "health_today", "youtube_stats",
         // his day on autopilot: shifts, supplies counting down, the evening rundown, habits he repeats
-        "start_shift", "end_shift", "shift_status", "stock_set", "stock_status", "evening_rundown", "habits_list")
+        "start_shift", "end_shift", "shift_status", "stock_set", "stock_status", "evening_rundown", "habits_list",
+        // act-first powers: the quiet council, money buckets, best days, miles and the car, lessons, practice, ideas
+        "council", "goals_status", "goal_add", "goal_spend", "best_days", "log_miles", "car_status", "miles_status", "learn", "next_lesson", "practice", "practice_stop", "idea")
 
     /** Lights an agent up in the brain for a moment when its skill was used directly. */
     fun flash(id: String, ms: Long = 1600) { val t = System.currentTimeMillis(); active[id] = t; Thread { try { Thread.sleep(ms) } catch (_: Exception) {}; active.remove(id, t) }.start() }
