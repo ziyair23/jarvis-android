@@ -48,3 +48,15 @@ class TalkModeTest {
         org.junit.Assert.assertFalse(FastChat.route("why do people get nervous before big decisions", true))   // old behaviour unchanged when off
     }
 }
+
+class CloudStreamTest {
+    @Test fun rawAudioBecomesFloats() {
+        val raw = byteArrayOf(0, 0, 0xff.toByte(), 0x7f, 0, 0x80.toByte())   // 0, max, min
+        val f = Pcm.floats(raw)
+        assertEquals(3, f.size); assertEquals(0f, f[0], 0.0001f); assertEquals(1f, f[1], 0.001f); assertEquals(-1f, f[2], 0.0001f)
+        val wav = ByteArray(44) { 0 }.also { it[0] = 'R'.code.toByte(); it[1] = 'I'.code.toByte(); it[2] = 'F'.code.toByte(); it[3] = 'F'.code.toByte() } + raw
+        assertEquals(3, Pcm.floats(wav).size)   // the WAV header is skipped
+        val svc = java.io.File("src/main/java/com/ziyair/jarvis/JarvisService.kt").readText()
+        assertTrue(svc.contains("(Piper.installed(this) || prefs.cloudVoice) && Cast.mode(prefs)") && svc.contains("cloudPcm()"))
+    }
+}

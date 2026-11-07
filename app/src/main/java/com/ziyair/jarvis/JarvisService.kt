@@ -710,6 +710,13 @@ class JarvisService : Service() {
     /** Same words, ignoring capitals, punctuation and "Jarvis". Pure. */
     private fun sameWords(a: String, b: String) = Reflex.norm(a) == Reflex.norm(b)
 
+    /** One sentence in his realistic voice: ElevenLabs first, Google's Chirp voice next, else null (the phone's voice). */
+    private fun cloudPcm(): ((String) -> Pair<FloatArray, Int>?)? {
+        if (!prefs.cloudVoice) return null
+        val cfg = brain.config()
+        return { text -> (if (ElevenVoice.usable(prefs)) ElevenVoice.pcm(this, text) else null) ?: prefs.ttsKey.takeIf { it.isNotBlank() }?.let { CloudVoice.pcm(this, it, text, cfg) } }
+    }
+
     private fun thinkAhead(text0: String) {
         if (!earListening || thinking || !brain.config().optBoolean("think_ahead", true)) return
         val text = text0.replace(Regex("^\\s*((hey|hi|ok|okay|yo)[,.!]?\\s+)?jarvis[,.!?]*\\s*", RegexOption.IGNORE_CASE), "").trim()
@@ -717,7 +724,7 @@ class JarvisService : Service() {
         // only what would go to Claude anyway (quick phone commands are already instant)
         if (t.split(" ").size < 3 || isStop(text) || goodbyeRe.containsMatchIn(t) || t.contains("timer") || Fast.direct(t) != null ||
             Fast.parse(t, prefs.babyName.lowercase()) != null || Fast.reminder(t, java.util.Calendar.getInstance()) != null || Coach.isCorrection(text)) return
-        if (Stealth.on(prefs) || !Piper.installed(this) || prefs.cloudVoice || Cast.mode(prefs) == "everything" || liveOK(false)) return
+        if (Stealth.on(prefs) || !(Piper.installed(this) || prefs.cloudVoice) || Cast.mode(prefs) == "everything" || liveOK(false)) return
         if (!earFirst && FollowUp.reject(text, System.currentTimeMillis() - lastSpokeEnd, followUpsInRow) != null) return
         ahead?.let { if (sameWords(it.text, text)) return; it.decide(false) }
         if (aheadCount >= 2) return
@@ -755,8 +762,10 @@ class JarvisService : Service() {
         chatted = true
         // with Jarvis's own voice he starts talking as soon as the first sentence is ready
         val wasQuiet = Stealth.on(prefs)
-        val live = if (!wasQuiet && Piper.installed(this) && !prefs.cloudVoice && Cast.mode(prefs) != "everything")
-            SpeechStream(this, brain.config().optDouble("piper_speed", 1.0).toFloat(), main, brain.config().optInt("sentence_gap_ms", 160)) { acking }.also { stream = it } else null
+        // speak sentence by sentence as the answer arrives, with his realistic cloud voice when he has one (it used to wait
+        // for the whole answer and then the whole recording, which is why the cloud voices felt slow)
+        val live = if (!wasQuiet && (Piper.installed(this) || prefs.cloudVoice) && Cast.mode(prefs) != "everything")
+            SpeechStream(this, brain.config().optDouble("piper_speed", 1.0).toFloat(), main, brain.config().optInt("sentence_gap_ms", 160), cloudPcm()) { acking }.also { stream = it } else null
         thread {
             // quick everyday commands are done right here on the phone: instant, and free
             val t0 = System.currentTimeMillis()
