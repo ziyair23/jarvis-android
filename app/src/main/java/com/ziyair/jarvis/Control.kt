@@ -120,6 +120,7 @@ object Apps {
 class JarvisAccess : AccessibilityService() {
     override fun onServiceConnected() { me = this }
     private var lastLook = 0L
+    private var lastDeep = 0L
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         // DoorDash offers: read pay and miles off the Dasher screen and give a verdict.
         // The Dasher map changes many times a second, so look at most about once a second, and only read the whole
@@ -135,9 +136,13 @@ class JarvisAccess : AccessibilityService() {
         if (now - lastLook < 900) return
         lastLook = now
         try {
-            val offer = offerTexts(deep = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
-            if (offer != null) { DashDays.seen(this, "offer on screen"); OfferJudge.check(this, offer) }
-            else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) dasherTexts()?.let { t -> DashPayout.seen(this, t); OfferJudge.maybeLook(this, t) }
+            // the offer slides up inside the same Dasher screen (no new window), so take the full look every 2.5 seconds too
+            val newScreen = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            val deep = newScreen || now - lastDeep > 2500
+            if (deep) lastDeep = now
+            val offer = offerTexts(deep = deep)
+            if (offer != null) { DashDays.seen(this, "offer on screen"); try { Shift.dasherOn(this) } catch (_: Exception) {}; OfferJudge.check(this, offer) }
+            else if (deep) dasherTexts()?.let { t -> DashPayout.seen(this, t); OfferJudge.maybeLook(this, t) }
         } catch (_: Exception) {}
     }
 

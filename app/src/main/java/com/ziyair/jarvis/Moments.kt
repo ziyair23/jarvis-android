@@ -146,10 +146,11 @@ object OfferJudge {
     fun maybeLook(context: Context, texts: List<String>) {
         val now = System.currentTimeMillis(); val p = Prefs(context)
         if (!on(p) || !p.running || now - lastShotTry < 20_000) return
-        if (!(try { Shift.active(context) } catch (_: Exception) { false })) return
+        if (!(try { Shift.active(context) || DashDays.dashing(context) } catch (_: Exception) { false })) return
         val all = texts.joinToString(" | ")
         if (now - lastMiss > 120_000) { lastMiss = now; Trace.log(context, "offer", "new Dasher screen: ${all.take(240)}") }
-        if (texts.size > 6 && !Regex("\\$\\s?\\d").containsMatchIn(all)) return   // a readable screen with no money on it: not an offer
+        if (!Regex("\\$\\s?\\d").containsMatchIn(all) && texts.size > 6) return   // a readable screen with no money on it: not an offer
+        if (Regex("\\$\\s?\\d").containsMatchIn(all) && read(all) == null && texts.size > 6 && !looksLikeOffer(all) && !Regex("(?i)(mi\\b|miles|min\\b)").containsMatchIn(all)) return
         val day = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val n = if (p.sp.getString("offer_shot_day", "") == day) p.sp.getInt("offer_shot_n", 0) else 0
         if (n >= Brain(context).config().optInt("offer_shots_per_day", 60)) return
