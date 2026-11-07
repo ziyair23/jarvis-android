@@ -465,6 +465,7 @@ function load() {
   $('t-feed').textContent = lastFeed ? 'Fed ' + ago(lastFeed.at) : 'No feeds logged yet';
   $('t-baby').textContent = lastFeed ? 'Next feed around ' + clock(lastFeed.at + D.feedHours * 3600000) : 'Tap Fed, or tell Jarvis "he just ate".';
   window.nextFeedAt = lastFeed ? lastFeed.at + D.feedHours * 3600000 : 0;
+  if (D.stock && /diaper/.test(D.stock)) { const m = D.stock.match(/(\d+) diapers(?: \(about (\d+) days\))?/); if (m) $('t-baby').textContent += ` · ${m[1]} diapers${m[2] ? ' (~' + m[2] + 'd)' : ''}`; }
   $('b-status').textContent = D.babyStatus;
   let html = '', cur = '';
   log.slice(0, 120).forEach(e => {
@@ -507,6 +508,8 @@ function load() {
   const target = D.target || 120, made = byDay[todayK] || 0;
   const dashDay = D.dashToday || 'NO', offDay = !made && (dashDay === 'OFF' || dashDay === 'NO');
   $('t-week').textContent = (offDay ? (dashDay === 'OFF' ? 'Day off' : 'Not a dash day') : 'of ' + money(target)) + ' · week ' + money(week);
+  // on shift: the clock runs on the Today tile; off shift, how long he worked today
+  window.shiftInfo = {on: !!D.shiftOn, at: D.shiftAt || 0, done: (D.shiftMs || 0) - (D.shiftOn ? Date.now() - (D.shiftAt || 0) : 0)};
   const pct = D.goal > 0 ? Math.min(100, total / D.goal * 100) : 0;
   $('t-goal-l').textContent = (D.goalName || 'the Macan').replace(/^the /i, '') + ' fund';
   $('t-goal').innerHTML = D.goal > 0 ? `<div class="big">${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%</div><div class="bar"><i style="width:${pct}%"></i></div><div class="faint">${money(total)} of ${money(D.goal)}</div>` : '<div class="faint" style="margin-top:4px">Tell Jarvis the price to track it.</div>';

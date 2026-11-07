@@ -50,6 +50,13 @@ setInterval(() => { if (document.hidden || sheetOpen() || OS || window.houseOpen
 setInterval(() => { const at = window.nextFeedAt || 0, el = $('t-baby'); if (!el || !at) return; const s = Math.round((at - Date.now()) / 1000); if (s <= 0) return;
   let sp = $('t-feedin'); if (!sp) { el.insertAdjacentHTML('beforeend', ' · <span id="t-feedin"></span>'); sp = $('t-feedin'); }
   sp.textContent = `in ${Math.floor(s / 3600)}h ${String(Math.floor(s / 60) % 60).padStart(2, '0')}m ${String(s % 60).padStart(2, '0')}s`; }, 1000);
+// a shift running: the Today tile shows the clock, to the second
+setInterval(() => { const si = window.shiftInfo, el = $('t-week'); if (!si || !el) return;
+  const ms = si.on ? si.done + (Date.now() - si.at) : si.done; if (ms < 60000) { const old = $('t-shift'); if (old) old.remove(); return; }
+  const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60;
+  let sp = $('t-shift'); if (!sp) { el.insertAdjacentHTML('afterend', '<div class="sub" id="t-shift"></div>'); sp = $('t-shift'); }
+  sp.textContent = (si.on ? 'On shift ' : 'Worked ') + h + 'h ' + String(m).padStart(2, '0') + 'm' + (si.on ? ' ' + String(sec).padStart(2, '0') + 's' : '') + ' today';
+  sp.style.color = si.on ? 'var(--accent-soft)' : ''; }, 1000);
 // ticking something off the list: the box fills, the line strikes through, then it moves
 window.tickItem = (li, at) => { if (li.classList.contains('ticking')) return; li.classList.add('ticking'); setTimeout(() => J.listToggle('list', at), reduce ? 0 : 520); };
 

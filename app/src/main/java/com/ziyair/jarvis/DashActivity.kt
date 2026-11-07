@@ -80,6 +80,8 @@ class DashActivity : Activity() {
                 .put("scan", org.json.JSONObject().put("running", Scan.running).put("step", Scan.step).put("report", Scan.report(ctx)))
                 .put("babyPatterns", try { BabyInsights.json(ctx) } catch (_: Exception) { org.json.JSONObject() })
                 .put("dashToday", try { DashDays.on(ctx).name } catch (_: Exception) { "NO" })
+                .put("shiftOn", Shift.active(ctx)).put("shiftAt", Shift.startedAt(ctx)).put("shiftMs", try { Shift.todayMs(ctx) } catch (_: Exception) { 0L })
+                .put("stock", try { Stock.status(ctx) } catch (_: Exception) { "" })
                 .put("dayPlan", try { DayPlan.card(ctx).takeIf { System.currentTimeMillis() - it.optLong("at") < 60_000L } ?: DayPlan.save(ctx) } catch (_: Exception) { org.json.JSONObject() })
                 .put("mind", try { Mind.json(ctx) } catch (e: Exception) { Trace.log(ctx, "dash", "mind failed: ${e.message}"); org.json.JSONObject() })
                 .put("spendTx", Spending.all(ctx).let { a -> org.json.JSONArray().apply { for (i in maxOf(0, a.length() - 300) until a.length()) put(a.get(i)) } })
