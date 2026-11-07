@@ -20,6 +20,8 @@ class SpeechStream(
     private val speed: Float,
     private val main: Handler,
     private val gapMs: Int = 160,
+    /** His realistic cloud voice, one stretch of speech at a time; null means the voice on the phone. */
+    private val cloud: ((String) -> Pair<FloatArray, Int>?)? = null,
     private val waitWhile: () -> Boolean,
 ) {
     private class Chunk(val pcm: FloatArray, val rate: Int, val newPiece: Boolean)
@@ -75,7 +77,10 @@ class SpeechStream(
                     piece = sb.toString()
                 }
                 var newPiece = true
-                val ok = Piper.synthFlow(context, piece, speed, { !cancelled }) { s, r -> audio.put(Chunk(s, r, newPiece)); newPiece = false }
+                val viaCloud = cloud?.let { f -> try { f(piece) } catch (_: Exception) { null } }
+                val ok = if (viaCloud != null) { audio.put(Chunk(viaCloud.first, viaCloud.second, true)); true }
+                    else if (Piper.installed(context)) Piper.synthFlow(context, piece, speed, { !cancelled }) { s, r -> audio.put(Chunk(s, r, newPiece)); newPiece = false }
+                    else false
                 if (!ok) break
                 first = false
             }
