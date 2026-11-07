@@ -78,6 +78,13 @@
             android:foregroundServiceType="microphone" />
 
         <activity
+            android:name=".Revive"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
             android:name=".LockView"
             android:exported="false"
             android:excludeFromRecents="true"

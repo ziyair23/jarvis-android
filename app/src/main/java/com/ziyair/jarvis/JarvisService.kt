@@ -49,6 +49,7 @@ class JarvisService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
+        alive = true; Heartbeat.arm(this)
         super.onCreate()
         prefs = Prefs(this)
         brain = Brain(this)
@@ -198,7 +199,7 @@ class JarvisService : Service() {
             if (prefs.running && android.provider.Settings.canDrawOverlays(this) && now - last > 60_000L) {
                 prefs.sp.edit().putLong("revive_at", now).apply()
                 Trace.log(this, "revive", "Android stopped him in the background; bringing him back")
-                try { startActivity(Intent(this, MainActivity::class.java).putExtra("autostart", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)); stopSelf(); return START_NOT_STICKY } catch (_: Exception) {}
+                try { startActivity(Intent(this, Revive::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)); stopSelf(); return START_NOT_STICKY } catch (_: Exception) {}
             }
             Scheduler.notify(this, "Jarvis stopped", "Android paused him in the background. Tap to open Jarvis and start him again.", false)
             prefs.running = false
@@ -1211,6 +1212,7 @@ class JarvisService : Service() {
     }
 
     override fun onDestroy() {
+        alive = false
         destroyed = true
         Telegram.stop()
         main.removeCallbacksAndMessages(null)
@@ -1235,6 +1237,8 @@ class JarvisService : Service() {
     companion object {
         const val CHANNEL = "jarvis"
         const val NOTIF_ID = 7
+        /** True while the service is running in this process (a killed process starts false). */
+        @Volatile var alive = false
         const val ACTION_STOP = "com.ziyair.jarvis.STOP"
         const val ACTION_LISTEN = "com.ziyair.jarvis.LISTEN"
         const val ACTION_SAY = "com.ziyair.jarvis.SAY"
