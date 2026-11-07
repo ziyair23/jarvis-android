@@ -135,9 +135,9 @@ class JarvisAccess : AccessibilityService() {
         if (now - lastLook < 900) return
         lastLook = now
         try {
-            val offer = offerTexts()
+            val offer = offerTexts(deep = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
             if (offer != null) { DashDays.seen(this, "offer on screen"); OfferJudge.check(this, offer) }
-            else dasherTexts()?.let { t -> DashPayout.seen(this, t); if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) OfferJudge.maybeLook(this, t) }
+            else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) dasherTexts()?.let { t -> DashPayout.seen(this, t); OfferJudge.maybeLook(this, t) }
         } catch (_: Exception) {}
     }
 
@@ -151,10 +151,13 @@ class JarvisAccess : AccessibilityService() {
     }
 
     /** All the text of a Dasher offer on screen (even when it pops up over the map), or null if no offer is showing. */
-    fun offerTexts(): List<String>? {
+    fun offerTexts(deep: Boolean = true): List<String>? {
         val roots = (try { windows.mapNotNull { it.root } } catch (_: Exception) { emptyList() }) + listOfNotNull(rootInActiveWindow)
         for (r in roots) {
             if (r.packageName?.toString() != OfferJudge.DASHER) continue
+            // cheap check first (only reads everything when an offer is showing); a new screen gets the full look
+            val buttons = !r.findAccessibilityNodeInfosByText("Accept").isNullOrEmpty() || !r.findAccessibilityNodeInfosByText("Decline").isNullOrEmpty()
+            if (!buttons && !deep) continue
             // read every label (newer Dasher screens don't always expose an "Accept" button by text), then decide
             val texts = ArrayList<String>()
             walk(r) { n -> (n.text ?: n.contentDescription)?.toString()?.let { if (it.isNotBlank() && it.length < 120) texts.add(it) } }
