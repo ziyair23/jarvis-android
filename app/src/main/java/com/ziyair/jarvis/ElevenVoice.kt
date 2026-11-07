@@ -89,3 +89,12 @@ object Pcm {
         return FloatArray(n) { i -> ((b[start + 2 * i].toInt() and 0xff) or (b[start + 2 * i + 1].toInt() shl 8)).toShort() / 32768f }
     }
 }
+
+/** Opens the connection to his cloud voice ahead of time (TLS takes a few hundred ms), so the first sentence comes back faster. */
+object Voices {
+    fun warm(context: Context) {
+        val p = Prefs(context)
+        val url = if (ElevenVoice.usable(p)) "https://api.elevenlabs.io/v1/models" else if (p.ttsKey.isNotBlank()) "https://texttospeech.googleapis.com/" else return
+        try { (URL(url).openConnection() as HttpURLConnection).apply { connectTimeout = 3000; readTimeout = 3000; if (url.contains("elevenlabs")) setRequestProperty("xi-api-key", p.elevenKey) }.let { it.responseCode; it.inputStream.use { s -> s.readBytes() } } } catch (_: Exception) {}
+    }
+}

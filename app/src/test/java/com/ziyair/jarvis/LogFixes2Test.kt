@@ -72,3 +72,16 @@ class HeartbeatTest {
         assertTrue(m.contains("android:name=\".Revive\""))
     }
 }
+
+class NextLevelTest {
+    @Test fun longFirstSentenceSpeaksItsOpeningFirst() {
+        val s = "Sir, the Cash App repayment is due Friday, and you've got about two hundred forty dollars to go on the week."
+        val c = SpeechStream.firstClause(s)!!
+        assertEquals("Sir, the Cash App repayment is due Friday,", c.first)
+        assertTrue(c.second.startsWith("and you've got"))
+        org.junit.Assert.assertNull(SpeechStream.firstClause("Doing well, sir. Ready when you are."))   // short: say it whole
+        val motion = java.io.File("src/main/assets/motion.js").readText()
+        assertTrue(motion.contains("dayring") && motion.contains("DD.dayPlan.items"))
+        assertTrue(java.io.File("src/main/java/com/ziyair/jarvis/Brain.kt").readText().contains("todayBlock()"))
+    }
+}

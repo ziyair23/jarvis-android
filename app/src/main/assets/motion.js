@@ -157,3 +157,62 @@ function onJobs(A) {
 }
 window.onAgents = A => { try { onJobs(A); } catch (e) { try { J.jsError('jobs: ' + e.message); } catch (_) {} } try { window.houseAgents && window.houseAgents(A); } catch (e) { try { J.jsError('house: ' + e.message); } catch (_) {} } };
 })();
+
+// ================= the day ring: his whole day as a quiet 24-hour dial around the brain =================
+// Midnight at the top, like a clock face for the full day. Dash shifts are oxblood arcs, feeds are milk-coloured
+// beads, appointments and reminders are ticks, bills are small diamonds, and a bright marker sweeps with the time.
+(function(){
+  const hero = document.getElementById('hero'); if (!hero) return;
+  const cv = document.createElement('canvas'); cv.id = 'dayring'; cv.setAttribute('aria-hidden', 'true');
+  cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none';
+  hero.insertBefore(cv, hero.querySelector('#status'));
+  const cap = document.createElement('div'); cap.id = 'dayring-next';
+  cap.style.cssText = 'position:absolute;left:18px;top:6px;font:500 10.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);pointer-events:none;max-width:60%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .4s';
+  hero.appendChild(cap);
+  const g = cv.getContext('2d'); let W = 0, H = 0, dpr = 1, born = performance.now();
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function size() { const r = cv.getBoundingClientRect(); dpr = Math.min(2, devicePixelRatio || 1); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; }
+  new ResizeObserver(size).observe(cv); size();
+  const midnight = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const ang = ms => -Math.PI / 2 + ((ms - midnight()) / 86400000) * Math.PI * 2;
+  const kind = x => /^dash/i.test(x) ? 'dash' : /^feed/i.test(x) ? 'feed' : /bill|due|payment/i.test(x) ? 'bill' : 'event';
+  function items() { try { const DD = typeof D !== "undefined" ? D : null; const a = (DD && DD.dayPlan && DD.dayPlan.items) || []; const out = []; for (let i = 0; i < a.length; i++) if (a[i].ms) out.push({ms: a[i].ms, x: a[i].x, t: a[i].t, k: kind(a[i].x)}); return out; } catch (_) { return []; } }
+  function frame(ts) {
+    requestAnimationFrame(frame);
+    if (document.hidden || window.houseOpen || (typeof openId !== 'undefined' && openId)) return;
+    const t = ts / 1000, grow = reduce ? 1 : Math.min(1, (ts - born) / 1600), e = 1 - Math.pow(1 - grow, 3);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.465;
+    const now = Date.now(), na = ang(now), list = items();
+    // the dial: faint full circle, the part of the day already gone a touch brighter, hour ticks
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(239,235,228,.07)'; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2 * e); g.stroke();
+    g.strokeStyle = 'rgba(201,102,92,.22)'; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + (na + Math.PI / 2) * e); g.stroke();
+    for (let h = 0; h < 24; h++) { const a = -Math.PI / 2 + h / 24 * Math.PI * 2, big = h % 6 === 0, r1 = R - (big ? 7 : 3.5);
+      g.strokeStyle = `rgba(239,235,228,${(big ? .28 : .1) * e})`; g.lineWidth = 1; g.beginPath(); g.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); g.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); g.stroke(); }
+    g.font = '500 9px Inter, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = `rgba(162,157,149,${.5 * e})`;
+    [['12A', 0], ['6A', 6], ['12P', 12], ['6P', 18]].forEach(([l, h]) => { const a = -Math.PI / 2 + h / 24 * Math.PI * 2; g.fillText(l, cx + Math.cos(a) * (R - 17), cy + Math.sin(a) * (R - 17)); });
+    // what's in his day
+    for (const it of list) {
+      const a = ang(it.ms), past = it.ms < now, alpha = (past ? .4 : 1) * e;
+      if (it.k === 'dash') { const a2 = ang(it.ms + 4 * 3600000);
+        g.strokeStyle = `rgba(201,102,92,${.85 * alpha})`; g.lineWidth = 4; g.beginPath(); g.arc(cx, cy, R, a, a2); g.stroke();
+        g.strokeStyle = `rgba(201,102,92,${.18 * alpha})`; g.lineWidth = 10; g.beginPath(); g.arc(cx, cy, R, a, a2); g.stroke(); }
+      else if (it.k === 'feed') { const x = cx + Math.cos(a) * (R + 9), y = cy + Math.sin(a) * (R + 9);
+        g.fillStyle = `rgba(216,196,163,${alpha})`; g.beginPath(); g.arc(x, y, 3.2, 0, 7); g.fill(); }
+      else if (it.k === 'bill') { const x = cx + Math.cos(a) * (R + 9), y = cy + Math.sin(a) * (R + 9);
+        g.save(); g.translate(x, y); g.rotate(Math.PI / 4); g.fillStyle = `rgba(201,164,106,${alpha})`; g.fillRect(-3, -3, 6, 6); g.restore(); }
+      else { g.strokeStyle = `rgba(239,235,228,${.75 * alpha})`; g.lineWidth = 2; g.beginPath(); g.moveTo(cx + Math.cos(a) * (R - 6), cy + Math.sin(a) * (R - 6)); g.lineTo(cx + Math.cos(a) * (R + 6), cy + Math.sin(a) * (R + 6)); g.stroke(); }
+    }
+    // now: a bright bead that breathes, with a soft glow
+    const nx = cx + Math.cos(na) * R, ny = cy + Math.sin(na) * R, pulse = .75 + .25 * Math.sin(t * 2.2);
+    const gr = g.createRadialGradient(nx, ny, 0, nx, ny, 16); gr.addColorStop(0, `rgba(255,214,200,${.55 * pulse * e})`); gr.addColorStop(1, 'rgba(255,214,200,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(nx, ny, 16, 0, 7); g.fill();
+    g.fillStyle = `rgba(255,236,228,${e})`; g.beginPath(); g.arc(nx, ny, 3.6, 0, 7); g.fill();
+    // what's next, in words
+    const next = list.filter(i => i.ms > now).sort((a, b) => a.ms - b.ms)[0];
+    const txt = next ? `Next · ${next.t} · ${next.x}` : '';
+    if (cap.textContent !== txt) cap.textContent = txt;
+  }
+  requestAnimationFrame(frame);
+})();
