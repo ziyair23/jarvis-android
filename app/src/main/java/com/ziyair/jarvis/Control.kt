@@ -134,7 +134,11 @@ class JarvisAccess : AccessibilityService() {
         val now = android.os.SystemClock.uptimeMillis()
         if (now - lastLook < 900) return
         lastLook = now
-        try { offerTexts()?.let { DashDays.seen(this, "offer on screen"); OfferJudge.check(this, it) } ?: dasherTexts()?.let { DashPayout.seen(this, it) } } catch (_: Exception) {}
+        try {
+            val offer = offerTexts()
+            if (offer != null) { DashDays.seen(this, "offer on screen"); OfferJudge.check(this, offer) }
+            else dasherTexts()?.let { t -> DashPayout.seen(this, t); if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) OfferJudge.maybeLook(this, t) }
+        } catch (_: Exception) {}
     }
 
     /** All the text on the Dasher screen (for the end-of-dash summary), or null if the Dasher app isn't showing. */
@@ -151,11 +155,10 @@ class JarvisAccess : AccessibilityService() {
         val roots = (try { windows.mapNotNull { it.root } } catch (_: Exception) { emptyList() }) + listOfNotNull(rootInActiveWindow)
         for (r in roots) {
             if (r.packageName?.toString() != OfferJudge.DASHER) continue
-            val hasOffer = !r.findAccessibilityNodeInfosByText("Accept").isNullOrEmpty() || !r.findAccessibilityNodeInfosByText("Decline").isNullOrEmpty()
-            if (!hasOffer) continue
+            // read every label (newer Dasher screens don't always expose an "Accept" button by text), then decide
             val texts = ArrayList<String>()
-            walk(r) { n -> (n.text ?: n.contentDescription)?.toString()?.let { if (it.isNotBlank() && it.length < 80) texts.add(it) } }
-            return texts
+            walk(r) { n -> (n.text ?: n.contentDescription)?.toString()?.let { if (it.isNotBlank() && it.length < 120) texts.add(it) } }
+            if (OfferJudge.looksLikeOffer(texts.joinToString(" | "))) return texts
         }
         return null
     }

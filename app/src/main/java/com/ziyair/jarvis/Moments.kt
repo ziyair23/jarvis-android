@@ -113,6 +113,59 @@ object OfferJudge {
         return "$payWords for $milesWords. $verdict"
     }
 
+    /** Is this Dasher screen an order offer? Buttons when they're readable, otherwise pay plus miles plus an offer word. Pure. */
+    fun looksLikeOffer(all: String): Boolean {
+        if (Regex("(?i)\\b(accept|decline|reject)\\b").containsMatchIn(all) && Regex("\\$\\s?\\d").containsMatchIn(all)) return true
+        return read(all) != null && Regex("(?i)(guaranteed|incl\\.? tips|deliver by|pickup|pick up|new order|order from|est\\.?|total)").containsMatchIn(all)
+    }
+
+    /** No text to read (or it couldn't be read): look at the screen itself and read the offer off the picture. Blocking. */
+    fun fromScreenshot(context: Context): Triple<Double, Double, Double?>? {
+        val shot = Hands.screenshot() ?: return null
+        val cfg = Brain(context).config(); val model = cfg.optString("agent_model", "claude-haiku-5-5")
+        val img = JSONObject().put("type", "image").put("source", JSONObject().put("type", "base64").put("media_type", "image/jpeg")
+            .put("data", android.util.Base64.encodeToString(shot.jpeg, android.util.Base64.NO_WRAP)))
+        val ask = JSONObject().put("type", "text").put("text", "Is there a DoorDash Dasher order offer on this phone screen? Reply with JSON only: " +
+            "{\"offer\": true or false, \"pay\": dollars, \"miles\": miles, \"minutes\": minutes to finish or null}. Pay is the big dollar amount of the offer; miles is the total distance.")
+        val body = JSONObject().put("model", model).put("max_tokens", 120)
+            .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", JSONArray().put(img).put(ask))))
+        val resp = Claude.send(context, body) ?: return null
+        try { Spend.record(context, cfg, model, resp.optJSONObject("usage")) } catch (_: Exception) {}
+        val text = resp.optJSONArray("content")?.let { a -> (0 until a.length()).joinToString(" ") { a.getJSONObject(it).optString("text") } }.orEmpty()
+        val j = try { JSONObject(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1)) } catch (_: Exception) { return null }
+        if (!j.optBoolean("offer")) return null
+        val pay = j.optDouble("pay", Double.NaN); val miles = j.optDouble("miles", Double.NaN)
+        if (pay.isNaN() || miles.isNaN() || pay <= 0 || miles <= 0) return null
+        Trace.log(context, "offer", "read off the screenshot: ${Earnings.money(pay)}, $miles mi")
+        return Triple(pay, miles, j.optDouble("minutes", Double.NaN).takeIf { !it.isNaN() && it > 0 })
+    }
+
+    @Volatile private var lastShotTry = 0L
+
+    /** A new Dasher screen popped up while he's dashing and its text didn't read as an offer: look at the picture (capped). */
+    fun maybeLook(context: Context, texts: List<String>) {
+        val now = System.currentTimeMillis(); val p = Prefs(context)
+        if (!on(p) || !p.running || now - lastShotTry < 20_000) return
+        if (!(try { Shift.active(context) } catch (_: Exception) { false })) return
+        val all = texts.joinToString(" | ")
+        if (now - lastMiss > 120_000) { lastMiss = now; Trace.log(context, "offer", "new Dasher screen: ${all.take(240)}") }
+        if (texts.size > 6 && !Regex("\\$\\s?\\d").containsMatchIn(all)) return   // a readable screen with no money on it: not an offer
+        val day = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val n = if (p.sp.getString("offer_shot_day", "") == day) p.sp.getInt("offer_shot_n", 0) else 0
+        if (n >= Brain(context).config().optInt("offer_shots_per_day", 60)) return
+        lastShotTry = now; p.sp.edit().putString("offer_shot_day", day).putInt("offer_shot_n", n + 1).apply()
+        kotlin.concurrent.thread {
+            val (pay, miles, mins) = fromScreenshot(context) ?: return@thread
+            val sig = "$pay|$miles"; if (sig == lastSig && System.currentTimeMillis() - lastAt < 120_000) return@thread
+            lastSig = sig; lastAt = System.currentTimeMillis()
+            val cfg = Brain(context).config()
+            val line = verdict2(pay, miles, minPerMile(p), mins, cfg.optDouble("offer_hourly", 25.0), cfg.optDouble("offer_min_pay", 4.0))
+            pending = JSONObject().put("pay", pay).put("miles", miles).put("mins", mins ?: 0.0).put("at", System.currentTimeMillis())
+            Trace.log(context, "offer", line)
+            try { context.startService(Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", line)) } catch (_: Exception) {}
+        }
+    }
+
     /** Minutes the offer will take, from "18 min" or "Deliver by 6:45 PM", or null. Pure. */
     fun minutes(all: String, now: java.util.Calendar): Double? {
         Regex("(\\d{1,3})\\s?min", RegexOption.IGNORE_CASE).find(all)?.groupValues?.get(1)?.toDoubleOrNull()?.takeIf { it in 3.0..180.0 }?.let { return it }
@@ -169,8 +222,17 @@ object OfferJudge {
         if (!on(p) || !p.running || Stealth.on(p)) return
         val all = texts.joinToString(" | ")
         val (pay, miles) = read(all) ?: run {
-            // an offer is up but the pay or miles couldn't be read: log what was on screen (once a minute) so it can be fixed
+            // an offer is up but the pay or miles couldn't be read: log what was on screen (once a minute) so it can be fixed,
+            // and read it off a screenshot instead (at most every 20 seconds)
             if (now - lastMiss > 60_000) { lastMiss = now; Trace.log(context, "offer", "couldn't read pay or miles from: ${all.take(300)}") }
+            if (now - lastShotTry > 20_000) { lastShotTry = now
+                kotlin.concurrent.thread { fromScreenshot(context)?.let { (pay, miles, mins) ->
+                    val cfg = Brain(context).config()
+                    val line = verdict2(pay, miles, minPerMile(p), mins, cfg.optDouble("offer_hourly", 25.0), cfg.optDouble("offer_min_pay", 4.0))
+                    pending = JSONObject().put("pay", pay).put("miles", miles).put("mins", mins ?: 0.0).put("at", System.currentTimeMillis())
+                    Trace.log(context, "offer", line)
+                    try { context.startService(Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", line)) } catch (_: Exception) {}
+                } } }
             return
         }
         val sig = "$pay|$miles"
@@ -187,9 +249,14 @@ object OfferJudge {
     /** "Is this a good order?": judges whatever offer is on screen right now. */
     fun now(context: Context): String {
         val a = JarvisAccess.me ?: return JarvisAccess.NEED
-        val texts = a.offerTexts() ?: return "I don't see a DoorDash offer on screen right now."
-        val (pay, miles) = read(texts.joinToString(" | ")) ?: return "There's an offer up, but I can't read the pay and miles off it."
-        return verdict(pay, miles, minPerMile(Prefs(context)))
+        val cfg = Brain(context).config(); val p = Prefs(context)
+        val texts = a.offerTexts()
+        val parsed = texts?.let { read(it.joinToString(" | ")) }
+        if (parsed != null) return verdict2(parsed.first, parsed.second, minPerMile(p), minutes(texts.joinToString(" | "), java.util.Calendar.getInstance()), cfg.optDouble("offer_hourly", 25.0), cfg.optDouble("offer_min_pay", 4.0))
+        // couldn't read it as text: look at the screen itself
+        a.dasherTexts()?.let { Trace.log(context, "offer", "asked to judge; Dasher screen said: ${it.joinToString(" | ").take(300)}") }
+        val shot = fromScreenshot(context) ?: return "I don't see a DoorDash offer on screen right now."
+        return verdict2(shot.first, shot.second, minPerMile(p), shot.third, cfg.optDouble("offer_hourly", 25.0), cfg.optDouble("offer_min_pay", 4.0))
     }
 }
 
