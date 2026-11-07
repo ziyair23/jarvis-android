@@ -54,3 +54,20 @@ class OfferTest {
         assertTrue(File("src/main/java/com/ziyair/jarvis/JarvisApp.kt").readText().contains("getHistoricalProcessExitReasons"))
     }
 }
+
+class DashPayoutTest {
+    @Test fun readsTheEndOfDash() {
+        assertEquals(112.4 to 38.5, DashPayout.read("Dash summary | Total earnings | \$112.40 | 4h 02m active | 38.5 mi | Done"))
+        assertEquals(86.0, DashPayout.read("You earned \$86.00 on this dash")!!.first, 0.001)
+        assertNull(DashPayout.read("\$45.50 this dash | Dash ends at 9:00 PM"))            // running total during the dash
+        assertNull(DashPayout.read("Dash summary | \$9.50 | 3.2 mi | Accept | Decline"))  // that's an offer
+    }
+
+    @Test fun logsEachDashOnce() {
+        val now = 10_000_000_000L
+        assertEquals(112.4, DashPayout.newPart(112.4, now, emptyList()), 0.001)
+        assertEquals(0.0, DashPayout.newPart(112.4, now, listOf(112.4 to now - 60_000L)), 0.001)         // same screen again
+        assertEquals(4.0, DashPayout.newPart(116.4, now, listOf(112.4 to now - 600_000L)), 0.001)        // a late tip
+        assertEquals(95.0, DashPayout.newPart(95.0, now, listOf(112.4 to now - 7 * 3600_000L)), 0.001)   // tonight's dash after this morning's
+    }
+}

@@ -192,3 +192,55 @@ object OfferJudge {
         return verdict(pay, miles, minPerMile(Prefs(context)))
     }
 }
+
+/**
+ * Payouts on autopilot: when the Dasher app shows the end-of-dash summary (or sends an "you earned" notification),
+ * Jarvis reads the total and the miles off it and logs them himself, once per dash. He only reads; he never taps.
+ */
+object DashPayout {
+    private val KEY = Regex("(?i)\\b(dash summary|dash complete|dash ended|dash is over|end of dash|you earned|great dash)\\b")   // only the end of a dash, never the running total
+    private val NEAR = Regex("(?i)(earned|earnings|total|you made)[^$]{0,40}\\$\\s?(\\d{1,4}(?:,\\d{3})*(?:\\.\\d{2})?)")
+    private val MONEY = Regex("\\$\\s?(\\d{1,4}(?:\\.\\d{2})?)")
+    private val MILES = Regex("(?i)(\\d{1,3}(?:\\.\\d{1,2})?)\\s?(mi|miles)\\b")
+
+    /** (total, miles) from an end-of-dash screen or notification, or null if it isn't one. Pure. */
+    fun read(all: String): Pair<Double, Double?>? {
+        if (!KEY.containsMatchIn(all)) return null
+        if (Regex("(?i)\\b(accept|decline)\\b").containsMatchIn(all)) return null   // an offer, not a summary
+        val total = NEAR.find(all)?.groupValues?.get(2)?.replace(",", "")?.toDoubleOrNull()
+            ?: MONEY.findAll(all).mapNotNull { it.groupValues[1].toDoubleOrNull() }.filter { it in 5.0..800.0 }.maxOrNull() ?: return null
+        if (total < 2.0 || total > 1500.0) return null
+        val miles = MILES.findAll(all).mapNotNull { it.groupValues[1].toDoubleOrNull() }.filter { it in 1.0..400.0 }.maxOrNull()
+        return total to miles
+    }
+
+    /** How much of this total is new: the same dash showing again (or its notification) adds nothing, and a summary
+     *  that grew within a few hours (a late tip) adds only the difference. Pure. */
+    fun newPart(total: Double, now: Long, logged: List<Pair<Double, Long>>): Double {
+        val recent = logged.filter { now - it.second < 3 * 3600_000L }.maxByOrNull { it.second } ?: return total
+        return if (total > recent.first + 0.01) Math.round((total - recent.first) * 100) / 100.0 else 0.0
+    }
+
+    @Volatile private var lastLook = 0L
+    fun seen(context: Context, texts: List<String>) {
+        val now = System.currentTimeMillis()
+        if (now - lastLook < 2000) return
+        lastLook = now
+        if (!Brain(context).config().optBoolean("auto_payouts", true)) return
+        val (total, miles) = read(texts.joinToString(" | ")) ?: return
+        val p = Prefs(context)
+        val logged = try { JSONArray(p.sp.getString("payouts_seen", "[]")) } catch (_: Exception) { JSONArray() }
+        val list = (0 until logged.length()).map { logged.getJSONObject(it).let { o -> o.optDouble("a") to o.optLong("at") } }
+        val add = newPart(total, now, list)
+        if (add <= 0.0) return
+        logged.put(JSONObject().put("a", total).put("at", now))
+        val keep = JSONArray(); for (i in maxOf(0, logged.length() - 40) until logged.length()) keep.put(logged.get(i))
+        p.sp.edit().putString("payouts_seen", keep.toString()).apply()
+        val out = StringBuilder(if (add < total) "Your dash total went up by ${Earnings.money(add)}, logged." else "Logged ${Earnings.money(total)} from the Dasher app.")
+        Earnings.log(context, add, "today", false)
+        try { Goals.allocate(context, add).takeIf { it.isNotBlank() }?.let { out.append(' ').append(it) } } catch (_: Exception) {}
+        if (miles != null && add >= total) try { Miles.log(context, miles); out.append(" Plus ${miles.toInt()} miles.") } catch (_: Exception) {}
+        Trace.log(context, "payout", out.toString())
+        Shift.say(context, "Sir, " + out.toString().replaceFirstChar { it.lowercase() }, false)
+    }
+}

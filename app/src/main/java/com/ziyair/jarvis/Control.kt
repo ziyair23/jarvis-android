@@ -134,7 +134,16 @@ class JarvisAccess : AccessibilityService() {
         val now = android.os.SystemClock.uptimeMillis()
         if (now - lastLook < 900) return
         lastLook = now
-        try { offerTexts()?.let { DashDays.seen(this, "offer on screen"); OfferJudge.check(this, it) } } catch (_: Exception) {}
+        try { offerTexts()?.let { DashDays.seen(this, "offer on screen"); OfferJudge.check(this, it) } ?: dasherTexts()?.let { DashPayout.seen(this, it) } } catch (_: Exception) {}
+    }
+
+    /** All the text on the Dasher screen (for the end-of-dash summary), or null if the Dasher app isn't showing. */
+    fun dasherTexts(): List<String>? {
+        val r = rootInActiveWindow ?: return null
+        if (r.packageName?.toString() != OfferJudge.DASHER) return null
+        val texts = ArrayList<String>()
+        walk(r) { n -> (n.text ?: n.contentDescription)?.toString()?.let { if (it.isNotBlank() && it.length < 120) texts.add(it) } }
+        return texts
     }
 
     /** All the text of a Dasher offer on screen (even when it pops up over the map), or null if no offer is showing. */
