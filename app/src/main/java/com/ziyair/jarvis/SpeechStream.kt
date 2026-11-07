@@ -26,8 +26,6 @@ class SpeechStream(
 ) {
     private class Chunk(val pcm: FloatArray, val rate: Int, val newPiece: Boolean)
 
-    }
-
     private val texts = LinkedBlockingQueue<String>()
     private val audio = LinkedBlockingQueue<Chunk>()
     @Volatile var started = false; private set
@@ -160,7 +158,8 @@ class SpeechStream(
             val m = Regex("[,;\u2014]\\s").find(s, 18) ?: return null
             if (m.range.first > 90 || s.length - m.range.last < 20) return null
             return s.substring(0, m.range.first + 1).trim() to s.substring(m.range.last + 1).trim()
-            /** Cut the dead air after the last sound (keeping a natural tail), with a soft fade-out so nothing clicks. Pure. */
+        }
+        /** Cut the dead air after the last sound (keeping a natural tail), with a soft fade-out so nothing clicks. Pure. */
         fun trimTail(s: FloatArray, rate: Int): FloatArray {
             var b = s.size - 1; while (b > 0 && kotlin.math.abs(s[b]) < 0.012f) b--
             b = minOf(s.size - 1, b + rate * 6 / 100)       // keep 60 ms after the last sound (word endings fade, not cut)
