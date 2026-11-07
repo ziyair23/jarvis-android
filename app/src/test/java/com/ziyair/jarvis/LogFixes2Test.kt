@@ -60,3 +60,15 @@ class CloudStreamTest {
         assertTrue(svc.contains("(Piper.installed(this) || prefs.cloudVoice) && Cast.mode(prefs)") && svc.contains("cloudPcm()"))
     }
 }
+
+class HeartbeatTest {
+    @Test fun bringsHimBackOnlyWhenItShould() {
+        assertTrue(Heartbeat.shouldRevive(wantOn = true, alive = false, screenOn = true, overlay = true, msSinceLast = 120_000L))
+        org.junit.Assert.assertFalse(Heartbeat.shouldRevive(false, false, true, true, 120_000L))   // he switched Jarvis off
+        org.junit.Assert.assertFalse(Heartbeat.shouldRevive(true, true, true, true, 120_000L))     // already running
+        org.junit.Assert.assertFalse(Heartbeat.shouldRevive(true, false, false, true, 120_000L))   // screen off: wait for the next beat
+        org.junit.Assert.assertFalse(Heartbeat.shouldRevive(true, false, true, true, 10_000L))     // tried a moment ago
+        val m = java.io.File("src/main/AndroidManifest.xml").readText()
+        assertTrue(m.contains("android:name=\".Revive\""))
+    }
+}

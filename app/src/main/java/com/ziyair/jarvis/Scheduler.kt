@@ -75,6 +75,7 @@ object Scheduler {
 
     /** Re-arm everything (after a reboot, or when settings change). */
     fun rearm(context: Context) {
+        Heartbeat.arm(context)
         val list = Prefs(context).reminders()
         val keep = JSONArray()
         for (i in 0 until list.length()) {
@@ -169,6 +170,7 @@ object Scheduler {
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Heartbeat.ACTION) { Heartbeat.beat(context); return }
         val prefs = Prefs(context)
         val moment = intent.getStringExtra("moment")
         if (moment != null) {
