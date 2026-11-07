@@ -71,3 +71,12 @@ class DashPayoutTest {
         assertEquals(95.0, DashPayout.newPart(95.0, now, listOf(112.4 to now - 7 * 3600_000L)), 0.001)   // tonight's dash after this morning's
     }
 }
+
+class OfferSpotTest {
+    @Test fun spotsOffersWithoutButtons() {
+        assertTrue(OfferJudge.looksLikeOffer("\$9.50 | Guaranteed (incl. tips) | 3.2 mi | Deliver by 6:45 PM"))   // no Accept text exposed
+        assertTrue(OfferJudge.looksLikeOffer("Chipotle | \$12.00 | 7.4 miles | Accept"))
+        org.junit.Assert.assertFalse(OfferJudge.looksLikeOffer("Dash along the way | Spokane | Busy"))
+        org.junit.Assert.assertFalse(OfferJudge.looksLikeOffer("Ratings | Acceptance rate 72% | Completion rate 98%"))
+    }
+}
