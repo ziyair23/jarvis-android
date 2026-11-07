@@ -20,11 +20,13 @@ object FastChat {
         "quiet|silent|volume|screen|photo|picture|camera|email|follow up|scan|update|build|fix|agent)\\b")
 
     /** Casual talk the fast brain can take: short, no action words, not a real question for Claude. Pure, unit-tested. */
-    fun route(t: String, deep: Boolean): Boolean {
-        if (deep && !smallTalk(t)) return false
+    fun route(t: String, deep: Boolean, chatFirst: Boolean = false): Boolean {
+        // talk mode: real conversation (opinions, ideas, explaining things) stays on the fast free brain too; it hands
+        // anything needing his data, the web or an action back to Claude before saying a word
+        if (deep && !smallTalk(t) && !chatFirst) return false
         val n = Reflex.norm(t)
         if (deep && smallTalk(t)) return true
-        if (n.isBlank() || n.split(" ").size > 25) return false
+        if (n.isBlank() || n.split(" ").size > (if (chatFirst) 45 else 25)) return false
         return !NEEDS_CLAUDE.containsMatchIn(n)
     }
 

@@ -494,7 +494,8 @@ class JarvisService : Service() {
 
     /** How long he keeps listening without hearing anything before going back to waiting for "Hey Jarvis". */
     private fun openWindow(seconds: Int) { listenUntil = System.currentTimeMillis() + seconds * 1000L }
-    private fun convoSeconds() = brain.config().optInt("conversation_seconds", 8)
+    // a real back-and-forth: after he answers, he keeps listening long enough for him to think and reply, no name needed
+    private fun convoSeconds() = brain.config().optInt("conversation_seconds", 20).coerceAtLeast(brain.config().optInt("conversation_min_seconds", 15))
 
     /** In a conversation: after each answer he keeps listening (no wake word, no chime) until he's done. */
     private var inConvo = false
