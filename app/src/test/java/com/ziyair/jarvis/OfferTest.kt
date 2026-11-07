@@ -14,6 +14,19 @@ class OfferTest {
         assertEquals(6.75 to 2.0, OfferJudge.read("\$6.75 | 2 mi | 18 min | Accept"))
     }
 
+    @Test fun smarterVerdicts() {
+        val cal = java.util.Calendar.getInstance().apply { set(2026, 10, 6, 18, 20, 0) }
+        assertEquals(25.0, OfferJudge.minutes("\$9.50 | 3.2 mi | Deliver by 6:45 PM | Accept", cal)!!, 0.5)
+        assertEquals(18.0, OfferJudge.minutes("\$6.75 | 2 mi | 18 min", cal)!!, 0.01)
+        assertTrue(OfferJudge.verdict2(3.0, 0.8, 2.0, 10.0, 25.0, 4.0).contains("minimum"))            // tiny payout: pass
+        assertTrue(OfferJudge.verdict2(12.0, 4.0, 2.0, 15.0, 25.0, 4.0).contains("Quick money"))       // $48 an hour
+        assertTrue(OfferJudge.verdict2(7.0, 3.0, 2.0, 45.0, 25.0, 4.0).contains("Too slow"))          // $9 an hour
+        assertTrue(OfferJudge.verdict2(10.0, 3.0, 2.0, null, 25.0, 4.0).contains("take it"))          // no time shown: per mile
+        val accepted = List(20) { 1.5 + it * 0.1 }
+        assertEquals(2.0, OfferJudge.learnedFloor(accepted)!!, 0.001)
+        org.junit.Assert.assertNull(OfferJudge.learnedFloor(accepted.take(10)))
+    }
+
     @Test fun minutesArentMiles() { assertNull(OfferJudge.read("\$8.00 | 15 min | Accept")) }
 
     @Test fun verdicts() {
