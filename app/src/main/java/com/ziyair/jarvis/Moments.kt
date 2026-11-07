@@ -113,6 +113,53 @@ object OfferJudge {
         return "$payWords for $milesWords. $verdict"
     }
 
+    /** Minutes the offer will take, from "18 min" or "Deliver by 6:45 PM", or null. Pure. */
+    fun minutes(all: String, now: java.util.Calendar): Double? {
+        Regex("(\\d{1,3})\\s?min", RegexOption.IGNORE_CASE).find(all)?.groupValues?.get(1)?.toDoubleOrNull()?.takeIf { it in 3.0..180.0 }?.let { return it }
+        val m = Regex("(?i)deliver by\\s*(\\d{1,2}):(\\d{2})\\s*(am|pm)").find(all) ?: return null
+        var h = m.groupValues[1].toInt() % 12; if (m.groupValues[3].lowercase() == "pm") h += 12
+        val at = (now.clone() as java.util.Calendar).apply { set(java.util.Calendar.HOUR_OF_DAY, h); set(java.util.Calendar.MINUTE, m.groupValues[2].toInt()); set(java.util.Calendar.SECOND, 0); if (before(now)) add(java.util.Calendar.DAY_OF_YEAR, 1) }
+        return ((at.timeInMillis - now.timeInMillis) / 60_000.0).takeIf { it in 3.0..180.0 }
+    }
+
+    /** The smarter verdict: per mile, per hour when the time is shown, and never below his minimum pay. Pure. */
+    fun verdict2(pay: Double, miles: Double, min: Double, mins: Double?, hourly: Double, minPay: Double): String {
+        val base = verdict(pay, miles, min)
+        val perHour = mins?.let { pay / (it / 60.0) }
+        val hourWords = perHour?.let { " About ${Math.round(it)} an hour." }.orEmpty()
+        return when {
+            pay < minPay -> base.substringBefore(". ") + ". Under your ${Math.round(minPay)} dollar minimum. I'd pass."
+            perHour != null && perHour < hourly * 0.6 && pay / miles < min * 1.25 -> base.substringBefore(". ") + ".$hourWords Too slow for the money. I'd pass."
+            perHour != null && perHour >= hourly * 1.4 && pay / miles >= min * 0.85 -> base.substringBefore(". ") + ".$hourWords Quick money, sir, take it."
+            else -> base + hourWords
+        }
+    }
+
+    /** His own floor, from what he's actually accepted: the rate a quarter of his accepted offers sit below. Pure. */
+    fun learnedFloor(acceptedRates: List<Double>): Double? = if (acceptedRates.size < 15) null else acceptedRates.sorted()[acceptedRates.size / 4]
+
+    @Volatile private var pending: JSONObject? = null
+    /** He tapped Accept or Decline on the offer Jarvis just judged: remember it, and after enough, judge by his real floor. */
+    fun decided(context: Context, accepted: Boolean) {
+        val o = pending ?: return; pending = null
+        if (System.currentTimeMillis() - o.optLong("at") > 120_000L) return
+        val p = Prefs(context)
+        val h = try { org.json.JSONArray(p.sp.getString("offer_history", "[]")) } catch (_: Exception) { org.json.JSONArray() }
+        h.put(o.put("ok", accepted))
+        val keep = org.json.JSONArray(); for (i in maxOf(0, h.length() - 300) until h.length()) keep.put(h.get(i))
+        p.sp.edit().putString("offer_history", keep.toString()).apply()
+        Trace.log(context, "offer", if (accepted) "he took it" else "he passed")
+        if (!Brain(context).config().optBoolean("offer_learn", true)) return
+        val rates = (0 until keep.length()).map { keep.getJSONObject(it) }.filter { it.optBoolean("ok") && it.optDouble("miles") > 0 }.map { it.optDouble("pay") / it.optDouble("miles") }
+        val floor = learnedFloor(rates) ?: return
+        val cur = minPerMile(p)
+        if (Math.abs(floor - cur) / cur > 0.12) {
+            val next = Math.round(((cur + floor) / 2) * 20) / 20.0   // move halfway, to the nearest 5 cents
+            p.sp.edit().putFloat("min_per_mile", next.toFloat()).apply()
+            Mind.tellLater(context, "Sir, from the offers you actually take, I'm judging at ${Earnings.money(next)} a mile now instead of ${Earnings.money(cur)}. Say the word if you want it different.")
+        }
+    }
+
     /** Called with all the text on the Dasher screen when an offer is showing: says the verdict once per offer. */
     fun check(context: Context, texts: List<String>) {
         val now = System.currentTimeMillis()
@@ -129,7 +176,10 @@ object OfferJudge {
         val sig = "$pay|$miles"
         if (sig == lastSig && now - lastAt < 120_000) return
         lastSig = sig; lastAt = now
-        val line = verdict(pay, miles, minPerMile(p))
+        val cfg = Brain(context).config()
+        val mins = minutes(all, java.util.Calendar.getInstance())
+        val line = verdict2(pay, miles, minPerMile(p), mins, cfg.optDouble("offer_hourly", 25.0), cfg.optDouble("offer_min_pay", 4.0))
+        pending = JSONObject().put("pay", pay).put("miles", miles).put("mins", mins ?: 0.0).put("at", now)
         Trace.log(context, "offer", line)
         try { context.startService(Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_SAY).putExtra("text", line)) } catch (_: Exception) {}
     }

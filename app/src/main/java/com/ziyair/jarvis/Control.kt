@@ -125,6 +125,12 @@ class JarvisAccess : AccessibilityService() {
         // The Dasher map changes many times a second, so look at most about once a second, and only read the whole
         // screen when an offer (an Accept button) is actually showing; that keeps Jarvis light while he dashes.
         if (event?.packageName?.toString() != OfferJudge.DASHER) return
+        // he tapped Accept or Decline: Jarvis learns what he actually takes (he never taps it for him)
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+            val t = (event.text?.joinToString(" ") ?: "") + " " + (event.contentDescription ?: "")
+            if (Regex("(?i)\\baccept").containsMatchIn(t)) OfferJudge.decided(this, true) else if (Regex("(?i)\\bdecline").containsMatchIn(t)) OfferJudge.decided(this, false)
+            return
+        }
         val now = android.os.SystemClock.uptimeMillis()
         if (now - lastLook < 900) return
         lastLook = now
