@@ -37,3 +37,14 @@ class BreathingRoomTest {
         assertTrue(ear.contains("maxOf(650, cfg.optInt(\"ear_fast_end_ms\", 700))") && ear.contains("giving him a moment"))
     }
 }
+
+class TalkModeTest {
+    @Test fun conversationStaysOnTheFastBrain() {
+        // talk mode: real questions and opinions go fast and free; doing things and his data still go to Claude
+        assertTrue(FastChat.route("what do you think about electric cars versus gas cars", true, chatFirst = true))
+        assertTrue(FastChat.route("why do people get nervous before big decisions", true, chatFirst = true))
+        org.junit.Assert.assertFalse(FastChat.route("how much did I make today", true, chatFirst = true))
+        org.junit.Assert.assertFalse(FastChat.route("set a reminder for 5", true, chatFirst = true))
+        org.junit.Assert.assertFalse(FastChat.route("why do people get nervous before big decisions", true))   // old behaviour unchanged when off
+    }
+}
