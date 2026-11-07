@@ -154,7 +154,7 @@ class JarvisService : Service() {
         val now = System.currentTimeMillis()
         if (now - warmedAt < 40_000) return
         warmedAt = now
-        thread(name = "jarvis-prewarm") { brain.warmLine(); Piper.warm(this) }
+        thread(name = "jarvis-prewarm") { brain.warmLine(); Piper.warm(this); if (prefs.cloudVoice) Voices.warm(this) }
     }
 
     // every ten minutes the lock-screen plan refreshes (free); his mind rethinks at most every couple of hours, only if something changed

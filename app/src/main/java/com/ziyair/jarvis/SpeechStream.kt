@@ -26,6 +26,16 @@ class SpeechStream(
 ) {
     private class Chunk(val pcm: FloatArray, val rate: Int, val newPiece: Boolean)
 
+    companion object {
+        /** Split a long opening at its first comma or dash (after a few words), or null to say it whole. Pure. */
+        fun firstClause(s: String): Pair<String, String>? {
+            if (s.length < 70) return null
+            val m = Regex("[,;\u2014]\\s").find(s, 18) ?: return null
+            if (m.range.first > 90 || s.length - m.range.last < 20) return null
+            return s.substring(0, m.range.first + 1).trim() to s.substring(m.range.last + 1).trim()
+        }
+    }
+
     private val texts = LinkedBlockingQueue<String>()
     private val audio = LinkedBlockingQueue<Chunk>()
     @Volatile var started = false; private set
@@ -77,6 +87,11 @@ class SpeechStream(
                     piece = sb.toString()
                 }
                 var newPiece = true
+                // a long first sentence with a cloud voice: say its opening clause first, so he hears Jarvis sooner
+                if (first && cloud != null) {
+                    val cut = firstClause(piece)
+                    if (cut != null) { cloud.let { f -> try { f(cut.first) } catch (_: Exception) { null } }?.let { audio.put(Chunk(it.first, it.second, true)); piece = cut.second } }
+                }
                 val viaCloud = cloud?.let { f -> try { f(piece) } catch (_: Exception) { null } }
                 val ok = if (viaCloud != null) { audio.put(Chunk(viaCloud.first, viaCloud.second, true)); true }
                     else if (Piper.installed(context)) Piper.synthFlow(context, piece, speed, { !cancelled }) { s, r -> audio.put(Chunk(s, r, newPiece)); newPiece = false }

@@ -96,7 +96,7 @@ object DayPlan {
         val mood = Mood.now(c)
         val card = JSONObject().put("at", now).put("list", JSONArray(shop.takeLast(12))).put("mood", mood.first.toDouble()).put("moodWhy", JSONArray(mood.second)).put("headline", if (Mind.thinking) "Thinking things over…" else headline(last))
             .put("thoughtAt", last?.optLong("at") ?: 0L)
-            .put("items", JSONArray().apply { list.forEach { put(JSONObject().put("t", clock.format(Date(it.at))).put("x", it.text)) } })
+            .put("items", JSONArray().apply { list.forEach { put(JSONObject().put("t", clock.format(Date(it.at))).put("x", it.text).put("ms", it.at)) } })
         Prefs(c).sp.edit().putString("lock_card", card.toString()).apply()
         return card
     }

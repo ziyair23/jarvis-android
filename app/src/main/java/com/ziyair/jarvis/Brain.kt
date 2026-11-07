@@ -102,11 +102,25 @@ class Brain(private val context: Context) {
     }
 
     /** Jarvis's personality for the fast brain: who he is and who Marcus is, but no tools (it hands anything to do to Claude). */
+    /** A few lines on where his day stands, so the quick side of Jarvis can chat about it without handing off. */
+    private fun todayBlock(): String = try {
+        val card = DayPlan.card(context)
+        val items = card.optJSONArray("items")?.let { a -> (0 until minOf(4, a.length())).joinToString("; ") { a.getJSONObject(it).let { o -> o.optString("t") + " " + o.optString("x") } } }.orEmpty()
+        val made = Earnings.today(context)
+        "\nRight now (${java.text.SimpleDateFormat("EEE h:mm a", java.util.Locale.US).format(java.util.Date())}): " +
+            listOfNotNull(card.optString("headline").takeIf { it.isNotBlank() }?.let { "on your mind: $it" },
+                items.takeIf { it.isNotBlank() }?.let { "coming up: $it" },
+                try { Shift.status(context) } catch (_: Exception) { null },
+                if (made > 0) "earned today ${Earnings.money(made)}" else null,
+                try { Baby.status(context).take(140) } catch (_: Exception) { null }).joinToString(". ") +
+            ". You can talk about these naturally; for exact numbers beyond this, or to change anything, hand off."
+    } catch (_: Exception) { "" }
+
     private fun fastSystem(cfg: JSONObject): String = cfg.optString("system") +
         (if (prefs.notes.isNotBlank()) "\n\nAbout him and his day: " + prefs.notes else "") +
         (if (prefs.herName.isNotBlank()) "\nHis partner's name: " + prefs.herName + "." else "") +
         (if (prefs.babyName.isNotBlank()) "\nHis baby son is ${prefs.babyName}." else "") +
-        Memory.promptBlock(context) +
+        Memory.promptBlock(context) + todayBlock() +
         "\nYou're speaking out loud through his phone in a quick back-and-forth: one to three short, natural spoken sentences, no lists, emojis or URLs. Sound like a person, not a script. " +
         "This is a real conversation: have opinions, ask him things back, keep the thread going like a friend would, and keep it short so he can jump in." +
         "\nYou are the quick conversational side of Jarvis, with no tools and no view of his data: you can't set timers or reminders, play music, send or log anything, so never say you did. If he asks you to do anything (set, send, call, play, log, add, cancel, check, look up), " +
