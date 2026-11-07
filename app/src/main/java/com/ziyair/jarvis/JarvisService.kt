@@ -433,6 +433,7 @@ class JarvisService : Service() {
         if (busy) return
         if (!manual && inCall()) { startWakeWord(); return }
         Trace.turn(this, if (manual) "talk button" else if (fromEar) "heard his name (one ear)" else "heard his name")
+        if (!manual) LockView.listening(this)
         busy = true
         followUps = 0
         chatted = false
