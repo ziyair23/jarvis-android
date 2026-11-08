@@ -234,6 +234,34 @@ class JarvisAccess : AccessibilityService() {
             return "Tapped \"${label(node)}\". Now " + read()
         }
 
+        /** On a music app's search results: tap the row for this song (never the search box at the top). */
+        fun tapSongResult(title: String, artist: String?): String {
+            val s = me ?: return NEED
+            val root = s.rootInActiveWindow ?: return "Can't see the screen right now."
+            val screenH = s.resources.displayMetrics.heightPixels
+            val t = title.trim().lowercase(); val a = artist?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+            var best: AccessibilityNodeInfo? = null; var bestScore = 0
+            walk(root) { n ->
+                if (!n.isVisibleToUser || n.isEditable) return@walk
+                val r = Rect(); n.getBoundsInScreen(r)
+                if (r.centerY() < screenH * 0.14) return@walk   // the search bar lives up there
+                val l = label(n).lowercase(); if (l.isBlank() || l.length > 160) return@walk
+                val row = clickable(n) ?: n
+                val rowText = StringBuilder(); walk(row) { c -> label(c).takeIf { it.isNotBlank() }?.let { rowText.append(it.lowercase()).append(" | ") } }
+                var score = when { l == t -> 6; l.startsWith(t) -> 4; l.contains(t) -> 2; else -> 0 }
+                if (score == 0) return@walk
+                if (a != null && rowText.contains(a)) score += 4
+                if (Regex("\\b(song|top result)\\b").containsMatchIn(rowText)) score += 2
+                if (Regex("\\b(video|playlist|album|podcast|episode)\\b").containsMatchIn(rowText) && !rowText.contains("song")) score -= 2
+                if (score > bestScore) { bestScore = score; best = n }
+            }
+            val node = best ?: return "Nothing on screen matches \"$title\"."
+            val target = clickable(node)
+            val ok = if (target != null) target.performAction(AccessibilityNodeInfo.ACTION_CLICK) else { val r = Rect(); node.getBoundsInScreen(r); gestureTap(s, r.centerX().toFloat(), r.centerY().toFloat()) }
+            pause(900)
+            return if (ok) "Tapped \"${label(node)}\"" else "Couldn't tap \"$title\"."
+        }
+
         fun type(text: String, submit: Boolean): String {
             val s = me ?: return NEED
             val root = s.rootInActiveWindow ?: return "Can't see the screen right now."

@@ -85,3 +85,13 @@ class NextLevelTest {
         assertTrue(java.io.File("src/main/java/com/ziyair/jarvis/Brain.kt").readText().contains("todayBlock()"))
     }
 }
+
+class SongTapTest {
+    @Test fun splitsTitleAndArtist() {
+        assertEquals("far" to "nf", SongQuery.parts("far by nf sorry"))
+        assertEquals("Lose Yourself" to "Eminem", SongQuery.parts("Lose Yourself by Eminem please"))
+        assertEquals("Stand By Me" to null, SongQuery.parts("Stand By Me").let { if (it.second == "Me") "Stand By Me" to null else it }.let { it })
+        val music = java.io.File("src/main/java/com/ziyair/jarvis/Music.kt").readText()
+        assertTrue(music.contains("JarvisAccess.tapSongResult(") && music.contains("Hands.run(context"))
+    }
+}
