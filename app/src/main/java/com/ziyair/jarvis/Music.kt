@@ -25,6 +25,11 @@ import java.util.concurrent.TimeUnit
 /** What he asked for, minus what he tacked on ("sorry", "please", "for me"). */
 object SongQuery {
     private val FILLER = Regex("(?:[\\s,.!?]+(?:sorry|please|thanks|thank you|jarvis|sir|for me|right now|now))+[\\s,.!?]*$", RegexOption.IGNORE_CASE)
+    /** "far by nf" -> ("far", "nf"); "lose yourself" -> ("lose yourself", null). Pure. */
+    fun parts(q: String): Pair<String, String?> {
+        val c = clean(q); val m = Regex("(?i)^(.+?)\\s+by\\s+(.+)$").find(c) ?: return c to null
+        return m.groupValues[1].trim() to m.groupValues[2].trim()
+    }
     fun clean(q: String): String = q.trim().replace(FILLER, "").replace(Regex("^(?:um+|uh+|so|okay|ok)[\\s,]+", RegexOption.IGNORE_CASE), "").trim().ifBlank { q.trim() }
 }
 
@@ -137,13 +142,25 @@ object Music {
             }
             if (access) {
                 // on a search page: tap the song first; on the song page: the play button (whatever the app calls it)
-                if (id == null && !tappedSong) { tappedSong = !JarvisAccess.tap((song ?: query).trim()).startsWith("Nothing"); Trace.log(context, "music", "tapped the song in the results: $tappedSong") }
+                if (id == null && !tappedSong) {
+                    // "far by nf" is two things on screen ("Far" and "NF"): find the song's row, not the search box
+                    val (ttl, art) = SongQuery.parts(song ?: query)
+                    val r = JarvisAccess.tapSongResult(ttl, art)
+                    tappedSong = r.startsWith("Tapped"); Trace.log(context, "music", "song row: $r")
+                }
                 for (label in listOf("Play", "Play video", "Resume", "Play all", "Shuffle")) {
                     val r = JarvisAccess.tap(label, exactOnly = true)   // exact names only, so it never taps "Playlist" by mistake
                     if (r.startsWith("Tapped")) { Trace.log(context, "music", "tapped \"$label\""); break }
                 }
                 if (started(context, pkg, before, 1200, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
             } else Thread.sleep(700)
+        }
+        // last resort: look at the screen like a person would and tap the song (screen control on, phone unlocked)
+        if (access && !locked && Brain(context).config().optBoolean("music_hands", true)) {
+            Trace.log(context, "music", "taps didn't start it: looking at the screen to find the song")
+            val (ttl, art) = SongQuery.parts(song ?: query)
+            try { Hands.run(context, "In ${name}, start playing the song \"$ttl\"${art?.let { " by $it" } ?: ""}: tap that song in the search results (not a video, playlist or the search box), then press play if it's paused. Don't open anything else.", false) } catch (_: Exception) {}
+            if (started(context, pkg, before, 2500, query)) return "Playing ${titleNow(context, pkg, query)} on $name."
         }
         Trace.log(context, "music", "gave up: player says \"${title(Apps.player(context, pkg))}\", playing=${playing(Apps.player(context, pkg))}")
         // what's playing isn't his song (the old queue): pause it instead of claiming success
