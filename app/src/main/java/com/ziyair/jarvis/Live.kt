@@ -314,6 +314,7 @@ class Live(
             } else {
                 if (Build.VERSION.SDK_INT >= 31) am.clearCommunicationDevice() else @Suppress("DEPRECATION") { am.isSpeakerphoneOn = false }
                 am.mode = AudioManager.MODE_NORMAL
+                GlassesMic.forget()
             }
         } catch (e: Exception) { Trace.log(context, "live", "audio mode: ${e.message}") }
     }

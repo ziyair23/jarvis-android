@@ -113,6 +113,7 @@ class Ear(private val context: Context, private val wake: WakeWord, private val 
             fun resetUtt() { uttN = 0; quietMs = 0; spec = null; specN = 0; preN = 0 }
             fun dropHeld() { held = null; heldText = ""; holds = 0 }
             try {
+                GlassesMic.use(context, rec)
                 rec.startRecording()
                 if (rec.recordingState != AudioRecord.RECORDSTATE_RECORDING) throw IllegalStateException("mic busy")
                 while (running) {
