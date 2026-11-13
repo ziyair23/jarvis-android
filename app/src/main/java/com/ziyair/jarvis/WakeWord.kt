@@ -17,7 +17,8 @@ import java.nio.FloatBuffer
  * 16 kHz audio in 80 ms chunks (1280 samples); each chunk adds 8 mel frames; every chunk the last
  * 76 mel frames become one 96-value embedding; the last 16 embeddings are scored by the wake model.
  */
-class WakeWord(context: Context, private val threshold: Float, private val onWake: () -> Unit) {
+class WakeWord(private val appCtx: Context, private val threshold: Float, private val onWake: () -> Unit) {
+    private val context = appCtx
     private val audio = context.getSystemService(android.media.AudioManager::class.java)
     private val env = OrtEnvironment.getEnvironment()
     private val mel: OrtSession
@@ -95,6 +96,7 @@ class WakeWord(context: Context, private val threshold: Float, private val onWak
             val chunk = ShortArray(CHUNK)
             reset(); gate.reset()
             try {
+                GlassesMic.use(context, rec)
                 rec.startRecording()
                 while (running) {
                     var got = 0

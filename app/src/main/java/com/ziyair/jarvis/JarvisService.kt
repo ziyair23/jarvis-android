@@ -166,7 +166,7 @@ class JarvisService : Service() {
     } }
     private fun tickNow() {
         lastTick = System.currentTimeMillis()
-        thread(name = "jarvis-mind") { try { Mind.tick(this) } catch (_: Exception) {}; try { SelfCare.maybeNight(this) } catch (_: Exception) {}; try { Routines.tick(this) } catch (_: Exception) {}; try { Upgrade.maybeReview(this) } catch (_: Exception) {} }
+        thread(name = "jarvis-mind") { try { Mind.tick(this) } catch (_: Exception) {}; try { SelfCare.maybeNight(this) } catch (_: Exception) {}; try { Routines.tick(this) } catch (_: Exception) {}; try { GlassesMic.tick(this) } catch (_: Exception) {}; try { Upgrade.maybeReview(this) } catch (_: Exception) {} }
     }
     /** Screen on: the lock screen shows the plan as it is right now. */
     private val screenOn = object : android.content.BroadcastReceiver() {
