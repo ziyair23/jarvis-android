@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.ziyair.jarvis"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 34
         versionCode = buildNumber
         versionName = "1.$buildNumber"
