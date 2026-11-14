@@ -17,7 +17,7 @@ import kotlin.concurrent.thread
  */
 object Jobs {
     /** What the job runner can do directly (everything else goes through an agent). */
-    val DIRECT = setOf("list_add", "remind_me", "draft_text", "calendar_events", "follow_up_add", "follow_ups_list", "follow_up_done", "list_read")
+    val DIRECT = setOf("list_add", "remind_me", "draft_text", "calendar_events", "follow_up_add", "follow_ups_list", "follow_up_done", "list_read", "ask_muse", "recall_sight")
     @Volatile var running: String? = null; private set
 
     fun all(c: Context): JSONArray = try { JSONArray(Prefs(c).sp.getString("jobs", "[]")) } catch (_: Exception) { JSONArray() }
@@ -47,7 +47,8 @@ object Jobs {
         val now = SimpleDateFormat("EEEE, MMMM d, h:mm a", Locale.US).format(Date())
         val system = "You are Jarvis, Marcus's personal assistant, running a whole job for him in the background: plan it, get it done, report once. " +
             "Work like a top executive assistant: think about what the job really needs across his whole life (money, Ziyair, his calendar and shifts, bills, meals, the list), " +
-            "hand each part to the agent who owns it with ask_agent (give them every detail), do the simple steps yourself, and check results before moving on. Don't ask the same agent twice for the same thing.\n" +
+            "hand each part to the agent who owns it with ask_agent (give them every detail), do the simple steps yourself, and check results before moving on. Don't ask the same agent twice for the same thing. " +
+            "Call every independent part in the same turn (several ask_agent calls at once, plus ask_muse for web jobs like bookings, forms and price hunting): they all run at the same time.\n" +
             "Limits: you can't send, call, pay, buy, post or delete anything. If a text is part of the job, use draft_text once (only one per job) and read it back at the end. " +
             "Use follow_up_add for anything that needs chasing later. Leave a team_note for anything the agents should keep in mind this week. Never touch his DoorDash offers.\n" +
             "When you're done, reply with what you'd say to him out loud: two to four plain sentences, what you got done (specifics), and the one or two things that need him. " +
@@ -61,6 +62,7 @@ object Jobs {
                 "ask_agent" -> Agents.run(c, input.optString("agent"), input.optString("task"), false, depth = 1)
                 "team_note" -> Team.note(c, "Jarvis", input.optString("note"))
                 "draft_text" -> if (++drafts > 1) "Only one text per job: mention the others to him instead." else actions.run(name, input)
+                "ask_muse" -> if (goal.contains("muse", true)) Muse.handoff(c, input.optString("job"), true) else "Muse jobs need his yes: mention it to him at the end instead."
                 in DIRECT -> actions.run(name, input)
                 else -> "Not something a background job can do."
             }

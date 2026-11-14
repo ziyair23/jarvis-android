@@ -86,13 +86,19 @@ object Claude {
             Spend.record(c, cfg, model, resp.optJSONObject("usage"))
             val content = resp.optJSONArray("content") ?: org.json.JSONArray()
             val text = StringBuilder(); val results = org.json.JSONArray()
+            val calls = (0 until content.length()).map { content.getJSONObject(it) }.filter { it.optString("type") == "tool_use" }
+            // the dispatcher: this round's independent calls (agents, Muse, lookups) run side by side
+            val outs = Dispatch.runAll(calls.map { it.optString("name") }, cfg.optBoolean("parallel_tools", true), { e -> "That didn't work: ${e.message}" }) { k ->
+                handle(calls[k].optString("name"), calls[k].optJSONObject("input") ?: JSONObject())
+            }
+            var k = 0
             for (i in 0 until content.length()) {
                 val p = content.getJSONObject(i)
                 when (p.optString("type")) {
                     "text" -> text.append(p.optString("text"))
                     "tool_use" -> {
                         val name = p.optString("name"); val input = p.optJSONObject("input") ?: JSONObject()
-                        val out = try { handle(name, input) } catch (e: Exception) { "That didn't work: ${e.message}" }
+                        val out = outs[k++]
                         steps.add(Step(name, input, out))
                         results.put(JSONObject().put("type", "tool_result").put("tool_use_id", p.optString("id")).put("content", out))
                     }

@@ -78,6 +78,7 @@ class Brain(private val context: Context) {
             Coach.promptBlock(context) +
             Skills.promptBlock(context) +
             Dream.promptBlock(context) +
+            "\nOne request often has several independent parts (\"have Muse book a haircut, check my balance and remind me to call Mom\"): call every tool it needs in the SAME turn, they all run at the same time. Only chain them when one part needs another's answer." +
             "\nKnow what you don't know: if you're not sure of something, say so plainly or check first (recall, search, ask him) instead of sounding sure. Never make up a number, a date or a fact." +
             "\nFor 'what if' questions about his life (what if I dash more, move, buy something, change a bill, when will I reach my goal), use simulate: it runs his real numbers. When he asks you to check yourself or find what's broken, use self_check." +
             "\nYou upgrade yourself: when he says 'upgrade yourself' or 'get better', use upgrade_now; when he approves or turns down an upgrade, use upgrade_decide; upgrades_list says what's waiting." +
@@ -302,6 +303,14 @@ class Brain(private val context: Context) {
             val results = JSONArray()
             val fastLines = ArrayList<String?>()
             val fastOn = cfg.optBoolean("fast_actions", true)
+            // the dispatcher: independent tool calls in this turn all start at once (screen/camera ones take turns)
+            val calls = (0 until content.length()).map { content.getJSONObject(it) }.filter { it.optString("type") == "tool_use" }
+            val outs: List<Any> = Dispatch.runAll(calls.map { it.getString("name") }, cfg.optBoolean("parallel_tools", true), { e -> "That didn't work: ${e.message}" }) { k ->
+                val part = calls[k]; val name = part.getString("name")
+                if (name == "look") look() else if (name == "recall_sight") Sights.recall(context, part.optJSONObject("input")?.optString("query").orEmpty()) else actions.run(name, part.optJSONObject("input") ?: JSONObject())
+            }
+            if (calls.size > 1) Trace.log(context, "dispatch", "${calls.size} at once: ${calls.joinToString(",") { it.getString("name") }}")
+            var callN = 0
             for (i in 0 until content.length()) {
                 val part = content.getJSONObject(i)
                 when (part.optString("type")) {
@@ -310,7 +319,7 @@ class Brain(private val context: Context) {
                         lastTools.add(part.getString("name"))
                         didSomething = true
                         val name = part.getString("name")
-                        val out: Any = if (name == "look") look() else if (name == "recall_sight") Sights.recall(context, part.optJSONObject("input")?.optString("query").orEmpty()) else actions.run(name, part.optJSONObject("input") ?: JSONObject())
+                        val out: Any = outs[callN++]
                         lastTools.addAll(Agents.drainInner())   // skills an agent used count as used (music, texts...)
                         if (Agents.on(context) && !name.startsWith("agent_")) Agents.owner(name)?.let { Agents.flash(it) }
                         if (out is String) recordAction(name, out)
