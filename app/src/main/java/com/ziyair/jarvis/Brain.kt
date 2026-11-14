@@ -511,7 +511,7 @@ class Brain(private val context: Context) {
     /** Tools used while answering the last question. */
     val lastTools = java.util.concurrent.CopyOnWriteArrayList<String>()
 
-    private val slow = listOf("play_music", "run_protocol", "phone_task", "screen_read", "stop_navigation", "status_report", "lights", "look", "open_app", "remember_sight", "recall_sight", "glasses_photo")
+    private val slow = listOf("play_music", "run_protocol", "phone_task", "screen_read", "stop_navigation", "status_report", "lights", "look", "open_app", "remember_sight", "recall_sight", "glasses_photo", "ask_muse")
 
     private fun post(key: String, body: JSONObject): Pair<Int, String> {
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
