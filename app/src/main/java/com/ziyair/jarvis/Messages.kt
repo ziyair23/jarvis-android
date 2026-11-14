@@ -131,13 +131,14 @@ class MessageListener : NotificationListenerService() {
         try { Loops.onMessage(this, sender) } catch (_: Exception) {}
 
         val prefs = Prefs(this)
-        val announce = when (prefs.readMessages) { "always" -> true; "driving" -> DriveMode.on; else -> false }
+        val fromMuse = try { Muse.onReply(this, sender, m.app, text) } catch (_: Exception) { false }
+        val announce = fromMuse || when (prefs.readMessages) { "always" -> true; "driving" -> DriveMode.on; else -> false }
         if (announce && prefs.running && !Inbox.alreadySaid(m)) {
             Inbox.lastAnnounced = m
-            val ask = if (reply != null) " Want to reply, sir?" else ""
+            val ask = if (reply != null) (if (fromMuse) " Anything to tell Muse, sir?" else " Want to reply, sir?") else ""
             try {
                 startService(Intent(this, JarvisService::class.java).setAction(JarvisService.ACTION_SAY)
-                    .putExtra("text", "Message from $sender: $text.$ask").putExtra("listen", reply != null)
+                    .putExtra("text", (if (fromMuse) "Muse says: $text." else "Message from $sender: $text.") + ask).putExtra("listen", reply != null)
                     .putExtra("from", sender).putExtra("at", m.at))
             } catch (_: Exception) {}
         }

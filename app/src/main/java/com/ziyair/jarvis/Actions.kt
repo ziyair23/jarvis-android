@@ -115,6 +115,7 @@ class Actions(private val context: Context) {
         put(tool("lights", "Control his Govee lights: on/off, brightness 1-100, color (red, orange, yellow, green, blue, purple, pink, white, warm, cool). which = a light's name or 'all'.",
             props("which" to str("Light name or 'all'"), "on" to bool("true on, false off"), "brightness" to num("1-100"), "color" to str("Color name")), listOf()))
         put(tool("find_phone", "He can't find his phone and asked where you are: ring loudly (even on silent) and flash the light.", props(), listOf()))
+        put(tool("ask_muse", "Hand a web job to Muse, Meta's personal agent with its own browser (it lives in his WhatsApp as a chat named Muse). Best for: booking appointments or tables, filling in forms on websites, finding and comparing prices or availability online, signing up for things. FIRST read the job back to him in one short sentence and get a clear yes; only then call with confirmed=true. Muse's answers are read out to him as they arrive.", props("job" to str("The whole job in one or two sentences with every detail he gave (what, where, when, budget, names)"), "confirmed" to JSONObject().put("type", "boolean").put("description", "He clearly said yes to handing this to Muse")), listOf("job")))
         put(tool("remember_sight", "Snap a photo of what he's looking at (his Meta glasses when he's wearing them, else the phone camera) and save it with the place and time, to find later. Use for 'remember where I parked', 'remember this', 'remember this shelf/sign/receipt'.", props("note" to str("What it is, in his words, e.g. 'where I parked', 'the paint color'")), listOf("note")))
         put(tool("recall_sight", "Bring back a photo he asked you to remember, with where and when it was saved; it also pops up on his phone. Use for 'where did I park', 'what did that receipt say', 'show me what I saved'.", props("query" to str("What he's looking for")), listOf("query")))
         put(tool("glasses_photo", "Take a picture with his Meta glasses and save it to his gallery. Use for 'take a picture', 'snap a photo', 'get a pic of this'.", props(), listOf()))
@@ -305,6 +306,7 @@ class Actions(private val context: Context) {
                 if (Inbox.reply(context, m, input.getString("message"))) "Replied to ${m.sender} on ${m.app}." else "The reply didn't go through."
             }
             "remember" -> if (Memory.add(context, input.getString("fact"))) "Saved to memory." else "Already remembered."
+            "ask_muse" -> Muse.handoff(context, input.optString("job"), input.optBoolean("confirmed"))
             "remember_sight" -> Sights.remember(context, input.optString("note"))
             "recall_sight" -> Sights.recall(context, input.optString("query")).let { if (it is JSONArray) it.getJSONObject(0).optString("text") else it.toString() }
             "glasses_photo" -> Sights.photo(context)
