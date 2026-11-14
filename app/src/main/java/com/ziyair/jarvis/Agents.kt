@@ -18,7 +18,7 @@ object Agents {
 
     /** Skills Jarvis keeps himself: the quick, everyday ones where an extra hop would only slow him down. */
     val CORE = setOf("set_timer", "remind_me", "get_weather", "remember", "forget", "learn_lesson",
-        "quiet_mode", "set_voice", "status_report", "look", "list_add",
+        "quiet_mode", "set_voice", "status_report", "look", "list_add", "remember_sight", "recall_sight", "glasses_photo", "connect_glasses",
         "list_check", "list_read", "list_clear", "driving_mode", "media_control", "answer_call", "decline_call",
         // quick one-step jobs he does himself (an extra hop to an agent costs a whole second); agents keep the bigger jobs
         "log_baby", "baby_status", "log_earnings", "earnings_summary", "log_expense", "play_music", "navigate",

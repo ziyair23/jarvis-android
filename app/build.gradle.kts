@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.ziyair.jarvis"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 34
         versionCode = buildNumber
         versionName = "1.$buildNumber"
@@ -67,6 +67,9 @@ dependencies {
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
     implementation("org.apache.commons:commons-compress:1.26.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Meta glasses camera (Wearables Device Access Toolkit, Maven Central)
+    implementation("com.meta.wearable:mwdat-core:1.0.1")
+    implementation("com.meta.wearable:mwdat-camera:1.0.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

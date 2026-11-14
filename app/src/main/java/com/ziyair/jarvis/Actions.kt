@@ -115,7 +115,11 @@ class Actions(private val context: Context) {
         put(tool("lights", "Control his Govee lights: on/off, brightness 1-100, color (red, orange, yellow, green, blue, purple, pink, white, warm, cool). which = a light's name or 'all'.",
             props("which" to str("Light name or 'all'"), "on" to bool("true on, false off"), "brightness" to num("1-100"), "color" to str("Color name")), listOf()))
         put(tool("find_phone", "He can't find his phone and asked where you are: ring loudly (even on silent) and flash the light.", props(), listOf()))
-        put(tool("look", "Take a photo with the back camera and look at it (he points the phone at something). Use for 'what's this', 'read this', 'what does this say', 'what's wrong with this'.", props(), listOf()))
+        put(tool("remember_sight", "Snap a photo of what he's looking at (his Meta glasses when he's wearing them, else the phone camera) and save it with the place and time, to find later. Use for 'remember where I parked', 'remember this', 'remember this shelf/sign/receipt'.", props("note" to str("What it is, in his words, e.g. 'where I parked', 'the paint color'")), listOf("note")))
+        put(tool("recall_sight", "Bring back a photo he asked you to remember, with where and when it was saved; it also pops up on his phone. Use for 'where did I park', 'what did that receipt say', 'show me what I saved'.", props("query" to str("What he's looking for")), listOf("query")))
+        put(tool("glasses_photo", "Take a picture with his Meta glasses and save it to his gallery. Use for 'take a picture', 'snap a photo', 'get a pic of this'.", props(), listOf()))
+        put(tool("connect_glasses", "Set up or re-link his Meta glasses with Jarvis (one-time: Bluetooth permission, link in the Meta AI app, camera access). Use for 'connect my glasses', 'set up my glasses', or when a glasses tool says they aren't linked and he wants to fix it.", props(), listOf()))
+        put(tool("look", "Take a photo and look at it: through his Meta glasses when he's wearing them (what he's looking at), otherwise the phone's back camera (he points the phone at something). Use for 'what's this', 'read this', 'what does this say', 'what's wrong with this'.", props(), listOf()))
         put(tool("remind_at_home", "Remind him of something when he gets home (e.g. 'grab the wipes from the car').", props("text" to str("What to remind him")), listOf("text")))
         put(tool("journal_add", "Save a moment to the baby journal (e.g. 'Ziyair smiled today', 'first bath'). Dated automatically.", props("text" to str("The moment, short, in his words")), listOf("text")))
         put(tool("journal_read", "Read back baby journal moments, optionally about something.", props("about" to str("Optional word to search")), listOf()))
@@ -301,6 +305,10 @@ class Actions(private val context: Context) {
                 if (Inbox.reply(context, m, input.getString("message"))) "Replied to ${m.sender} on ${m.app}." else "The reply didn't go through."
             }
             "remember" -> if (Memory.add(context, input.getString("fact"))) "Saved to memory." else "Already remembered."
+            "remember_sight" -> Sights.remember(context, input.optString("note"))
+            "recall_sight" -> Sights.recall(context, input.optString("query")).let { if (it is JSONArray) it.getJSONObject(0).optString("text") else it.toString() }
+            "glasses_photo" -> Sights.photo(context)
+            "connect_glasses" -> Glasses.setup(context)
             "memory_list" -> Memory.listNumbered(context)
             "learn_lesson" -> Coach.addLesson(context, input.optString("lesson"), "correction")
             "memory_fix" -> Memory.fix(context, input.optInt("number"), input.optString("new_fact"))

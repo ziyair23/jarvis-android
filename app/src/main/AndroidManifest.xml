@@ -33,6 +33,8 @@
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <queries>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
@@ -54,6 +56,25 @@
         android:icon="@mipmap/ic_launcher"
         android:label="Jarvis"
         android:theme="@style/Jarvis">
+
+        <!-- Meta glasses (Wearables Device Access Toolkit). 0/0 = Developer Mode in the Meta AI app, no attestation. -->
+        <meta-data android:name="com.meta.wearable.mwdat.APPLICATION_ID" android:value="0" />
+        <meta-data android:name="com.meta.wearable.mwdat.CLIENT_TOKEN" android:value="0" />
+        <meta-data android:name="com.meta.wearable.mwdat.ANALYTICS_OPT_OUT" android:value="true" />
+
+        <activity
+            android:name=".GlassesSetup"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="jarvisglasses" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".DashActivity"
