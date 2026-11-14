@@ -138,7 +138,7 @@ class GlassesSetup : ComponentActivity() {
             requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 7) else next()
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) next() else { say("Jarvis needs Bluetooth access for the glasses, sir."); finish() }
     }
