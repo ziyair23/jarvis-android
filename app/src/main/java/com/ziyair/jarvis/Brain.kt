@@ -310,7 +310,7 @@ class Brain(private val context: Context) {
                         lastTools.add(part.getString("name"))
                         didSomething = true
                         val name = part.getString("name")
-                        val out: Any = if (name == "look") look() else actions.run(name, part.optJSONObject("input") ?: JSONObject())
+                        val out: Any = if (name == "look") look() else if (name == "recall_sight") Sights.recall(context, part.optJSONObject("input")?.optString("query").orEmpty()) else actions.run(name, part.optJSONObject("input") ?: JSONObject())
                         lastTools.addAll(Agents.drainInner())   // skills an agent used count as used (music, texts...)
                         if (Agents.on(context) && !name.startsWith("agent_")) Agents.owner(name)?.let { Agents.flash(it) }
                         if (out is String) recordAction(name, out)
@@ -497,10 +497,11 @@ class Brain(private val context: Context) {
 
     /** Jarvis's eyes: a photo from the back camera, sent to Claude to look at. */
     private fun look(): Any {
-        val f = Eyes.capture(context) ?: return Eyes.why
-        val data = android.util.Base64.encodeToString(f.readBytes(), android.util.Base64.NO_WRAP)
+        val (f, glasses) = Sights.snap(context) ?: return Sights.why
+        val data = Sights.shrink(f.readBytes()) ?: android.util.Base64.encodeToString(f.readBytes(), android.util.Base64.NO_WRAP)
+        if (glasses) f.delete()
         return JSONArray()
-            .put(JSONObject().put("type", "text").put("text", "Photo just taken with his phone's back camera, pointed at what he's asking about."))
+            .put(JSONObject().put("type", "text").put("text", if (glasses) "Photo just taken with his Meta glasses: exactly what he's looking at right now." else "Photo just taken with his phone's back camera, pointed at what he's asking about."))
             .put(JSONObject().put("type", "image").put("source", JSONObject().put("type", "base64").put("media_type", "image/jpeg").put("data", data)))
     }
 
@@ -510,7 +511,7 @@ class Brain(private val context: Context) {
     /** Tools used while answering the last question. */
     val lastTools = java.util.concurrent.CopyOnWriteArrayList<String>()
 
-    private val slow = listOf("play_music", "run_protocol", "phone_task", "screen_read", "stop_navigation", "status_report", "lights", "look", "open_app")
+    private val slow = listOf("play_music", "run_protocol", "phone_task", "screen_read", "stop_navigation", "status_report", "lights", "look", "open_app", "remember_sight", "recall_sight", "glasses_photo")
 
     private fun post(key: String, body: JSONObject): Pair<Int, String> {
         val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
